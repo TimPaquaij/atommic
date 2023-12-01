@@ -771,17 +771,18 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                         [output_target_reconstruction[i] for i in range(output_target_reconstruction.shape[0])], dim=-1
                     )
 
-                self.log_image(
-                    f"{key}/a/target-reconstruction-error",
-                    torch.cat(
-                        [
-                            output_target_reconstruction,
-                            output_predictions_reconstruction,
-                            torch.abs(output_target_reconstruction - output_predictions_reconstruction),
-                        ],
-                        dim=-1,
-                    ),
-                )
+                if self.use_reconstruction_module:
+                    self.log_image(
+                        f"{key}/a/reconstruction/target/predictions/error",
+                        torch.cat(
+                            [
+                                output_target_reconstruction,
+                                output_predictions_reconstruction,
+                                torch.abs(output_target_reconstruction - output_predictions_reconstruction),
+                            ],
+                            dim=-1,
+                        ),
+                    )
 
                 # concatenate the segmentation classes for logging
                 target_segmentation_class = torch.cat(
@@ -791,10 +792,11 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                     [output_predictions_segmentation[i] for i in range(output_predictions_segmentation.shape[0])],
                     dim=-1,
                 )
-                self.log_image(f"{key}/b/target", target_segmentation_class)
-                self.log_image(f"{key}/c/segmentation", output_predictions_segmentation_class)
+                self.log_image(f"{key}/b/segmentation/target", target_segmentation_class)
+                self.log_image(f"{key}/c/segmentation/predictions", output_predictions_segmentation_class)
                 self.log_image(
-                    f"{key}/d/error", torch.abs(target_segmentation_class - output_predictions_segmentation_class)
+                    f"{key}/d/segmentation/error",
+                    torch.abs(target_segmentation_class - output_predictions_segmentation_class),
                 )
 
             # Compute metrics and log them.
