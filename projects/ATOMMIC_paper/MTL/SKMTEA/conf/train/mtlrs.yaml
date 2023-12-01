@@ -108,7 +108,7 @@ model:
   n2r: false
 
   train_ds:
-    data_path: parent_data_dir/skm-tea/v1-release/json/files_recon_calib-24_train.json
+    data_path: /data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_train.json #/scratch/tmpaquaij/data/skm-tea_small/v1-release/json/files_recon_calib-24_train.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_train.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None

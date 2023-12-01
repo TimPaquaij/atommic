@@ -9,7 +9,7 @@ Generating train, val, and test sets...
 "
 
 # Prompt the user to enter the path to the downloaded annotations directory
-echo "Please enter the (downloaded) annotations data directory:"
+echo "Please enter the data directory to raw data:"
 read INPUT_DIR
 
 # Check if the input directory exists
@@ -18,10 +18,16 @@ if [ ! -d "$INPUT_DIR" ]; then
   exit 1
 fi
 
-# Prompt the user to enter the output directory for the generated json files
-echo "Please enter the output directory for the generated json files:"
-read OUTPUT_DIR
+# Prompt the user to enter the path to the downloaded annotations directory
+echo "Please enter the annotations:"
+read INPUT_DIR_AN
+
+# Check if the input directory exists
+if [ ! -d "$INPUT_DIR_AN" ]; then
+  echo "The input directory does not exist. Please try again."
+  exit 1
+fi
 
 # Run the json generation script
-python projects/MTL/rs/SKMTEA/scripts/split_sets_json.py $INPUT_DIR $OUTPUT_DIR --data_type raw
+python projects/MTL/rs/SKMTEA/scripts/preprocess_data.py $INPUT_DIR $INPUT_DIR_AN --data_type raw
 echo "Done!"

@@ -42,6 +42,8 @@ from atommic.collections.segmentation.nn.vnet import SegmentationVNet
 from atommic.core.conf.hydra_runner import hydra_runner
 from atommic.utils import logging
 from atommic.utils.exp_manager import exp_manager
+import os
+os.environ['HYDRA_FULL_ERROR'] ='1' ##This gives a better backlog to an error
 
 
 def register_cli_subcommand(parser: argparse._SubParsersAction):

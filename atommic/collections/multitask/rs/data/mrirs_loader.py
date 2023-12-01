@@ -395,11 +395,22 @@ class SKMTEARSMRIDataset(RSMRIDataset):
     def __getitem__(self, i: int):  # noqa: MC0001
         """Get item from :class:`SKMTEARSMRIDataset`."""
         if not is_none(self.dataset_format):
-            dataset_format = self.dataset_format.lower()  # type: ignore
-            masking = "default"
-            if "custom_masking" in dataset_format:
-                masking = "custom"
-                dataset_format = dataset_format.replace("custom_masking", "").strip("_")
+            masking ="default"
+            dataset_format =None
+            for s in self.dataset_format:
+                if s.lower() in (
+                    "skm-tea-echo1",
+                    "skm-tea-echo2",
+                    "skm-tea-echo1+echo2",
+                    "skm-tea-echo1+echo2-mc",
+            ):
+                    dataset_format = s.lower()
+                elif s.lower() in ("custom_masking"):
+                    masking = "custom"
+
+
+
+
         else:
             dataset_format = None
             masking = "custom"
@@ -486,6 +497,117 @@ class SKMTEARSMRIDataset(RSMRIDataset):
             segmentation_labels = np.fft.fftshift(np.fft.fft2(segmentation_labels))
             segmentation_labels = segmentation_labels[:, 48:-48, 40:-40]
             segmentation_labels = np.fft.ifft2(np.fft.ifftshift(segmentation_labels)).real
+
+            imspace = np.empty([])
+
+            initial_prediction = np.empty([])
+            attrs = dict(hf.attrs)
+
+            # get noise level for current slice, if metadata["noise_levels"] is not empty
+            if "noise_levels" in metadata and len(metadata["noise_levels"]) > 0:
+                metadata["noise"] = metadata["noise_levels"][dataslice]
+            else:
+                metadata["noise"] = 1.0
+
+            attrs.update(metadata)
+
+        kspace = np.transpose(kspace, (2, 0, 1))
+        sensitivity_map = np.transpose(sensitivity_map.squeeze(), (2, 0, 1))
+
+        attrs["log_image"] = bool(dataslice in self.indices_to_log)
+
+        return (
+            (
+                kspace,
+                imspace,
+                sensitivity_map,
+                mask,
+                initial_prediction,
+                segmentation_labels,
+                attrs,
+                fname.name,
+                dataslice,
+            )
+            if self.transform is None
+            else self.transform(
+                kspace,
+                imspace,
+                sensitivity_map,
+                mask,
+                initial_prediction,
+                segmentation_labels,
+                attrs,
+                fname.name,
+                dataslice,
+            )
+        )
+
+class SKMTEARSMRIDatasetlateral(RSMRIDataset):
+    """Supports the SKM-TEA dataset for multitask accelerated MRI reconstruction and MRI segmentation.
+
+    .. note::
+        Extends :class:`atommic.collections.multitask.rs.data.mrirs_loader.RSMRIDataset`.
+    """
+
+    def __getitem__(self, i: int):  # noqa: MC0001
+        """Get item from :class:`SKMTEARSMRIDataset`."""
+        if not is_none(self.dataset_format):
+            masking = "custom"
+            dataset_format = None
+            for s in self.dataset_format:
+                if s.lower() in (
+                        "skm-tea-echo1",
+                        "skm-tea-echo2",
+                        "skm-tea-echo1+echo2",
+                        "skm-tea-echo1+echo2-mc",
+                ):
+                    dataset_format = s.lower()
+                elif s.lower() in ("custom_masking"):
+                    masking = "custom"
+
+
+
+
+        else:
+            dataset_format = None
+            masking = "custom"
+
+        fname, dataslice, metadata = self.examples[i]
+        with h5py.File(fname, "r") as hf:
+            kspace = self.get_consecutive_slices(hf, "kspace", dataslice).astype(np.complex64)
+            if not is_none(dataset_format) and dataset_format == "skm-tea-echo1":
+                kspace = kspace[:, :, 0, :]
+            elif not is_none(dataset_format) and dataset_format == "skm-tea-echo2":
+                kspace = kspace[:, :, 1, :]
+            elif not is_none(dataset_format) and dataset_format == "skm-tea-echo1+echo2":
+                kspace = kspace[:, :, 0, :] + kspace[:, :, 1, :]
+            elif not is_none(dataset_format) and dataset_format == "skm-tea-echo1+echo2-mc":
+                kspace = np.concatenate([kspace[:, :, 0, :], kspace[:, :, 1, :]], axis=-1)
+            else:
+                warnings.warn(
+                    f"Dataset format {dataset_format} is either not supported or set to None. "
+                    "Using by default only the first echo."
+                )
+                kspace = kspace[:, :, 0, :]
+
+            sensitivity_map = self.get_consecutive_slices(hf, "maps", dataslice).astype(np.complex64)
+
+            if masking == "custom":
+                mask = np.array([])
+            else:
+                masks = hf["masks"]
+                mask = {}
+                for key, val in masks.items():
+                    mask[key.split("_")[-1].split(".")[0]] = np.asarray(val)
+
+            # get the file format of the segmentation files
+            segmentation_labels = nib.load(
+                Path(self.segmentations_root) / Path(str(fname.name.split(".")[0]) + ".nii.gz")  # type: ignore
+            ).get_fdata()
+
+            # get a slice
+            segmentation_labels = self.get_consecutive_slices({"seg": segmentation_labels}, "seg", dataslice)
+            segmentation_labels = np.transpose(segmentation_labels, (2, 0, 1))
 
             imspace = np.empty([])
 

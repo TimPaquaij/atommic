@@ -108,7 +108,7 @@ model:
   n2r: false
 
   test_ds:
-    data_path: data_parent_dir/skm-tea/v1-release/json/files_recon_calib-24_test.json
+    data_path: /data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_test.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
@@ -152,7 +152,7 @@ model:
       - -1
     coil_dim: 1
     use_seed: true
-    segmentations_path: data_parent_dir/skm-tea/v1-release/segmentation_masks/raw-data-track
+    segmentations_path: /data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
     segmentation_classes: 4
     complex_data: true
     batch_size: 1
@@ -188,7 +188,7 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: output_dir/atommic/mltrs/predictions/SKMTEA/MTLRS_SENSE
+  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA/MTLRS_SENSE
   create_tensorboard_logger: true
   create_wandb_logger: false
   files_to_copy: [ ]

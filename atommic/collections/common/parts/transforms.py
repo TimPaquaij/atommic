@@ -821,7 +821,8 @@ class Masker:
         apply_forward_transform : bool
             Apply forward transform, i.e. Fast Fourier Transform. Default is ``False``.
         """
-        if self.dataset_format is not None and "skm-tea" in self.dataset_format.lower():
+
+        if self.dataset_format is not None and any( "skm-tea" in s.lower() for s in self.dataset_format):
             if not is_none(self.mask_func) and not isinstance(mask, np.ndarray):
                 # if skm-tea dataset, then the mask is already computed and loaded
                 accelerations = list(self.mask_func[0].accelerations)  # type: ignore
@@ -910,7 +911,7 @@ class Masker:
                 masked_data.append(data * m + 0.0)
                 masks.append(m)
 
-                if self.dataset_format is not None and "skm-tea" in self.dataset_format.lower():
+                if self.dataset_format is not None and "skm-tea" in self.dataset_format[0].lower():
                     accelerations.append(float(self.acc[i]))
                 else:
                     accelerations.append(np.round(m.squeeze(0).squeeze(-1).numpy().size / m.numpy().sum()))
