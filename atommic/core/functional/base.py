@@ -1,7 +1,7 @@
 r"""General purpose functions"""
 from typing import Tuple, Union, Optional
 import torch
-#from piq.utils import _parse_version
+from atommic.core.utils.piq import _parse_version
 
 
 

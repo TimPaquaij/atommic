@@ -167,6 +167,10 @@ def ssim(x: np.ndarray, y: np.ndarray, maxval: np.ndarray = None) -> float:
 
 def haarpsi3d(gt: np.ndarray, pred: np.ndarray, maxval: np.ndarray = None) -> float:
     """Compute Structural Similarity Index Metric (SSIM)"""
+    if gt.ndim == 2:
+        gt = gt[np.newaxis, :, :]
+    if pred.ndim == 2:
+        pred = pred[np.newaxis, :, :]
     if gt.ndim != 3:
         raise ValueError("Unexpected number of dimensions in ground truth.")
     if gt.ndim != pred.ndim:
@@ -190,6 +194,10 @@ def haarpsi3d(gt: np.ndarray, pred: np.ndarray, maxval: np.ndarray = None) -> fl
 
 def vsi3d(gt: np.ndarray, pred: np.ndarray, maxval: np.ndarray = None) -> float:
     """Compute Structural Similarity Index Metric (SSIM)"""
+    if gt.ndim == 2:
+        gt = gt[np.newaxis, :, :]
+    if pred.ndim == 2:
+        pred = pred[np.newaxis, :, :]
     if gt.ndim != 3:
         raise ValueError("Unexpected number of dimensions in ground truth.")
     if gt.ndim != pred.ndim:
