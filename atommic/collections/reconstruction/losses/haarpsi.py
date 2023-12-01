@@ -1,11 +1,16 @@
 # coding=utf-8
 __author__ = "Tim Paquaij"
 
-# Parts of the code have been taken from https://github.com/photosynthesis-team/piq
-from typing import Union,Sequence
+# Parts of the code have been taken from https://github.com/photosynthesis-team/piq/blob/master/piq/haarpsi.py
+from typing import Union
 import torch
 import torch.nn as nn
 import functools
+
+
+from atommic.core.functional import similarity_map, rgb2yiq, haar_filter
+from atommic.core.utils.piq import _validate_input, _reduce
+
 def haarpsi(x: torch.Tensor, y: torch.Tensor, reduction: str = 'mean',
             data_range: Union[int, float] = 1., scales: int = 3, subsample: bool = True,
             c: float = 30.0, alpha: float = 4.2) -> torch.Tensor:
