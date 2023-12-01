@@ -83,7 +83,7 @@ model:
   segmentation_classes_thresholds: [0.5, 0.5, 0.5, 0.5]
   segmentation_activation: sigmoid
   reconstruction_loss:
-    l1: 1.0
+    vsi: 1.0
   kspace_reconstruction_loss: false
   total_reconstruction_loss_weight: 0.5
   total_segmentation_loss_weight: 0.5
@@ -130,7 +130,7 @@ model:
     coil_combination_method: SENSE
     dimensionality: 2
     mask_args:
-      type: poisson2d  # the mask will be loaded from the dataset, but we need to specify the type here
+      type: gaussian2d  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
         - 4  # 4, 6, 8, 10, 12, 16
       shift_mask: false
@@ -181,13 +181,13 @@ model:
     consecutive_slices: 1
     data_saved_per_slice: false
     complex_target: true
-    log_images_rate: 0.025
+    log_images_rate: 0.05
     apply_prewhitening: false
     apply_gcc: false
     coil_combination_method: SENSE
     dimensionality: 2
     mask_args:
-      type: poisson2d  # the mask will be loaded from the dataset, but we need to specify the type here
+      type: gaussian2d  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
         - 4  # 4, 6, 8, 10, 12, 16
       shift_mask: false

@@ -4,7 +4,6 @@ __author__ = "Tim Paquaij"
 # Parts of the code have been taken from https://github.com/photosynthesis-team/piq/blob/master/piq/haarpsi.py
 from typing import Union
 import torch
-import torch.nn as nn
 import functools
 import torch.nn.functional as F
 from atommic.core.classes.loss import Loss
@@ -62,6 +61,13 @@ class HaarPSILoss(Loss):
         Returns:
             Value of HaarPSI loss to be minimized in [0, 1] range.
         """
+
+
+        if data_range is None:
+            data_range = torch.tensor([max(x.max() - x.min(), y.max() - x.min())]).to(y)
+        if isinstance(data_range, int):
+            data_range = torch.tensor([data_range]).to(y)
+
         data_range = data_range[:, None, None, None]
         self.haarpsi = functools.partial(haarpsi, scales=self.scales, subsample=self.subsample, c=self.c, alpha=self.alpha,data_range=data_range, reduction=self.reduction)
         return 1.-self.haarpsi(x=x, y=y)
