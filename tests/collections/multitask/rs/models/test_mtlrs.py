@@ -38,7 +38,7 @@ from tests.collections.reconstruction.mri_data.conftest import create_input
                 "reconstruction_module_accumulate_predictions": True,
                 "reconstruction_module_no_dc": True,
                 "reconstruction_module_keep_prediction": True,
-                "reconstruction_loss": {"l1": 1.0},
+                "reconstruction_loss": {"haarpsi": 1.0,"l1":1.0},
                 "segmentation_module": "UNet",
                 "segmentation_module_input_channels": 2,
                 "segmentation_module_output_channels": 4,

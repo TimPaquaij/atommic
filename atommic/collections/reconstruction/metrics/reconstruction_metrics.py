@@ -185,8 +185,8 @@ def haarpsi3d(gt: np.ndarray, pred: np.ndarray, maxval: np.ndarray = None) -> fl
     _haarpsi = functools.partial(haarpsi, scales=scales, subsample=subsample, c=c, alpha=alpha,
                                  data_range=maxval, reduction=reduction)
     __haarpsi = sum(
-        _haarpsi(torch.from_numpy(gt[slice_num]).unsqueeze(0).unsqueeze(0).float(),
-                 torch.from_numpy(pred[slice_num]).unsqueeze(0).unsqueeze(0).float()) for slice_num in
+        _haarpsi(torch.from_numpy(gt[slice_num]).unsqueeze(0).float(),
+                 torch.from_numpy(pred[slice_num]).unsqueeze(0).float()) for slice_num in
         range(gt.shape[0])
     ).numpy()
 
@@ -208,7 +208,6 @@ def vsi3d(gt: np.ndarray, pred: np.ndarray, maxval: np.ndarray = None) -> float:
     c3: float = 130.
     alpha: float = 0.4
     beta: float = 0.02
-    data_range: [int, float] = 1.
     omega_0: float = 0.021
     sigma_f: float = 1.34
     sigma_d: float = 145.
@@ -220,8 +219,8 @@ def vsi3d(gt: np.ndarray, pred: np.ndarray, maxval: np.ndarray = None) -> float:
         sigma_f=sigma_f, sigma_d=sigma_d, sigma_c=sigma_c, data_range=maxval,
         reduction=reduction)
     __vsi = sum(
-        _vsi(torch.from_numpy(gt[slice_num]).unsqueeze(0).unsqueeze(0).float(),
-             torch.from_numpy(pred[slice_num]).unsqueeze(0).unsqueeze(0).float()) for slice_num in
+        _vsi(torch.from_numpy(gt[slice_num]).unsqueeze(0).float(),
+             torch.from_numpy(pred[slice_num]).unsqueeze(0).float()) for slice_num in
         range(gt.shape[0])
     )
 

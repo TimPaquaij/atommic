@@ -41,17 +41,17 @@ class HaarPSILoss(Loss):
         http://www.math.uni-bremen.de/cda/HaarPSI/publications/HaarPSI_preprint_v4.pdf
     """
     def __init__(self, reduction: [str] = 'mean',
-                 scales: int = 3, subsample: bool = True, c: float = 30.0, alpha: float = 4.2) -> None:
+                 scales: int = 3, subsample: bool = True, c: float = 30.0, alpha: float = 4.2,data_range: int = 1) -> None:
         super().__init__()
         self.reduction = reduction
-
         self.reduction=reduction
         self.scales =scales
         self.subsample=subsample
         self.c =c
         self.alpha =alpha
+        self.data_range =data_range
 
-    def forward(self, x: torch.Tensor, y: torch.Tensor,data_range: torch.tensor):
+    def forward(self, x: torch.Tensor, y: torch.Tensor,data_range: torch.Tensor):
         r"""Computation of HaarPSI as a loss function.
 
         Args:
@@ -67,10 +67,12 @@ class HaarPSILoss(Loss):
             data_range = torch.tensor([max(x.max() - x.min(), y.max() - x.min())]).to(y)
         if isinstance(data_range, int):
             data_range = torch.tensor([data_range]).to(y)
+        self.haarpsi_fun = functools.partial(haarpsi, scales=self.scales, subsample=self.subsample, c=self.c,
+                                             alpha=self.alpha, data_range=data_range, reduction=self.reduction)
 
-        data_range = data_range[:, None, None, None]
-        self.haarpsi = functools.partial(haarpsi, scales=self.scales, subsample=self.subsample, c=self.c, alpha=self.alpha,data_range=data_range, reduction=self.reduction)
-        return 1.-self.haarpsi(x=x, y=y)
+        return 1. - self.haarpsi_fun(x=x, y=y,data_range=data_range)
+
+
 
 def haarpsi(x: torch.Tensor, y: torch.Tensor, reduction: str = 'mean',
             data_range: Union[int, float] = 1., scales: int = 3, subsample: bool = True,
@@ -100,6 +102,8 @@ def haarpsi(x: torch.Tensor, y: torch.Tensor, reduction: str = 'mean',
         Code from authors on MATLAB and Python
         https://github.com/rgcda/haarpsi
     """
+    x = x.unsqueeze(1)
+    y = y.unsqueeze(1)
     _validate_input([x, y], dim_range=(4, 4), data_range=(0, data_range))
 
     # Assert minimal image size
@@ -180,9 +184,10 @@ def haarpsi(x: torch.Tensor, y: torch.Tensor, reduction: str = 'mean',
 
     # Calculate the final score
     eps = torch.finfo(sim_map.dtype).eps
-    score = (((sim_map * alpha).sigmoid() * weights).sum(dim=[1, 2, 3]) + eps) /\
-        (torch.sum(weights, dim=[1, 2, 3]) + eps)
+    score = (((sim_map * alpha).sigmoid() * weights).sum(dim=[1, 2, 3]) + eps) / \
+            (torch.sum(weights, dim=[1, 2, 3]) + eps)
     # Logit of score
     score = (torch.log(score / (1 - score)) / alpha) ** 2
 
     return _reduce(score, reduction)
+

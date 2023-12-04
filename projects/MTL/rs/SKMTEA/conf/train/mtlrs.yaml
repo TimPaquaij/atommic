@@ -83,7 +83,8 @@ model:
   segmentation_classes_thresholds: [0.5, 0.5, 0.5, 0.5]
   segmentation_activation: sigmoid
   reconstruction_loss:
-    vsi: 1.0
+    l1: 1
+    ssim: 1
   kspace_reconstruction_loss: false
   total_reconstruction_loss_weight: 0.5
   total_segmentation_loss_weight: 0.5
@@ -117,7 +118,7 @@ model:
     - custom_masking
     - skm-tea-echo1
     - lateral
-    sample_rate: 0.1
+    sample_rate: 1
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
@@ -173,7 +174,7 @@ model:
       - custom_masking
       - skm-tea-echo1
       - lateral
-    sample_rate: 0.1
+    sample_rate: 1
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
@@ -181,7 +182,7 @@ model:
     consecutive_slices: 1
     data_saved_per_slice: false
     complex_target: true
-    log_images_rate: 0.05
+    log_images_rate: 0.01
     apply_prewhitening: false
     apply_gcc: false
     coil_combination_method: SENSE
@@ -238,7 +239,7 @@ trainer:
   accelerator: gpu
   devices: 1
   num_nodes: 1
-  max_epochs: 20
+  max_epochs: 80
   precision: 16-mixed
   enable_checkpointing: false
   logger: false
@@ -248,8 +249,8 @@ trainer:
 
 exp_manager:
   exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA/MTLRS_SENSE
-  create_tensorboard_logger: true
-  create_wandb_logger: false
+  create_tensorboard_logger: false
+  create_wandb_logger: true
   wandb_logger_kwargs:
     project: MTLRS
   files_to_copy: [ ]

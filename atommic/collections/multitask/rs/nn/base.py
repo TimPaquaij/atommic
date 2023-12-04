@@ -530,17 +530,27 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                 p = torch.abs(p / torch.max(torch.abs(p)))
                 t = torch.abs(t / torch.max(torch.abs(t)))
 
-            elif "haarpsi" in str(loss_func).lower():
+                return loss_func(
+                    t,
+                    p,
+                    data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(dim=0).to(t),
+                )
+            if "haarpsi" in str(loss_func).lower():
                 p = torch.abs(p / torch.max(torch.abs(p)))
                 t = torch.abs(t / torch.max(torch.abs(t)))
 
-            elif "vsi" in str(loss_func).lower():
+                return loss_func(
+                    t,
+                    p,
+                    data_range=torch.tensor(max(torch.max(t).item(), torch.max(p).item())).to(t),
+                )
+            if "vsi" in str(loss_func).lower():
                 p = torch.abs(p / torch.max(torch.abs(p)))
                 t = torch.abs(t / torch.max(torch.abs(t)))
                 return loss_func(
                     t,
                     p,
-                    data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(dim=0).to(t),
+                    data_range=torch.tensor(max(torch.max(t).item(), torch.max(p).item())).to(t),
                 )
 
             return loss_func(t, p)
@@ -759,11 +769,12 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             # Normalize target and predictions to [0, 1] for logging.
             if torch.is_complex(output_target_reconstruction) and output_target_reconstruction.shape[-1] != 2:
                 output_target_reconstruction = torch.view_as_real(output_target_reconstruction)
+
+            if output_target_reconstruction.shape[-1] == 2:
+                output_target_reconstruction = complex_abs(output_target_reconstruction)
             output_target_reconstruction = output_target_reconstruction / torch.max(
                 torch.abs(output_target_reconstruction)
             )
-            if output_target_reconstruction.shape[-1] == 2:
-                output_target_reconstruction = complex_abs(output_target_reconstruction)
             output_target_reconstruction = output_target_reconstruction.detach().cpu()
 
             if (
@@ -771,13 +782,12 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                 and output_predictions_reconstruction.shape[-1] != 2
             ):
                 output_predictions_reconstruction = torch.view_as_real(output_predictions_reconstruction)
+            if output_predictions_reconstruction.shape[-1] == 2:
+                output_predictions_reconstruction = complex_abs(output_predictions_reconstruction)
             output_predictions_reconstruction = output_predictions_reconstruction / torch.max(
                 torch.abs(output_predictions_reconstruction)
             )
-            if output_predictions_reconstruction.shape[-1] == 2:
-                output_predictions_reconstruction = complex_abs(output_predictions_reconstruction)
             output_predictions_reconstruction = output_predictions_reconstruction.detach().cpu()
-
             # Log target and predictions, if log_image is True for this slice.
             if attrs["log_image"][_batch_idx_]:
                 key = f"{fname[_batch_idx_]}_slice_{int(slice_idx[_batch_idx_])}"
