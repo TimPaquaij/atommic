@@ -250,7 +250,7 @@ trainer:
 exp_manager:
   exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA/MTLRS_SENSE
   create_tensorboard_logger: false
-  create_wandb_logger: false
+  create_wandb_logger: true
   wandb_logger_kwargs:
     project: MTLRS
   files_to_copy: [ ]
