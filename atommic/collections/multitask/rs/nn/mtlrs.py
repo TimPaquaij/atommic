@@ -273,9 +273,8 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                 p = self.__abs_output__(p / torch.max(torch.abs(p)))
 
             if "ssim" in str(loss_func).lower():
-                epssilon = 1e-10
-                p = torch.abs(p / torch.max(torch.abs(p))+epssilon)
-                t = torch.abs(t / torch.max(torch.abs(t))+epssilon)
+                p = torch.abs(p / torch.max(torch.abs(p)))
+                t = torch.abs(t / torch.max(torch.abs(t)))
 
                 return loss_func(
                     t,
@@ -283,18 +282,16 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                     data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(dim=0).to(t),
                 )
             if "haarpsi" in str(loss_func).lower():
-                epssilon = 1e-10
-                p = torch.abs(p / torch.max(torch.abs(p))+epssilon)
-                t = torch.abs(t / torch.max(torch.abs(t))+epssilon)
+                p = torch.abs(p / torch.max(torch.abs(p)))
+                t = torch.abs(t / torch.max(torch.abs(t)))
 
                 return loss_func(
                     t,
                     p,
                     data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(dim=0).to(t))
             if "vsi" in str(loss_func).lower():
-                epssilon = 1e-10
-                p = torch.abs(p / torch.max(torch.abs(p))+epssilon)
-                t = torch.abs(t / torch.max(torch.abs(t))+epssilon)
+                p = torch.abs(p / torch.max(torch.abs(p)))
+                t = torch.abs(t / torch.max(torch.abs(t)))
 
                 return loss_func(
                     t,
