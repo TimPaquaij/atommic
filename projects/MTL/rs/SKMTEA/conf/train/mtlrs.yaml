@@ -109,7 +109,7 @@ model:
   n2r: false
 
   train_ds:
-    data_path: /scratch/tmpaquaij/data/skm-tea_small/v1-release/json/files_recon_calib-24_train.json #/scratch/tmpaquaij/data/skm-tea_small/v1-release/json/files_recon_calib-24_train.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_train.json
+    data_path: /data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_train.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_train.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_train.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
@@ -155,7 +155,7 @@ model:
       - -1
     coil_dim: 1
     use_seed: false
-    segmentations_path: /scratch/tmpaquaij/data/skm-tea_small/v1-release/segmentation_masks/raw-data-track #/scratch/tmpaquaij/data/skm-tea_small/v1-release/segmentation_masks/raw-data-track  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
+    segmentations_path: /data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
     segmentation_classes: 4
     complex_data: true
     batch_size: 1
@@ -165,7 +165,7 @@ model:
     drop_last: false
 
   validation_ds:
-    data_path: /scratch/tmpaquaij/data/skm-tea_small/v1-release/json/files_recon_calib-24_val.json #/scratch/tmpaquaij/data/skm-tea_small/v1-release/json/files_recon_calib-24_val.json  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json
+    data_path: /data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
@@ -212,7 +212,7 @@ model:
       - -1
     coil_dim: 1
     use_seed: true
-    segmentations_path: /scratch/tmpaquaij/data/skm-tea_small/v1-release/segmentation_masks/raw-data-track #/scratch/tmpaquaij/data/skm-tea_small/v1-release/segmentation_masks/raw-data-track  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
+    segmentations_path: /data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
     segmentation_classes: 4
     complex_data: true
     batch_size: 1
@@ -250,7 +250,7 @@ trainer:
 exp_manager:
   exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA/MTLRS_SENSE
   create_tensorboard_logger: false
-  create_wandb_logger: true
+  create_wandb_logger: false
   wandb_logger_kwargs:
     project: MTLRS
   files_to_copy: [ ]
