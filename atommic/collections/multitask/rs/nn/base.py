@@ -533,7 +533,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                 return loss_func(
                     t,
                     p,
-                    data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(dim=0).to(t),
+                    data_range=torch.tensor(max(torch.max(t).item(), torch.max(p).item())).to(t),
                 )
             if "haarpsi" in str(loss_func).lower():
                 p = torch.abs(p / torch.max(torch.abs(p)))
@@ -829,30 +829,25 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             # Compute metrics and log them.
             output_predictions_reconstruction = output_predictions_reconstruction.numpy()
             output_target_reconstruction = output_target_reconstruction.numpy()
-
+            max_value = max(np.max(output_target_reconstruction), np.max(output_predictions_reconstruction))
             self.mse_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
-                mse(output_target_reconstruction, output_predictions_reconstruction)
+                mse(output_target_reconstruction, output_predictions_reconstruction,maxval = max_value)
             ).view(1)
             self.nmse_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
-                nmse(output_target_reconstruction, output_predictions_reconstruction)
+                nmse(output_target_reconstruction, output_predictions_reconstruction,maxval = max_value)
             ).view(1)
-
-            max_value = max(np.max(output_target_reconstruction), np.max(output_predictions_reconstruction)) - min(
-                np.min(output_target_reconstruction), np.min(output_predictions_reconstruction)
-            )
-
             self.ssim_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
                 ssim(output_target_reconstruction, output_predictions_reconstruction, maxval=max_value)
             ).view(1)
             self.psnr_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
                 psnr(output_target_reconstruction, output_predictions_reconstruction, maxval=max_value)
             ).view(1)
+
             self.haarpsi_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
                 haarpsi3d(output_target_reconstruction, output_predictions_reconstruction, maxval=max_value)
             ).view(1)
-            self.vsi_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
-                vsi3d(output_target_reconstruction, output_predictions_reconstruction, maxval=max_value)
-            ).view(1)
+            self.vsi_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = \
+                vsi3d(output_target_reconstruction, output_predictions_reconstruction, maxval=max_value).view(1)
 
             if self.cross_entropy_metric is not None:
                 self.cross_entropy_vals[fname[_batch_idx_]][

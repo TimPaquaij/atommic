@@ -118,7 +118,7 @@ model:
     - custom_masking
     - skm-tea-echo1
     - lateral
-    sample_rate: 1
+    sample_rate: 0.5
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
@@ -174,7 +174,7 @@ model:
       - custom_masking
       - skm-tea-echo1
       - lateral
-    sample_rate: 1
+    sample_rate: 0.5
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
@@ -239,7 +239,7 @@ trainer:
   accelerator: gpu
   devices: 1
   num_nodes: 1
-  max_epochs: 80
+  max_epochs: 20
   precision: 16-mixed
   enable_checkpointing: false
   logger: false
