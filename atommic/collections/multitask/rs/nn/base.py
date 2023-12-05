@@ -533,7 +533,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                 return loss_func(
                     t,
                     p,
-                    data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(dim=0).to(t),
+                    data_range=torch.tensor(max(torch.max(t).item(), torch.max(p).item())).to(t),
                 )
             if "haarpsi" in str(loss_func).lower():
                 p = torch.abs(p / torch.max(torch.abs(p)))
@@ -1416,7 +1416,6 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         self.validation_step_outputs.append({"val_loss": val_loss})
 
         # Compute metrics and log them and log outputs.
-        print('compute')
         self.__compute_and_log_metrics_and_outputs__(
             predictions_reconstruction,
             target_reconstruction,
