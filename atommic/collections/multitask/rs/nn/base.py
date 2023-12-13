@@ -190,7 +190,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             if name in segmentation_losses_:
                 if name == "cross_entropy":
                     cross_entropy_loss_classes_weight = torch.tensor(
-                        cfg_dict.get("cross_entropy_loss_classes_weight", 0.0)
+                        cfg_dict.get("cross_entropy_loss_classes_weight", [0.5,0.5,0.5,0.5])
                     )
                     self.segmentation_losses[name] = CrossEntropyLoss(
                         num_samples=cfg_dict.get("cross_entropy_loss_num_samples", 50),
@@ -223,7 +223,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         cross_entropy_metric_ignore_index = cfg_dict.get("cross_entropy_metric_ignore_index", -100)
         cross_entropy_metric_reduction = cfg_dict.get("cross_entropy_metric_reduction", "none")
         cross_entropy_metric_label_smoothing = cfg_dict.get("cross_entropy_metric_label_smoothing", 0.0)
-        cross_entropy_metric_classes_weight = torch.tensor(cfg_dict.get("cross_entropy_metric_classes_weight", 0.0))
+        cross_entropy_metric_classes_weight = torch.tensor(cfg_dict.get("cross_entropy_metric_classes_weight", [0.5,0.5,0.5,0.5]))
         dice_metric_include_background = cfg_dict.get("dice_metric_include_background", False)
         dice_metric_to_onehot_y = cfg_dict.get("dice_metric_to_onehot_y", False)
         dice_metric_sigmoid = cfg_dict.get("dice_metric_sigmoid", True)
@@ -274,7 +274,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             self.haarpsi_vals_reconstruction: Dict = defaultdict(dict)
             self.vsi_vals_reconstruction: Dict = defaultdict(dict)
 
-        if not is_none(cross_entropy_metric_classes_weight) and cross_entropy_metric_classes_weight != 0.0:
+        if not is_none(cross_entropy_metric_classes_weight) or cross_entropy_metric_classes_weight != 0.0:
             self.cross_entropy_metric = CrossEntropyLoss(
                 num_samples=cross_entropy_metric_num_samples,
                 ignore_index=cross_entropy_metric_ignore_index,
@@ -1507,8 +1507,9 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
 
         if self.use_reconstruction_module:
             if isinstance(predictions_reconstruction, list):
-                while isinstance(predictions_reconstruction, list):
-                    predictions_reconstruction = predictions_reconstruction[-1]
+                while len(predictions_reconstruction) != 5:
+                    predictions_reconstruction = predictions_reconstruction[0][-1]
+
 
             # If "16" or "16-mixed" fp is used, ensure complex type will be supported when saving the predictions.
             predictions_reconstruction = (
@@ -1661,7 +1662,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                 psnr_vals_reconstruction[k].update(v)
             for k, v in self.haarpsi_vals_reconstruction.items():
                 haarpsi_vals_reconstruction[k].update(v)
-            for k, v in self.vsi_reconstruction.items():
+            for k, v in self.vsi_vals_reconstruction.items():
                 vsi_vals_reconstruction[k].update(v)
 
             metrics_reconstruction = {"MSE": 0, "NMSE": 0, "SSIM": 0, "PSNR": 0,"HaarPSI": 0, "VSI": 0}

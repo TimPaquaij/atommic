@@ -608,7 +608,9 @@ class SKMTEARSMRIDatasetlateral(RSMRIDataset):
             # get a slice
             segmentation_labels = self.get_consecutive_slices({"seg": segmentation_labels}, "seg", dataslice)
             segmentation_labels = np.transpose(segmentation_labels, (2, 0, 1))
-
+            #Add backgound as an seperate class
+            #back_ground = (segmentation_labels.sum(axis=0) == 0).astype(int)
+            #segmentation_labels = np.concatenate((back_ground[np.newaxis,:,:],segmentation_labels),axis=0)
             imspace = np.empty([])
 
             initial_prediction = np.empty([])

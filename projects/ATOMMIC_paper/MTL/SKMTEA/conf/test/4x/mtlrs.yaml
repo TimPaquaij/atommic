@@ -1,5 +1,5 @@
 pretrained: test
-checkpoint: https://huggingface.co/wdika/MTL_MTLRS_SKMTEA_poisson2d_4x/blob/main/MTL_MTLRS_SKMTEA_poisson2d_4x.ckpt
+checkpoint: /home/tmpaquaij/scratch/Results/atommic/mltrs/trained_models/SKMTEA/MTLRS_SENSE/default/2023-12-06_12-04-21/checkpoints/default--val_loss=0.2588-epoch=20-last.ckpt
 mode: true
 
 model:
@@ -84,6 +84,7 @@ model:
   segmentation_activation: sigmoid
   reconstruction_loss:
     l1: 1.0
+    ssim: 1
   kspace_reconstruction_loss: false
   total_reconstruction_loss_weight: 0.5
   total_segmentation_loss_weight: 0.5
@@ -108,12 +109,14 @@ model:
   n2r: false
 
   test_ds:
-    data_path: parent_data_dir/skm-tea/v1-release/json/files_recon_calib-24_test.json
+    data_path: /data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_test.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
     initial_predictions_path: None
-    dataset_format: skm-tea-echo1
+    dataset_format:
+    - skm-tea-echo1
+    -
     sample_rate: 1
     volume_sample_rate: None
     use_dataset_cache: false
@@ -130,7 +133,7 @@ model:
     mask_args:
       type: poisson2d  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
-        - 4  # 4, 6, 8, 10, 12, 16
+        - 8  # 4, 6, 8, 10, 12, 16
       shift_mask: false
       use_seed: true
     partial_fourier_percentage: 0.0
@@ -152,7 +155,7 @@ model:
       - -1
     coil_dim: 1
     use_seed: true
-    segmentations_path: parent_data_dir/skm-tea/v1-release/segmentation_masks/raw-data-track
+    segmentations_path: /data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track
     segmentation_classes: 4
     complex_data: true
     batch_size: 1

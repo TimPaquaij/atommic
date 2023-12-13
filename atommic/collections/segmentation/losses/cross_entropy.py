@@ -33,12 +33,12 @@ class CrossEntropyLoss(nn.Module):
         """
         super().__init__()
         self.mc_samples = num_samples
-        self.cross_entropy = torch.nn.CrossEntropyLoss(
-            weight=weight,
-            ignore_index=ignore_index,
-            reduction=reduction,
-            label_smoothing=label_smoothing,
-        )
+        self.ignore_index =ignore_index
+        self.weight = weight
+        self.label_smoothing = label_smoothing
+        self.reduction = reduction
+
+
 
     def forward(self, target: torch.Tensor, _input: torch.Tensor, pred_log_var: torch.Tensor = None) -> torch.Tensor:
         """Forward pass of :class:`CrossEntropyLoss`.
@@ -63,13 +63,19 @@ class CrossEntropyLoss(nn.Module):
         if target.dim() == 3:
             target = target.unsqueeze(0)
 
+        cross_entropy = torch.nn.CrossEntropyLoss(
+            weight=self.weight.to(_input),
+            ignore_index=self.ignore_index,
+            reduction=self.reduction,
+            label_smoothing=self.label_smoothing,
+        )
         if self.mc_samples == 1 or pred_log_var is None:
-            return self.cross_entropy(_input.float(), target).mean()
+            return cross_entropy(_input.float(), target).mean()
 
         pred_shape = [self.mc_samples, *_input.shape]
         noise = torch.randn(pred_shape, device=_input.device)
         noisy_pred = _input.unsqueeze(0) + torch.sqrt(torch.exp(pred_log_var)).unsqueeze(0) * noise
         noisy_pred = noisy_pred.view(-1, *_input.shape[1:])
         tiled_target = target.unsqueeze(0).tile((self.mc_samples,)).view(-1, *target.shape[1:])
-        loss = self.cross_entropy(noisy_pred, tiled_target).view(self.mc_samples, -1, *_input.shape[-2:]).mean(0)
+        loss = cross_entropy(noisy_pred, tiled_target).to(target).view(self.mc_samples, -1, *_input.shape[-2:]).mean(0)
         return loss.mean()

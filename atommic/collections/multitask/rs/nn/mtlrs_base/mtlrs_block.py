@@ -13,7 +13,7 @@ from atommic.collections.reconstruction.nn.unet_base.unet_block import Unet
 from atommic.collections.segmentation.nn.attentionunet_base.attentionunet_block import AttentionUnet
 from atommic.collections.segmentation.nn.lambdaunet_base.lambdaunet_block import LambdaBlock
 from atommic.collections.segmentation.nn.vnet_base.vnet_block import VNet
-
+from atommic.core.models_uq.model.sequential import *
 __all__ = ["MTLRSBlock"]
 
 
@@ -82,6 +82,7 @@ class MTLRSBlock(torch.nn.Module):
         self.spatial_dims = spatial_dims
         self.coil_dim = coil_dim
         self.dimensionality = dimensionality
+        self.uncertainty = False
         if self.dimensionality != 2:
             raise NotImplementedError(f"Currently only 2D is supported for segmentation, got {self.dimensionality}D.")
         self.consecutive_slices = consecutive_slices
@@ -145,6 +146,7 @@ class MTLRSBlock(torch.nn.Module):
                 num_pool_layers=self.segmentation_module_params["pooling_layers"],
                 drop_prob=self.segmentation_module_params["dropout"],
             )
+            print(segmentation_module)
         elif segmentation_module.lower() == "attentionunet":
             segmentation_module = AttentionUnet(
                 in_chans=self.input_channels,
@@ -238,6 +240,8 @@ class MTLRSBlock(torch.nn.Module):
                 cascades_predictions = []
                 for i, cascade in enumerate(self.reconstruction_module):
                     # Forward pass through the cascades
+                    if self.uncertainty:
+                        cascade = RNN_uncertainty_wrapper(cascade)
                     prediction_slice, hx = cascade(
                         prediction_slice,
                         y_slice,
@@ -271,6 +275,9 @@ class MTLRSBlock(torch.nn.Module):
             cascades_predictions = []
             for i, cascade in enumerate(self.reconstruction_module):
                 # Forward pass through the cascades
+                if self.uncertainty:
+                    parameters = cascade.get_parameter()
+                    print(parameters)
                 prediction, hx = cascade(
                     prediction,
                     y,

@@ -51,11 +51,12 @@ model:
   segmentation_module: AttentionUNet
   segmentation_module_input_channels: 1
   segmentation_module_output_channels: 4
-  segmentation_module_channels: 64
+  segmentation_module_channels: 32
   segmentation_module_pooling_layers: 2
   segmentation_module_dropout: 0.0
   segmentation_loss:
     dice: 1.0
+    cross_entropy: 1.0
   dice_loss_include_background: true  # always set to true if the background is removed
   dice_loss_to_onehot_y: false
   dice_loss_sigmoid: false
@@ -109,7 +110,7 @@ model:
   n2r: false
 
   train_ds:
-    data_path: /data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_train.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_train.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_train.json
+    data_path: /data/projects/utwente/recon/SKM-TEA/v1-release/json/folds/files_recon_calib-24_fold_7_train.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_train.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_train.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
@@ -118,7 +119,7 @@ model:
     - custom_masking
     - skm-tea-echo1
     - lateral
-    sample_rate: 0.5
+    sample_rate: 1
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
@@ -133,7 +134,7 @@ model:
     mask_args:
       type: gaussian2d  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
-        - 4  # 4, 6, 8, 10, 12, 16
+        - 8  # 4, 6, 8, 10, 12, 16
       shift_mask: false
       use_seed: false
     partial_fourier_percentage: 0.0
@@ -158,23 +159,23 @@ model:
     segmentations_path: /data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
     segmentation_classes: 4
     complex_data: true
-    batch_size: 1
+    batch_size: 4
     shuffle: true
     num_workers: 4
     pin_memory: false
     drop_last: false
 
   validation_ds:
-    data_path: /data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json
+    data_path: /data/projects/utwente/recon/SKM-TEA/v1-release/json/folds/files_recon_calib-24_fold_7_val.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
     initial_predictions_path: None
     dataset_format:
-      - custom_masking
-      - skm-tea-echo1
-      - lateral
-    sample_rate: 0.5
+    - custom_masking
+    - skm-tea-echo1
+    - lateral
+    sample_rate: 1
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
@@ -190,7 +191,7 @@ model:
     mask_args:
       type: gaussian2d  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
-        - 4  # 4, 6, 8, 10, 12, 16
+        - 8  # 4, 6, 8, 10, 12, 16
       shift_mask: false
       use_seed: true
     partial_fourier_percentage: 0.0
@@ -250,7 +251,7 @@ trainer:
 exp_manager:
   exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA/MTLRS_SENSE
   create_tensorboard_logger: false
-  create_wandb_logger: false
+  create_wandb_logger: true
   wandb_logger_kwargs:
     project: MTLRS
   files_to_copy: [ ]
