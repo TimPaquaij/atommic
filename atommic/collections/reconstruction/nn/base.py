@@ -11,7 +11,7 @@ from typing import Dict, List, Tuple, Union
 import h5py
 import numpy as np
 import torch
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf,ListConfig
 from pytorch_lightning import Trainer
 from torch.nn import L1Loss, MSELoss
 from torch.utils.data import DataLoader
@@ -35,11 +35,14 @@ from atommic.collections.reconstruction.data.mri_reconstruction_loader import (
     CC359ReconstructionMRIDataset,
     ReconstructionMRIDataset,
     SKMTEAReconstructionMRIDataset,
+    SKMTEAReconstructionMRIDatasetlateral,
     StanfordKneesReconstructionMRIDataset,
 )
 from atommic.collections.reconstruction.losses.na import NoiseAwareLoss
 from atommic.collections.reconstruction.losses.ssim import SSIMLoss
-from atommic.collections.reconstruction.metrics.reconstruction_metrics import mse, nmse, psnr, ssim
+from atommic.collections.reconstruction.losses.haarpsi import HaarPSILoss
+from atommic.collections.reconstruction.losses.vsi import VSILoss
+from atommic.collections.reconstruction.metrics import mse, nmse, psnr, ssim, haarpsi3d, vsi3d
 from atommic.collections.reconstruction.parts.transforms import ReconstructionMRIDataTransforms
 
 __all__ = ["BaseMRIReconstructionModel"]
@@ -124,6 +127,10 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
                     self.reconstruction_losses[name] = NoiseAwareLoss()
                 elif name == "l1":
                     self.reconstruction_losses[name] = L1Loss()
+                elif name == "haarpsi":
+                    self.reconstruction_losses[name] = HaarPSILoss()
+                elif name == "vsi":
+                    self.reconstruction_losses[name] = VSILoss()
         # replace losses names by 'loss_1', 'loss_2', etc. to properly iterate in the aggregator loss
         self.reconstruction_losses = {f"loss_{i+1}": v for i, v in enumerate(self.reconstruction_losses.values())}
         self.total_reconstruction_losses = len(self.reconstruction_losses)
@@ -139,7 +146,7 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
 
         # Refers to the type of the complex-valued data. It can be either "stacked" or "complex_abs" or
         # "complex_sqrt_abs".
-        self.complex_valued_type = cfg_dict.get("complex_valued_type", "stacked")
+        self.complex_valued_type = cfg_dict.get("complex_valued_type", "complex_sqrt_abs")
 
         # Initialize the module
         super().__init__(cfg=cfg, trainer=trainer)
@@ -167,6 +174,8 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
         self.NMSE = DistributedMetricSum()
         self.SSIM = DistributedMetricSum()
         self.PSNR = DistributedMetricSum()
+        self.HAARPSI = DistributedMetricSum()
+        self.VSI = DistributedMetricSum()
         self.TotExamples = DistributedMetricSum()
 
         # Set evaluation metrics dictionaries
@@ -174,6 +183,8 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
         self.nmse_vals: Dict = defaultdict(dict)
         self.ssim_vals: Dict = defaultdict(dict)
         self.psnr_vals: Dict = defaultdict(dict)
+        self.haarpsi_vals: Dict = defaultdict(dict)
+        self.vsi_vals: Dict = defaultdict(dict)
 
     def __abs_output__(self, x: torch.Tensor) -> torch.Tensor:
         """Converts the input to absolute value."""
@@ -539,15 +550,16 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
                 output_target = torch.view_as_real(output_target)
             if output_target.shape[-1] == 2:
                 output_target = torch.view_as_complex(output_target)
-            output_target = torch.abs(output_target / torch.max(torch.abs(output_target))).detach().cpu()
+            output_target = torch.abs(output_target / torch.max(torch.abs(output_target)))
+            output_target = torch.clip(output_target,0,1).detach().cpu()
 
             if torch.is_complex(output_predictions) and output_predictions.shape[-1] != 2:
                 output_predictions = torch.view_as_real(output_predictions)
             if output_predictions.shape[-1] == 2:
                 output_predictions = torch.view_as_complex(output_predictions)
-            output_predictions = (
-                torch.abs(output_predictions / torch.max(torch.abs(output_predictions))).detach().cpu()
-            )
+            output_predictions =  torch.abs(output_predictions / torch.max(torch.abs(output_predictions)))
+            output_predictions = torch.clip(output_predictions, 0, 1).detach().cpu()
+
 
             # Log target and predictions, if log_image is True for this slice.
             if attrs["log_image"][_batch_idx_]:
@@ -581,6 +593,13 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
             ).view(1)
             self.psnr_vals[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(  # type: ignore
                 psnr(output_target, output_predictions, maxval=max_value)
+            ).view(1)
+            max_value = max(np.max(output_target), np.max(output_predictions))
+            self.haarpsi_vals[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(  # type: ignore
+                haarpsi3d(output_target, output_predictions, maxval=max_value)
+            ).view(1)
+            self.vsi_vals[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(  # type: ignore
+                vsi3d(output_target, output_predictions, maxval=max_value)
             ).view(1)
 
     def __check_noise_to_recon_inputs__(
@@ -1139,17 +1158,55 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
             acceleration,
         )
 
-        if self.accumulate_predictions:
-            predictions = parse_list_and_keep_last(predictions)
+        cascades_var = []
+        if self.use_reconstruction_module:
+            if isinstance(predictions, list):
+                while isinstance(predictions, list):
+                    if len(predictions) == self.rs_cascades:
+                        for cascade in predictions:
+                            while len(cascade) != self.reconstruction_module_time_steps:
+                                cascade = cascade[-1]
+                            if len(cascade) == self.reconstruction_module_time_steps:
+                                time_steps = []
+                                for time_step in cascade:
+                                    if torch.is_complex(time_step) and time_step.shape[-1] != 2:
+                                        time_step = torch.view_as_real(time_step)
+                                    if self.consecutive_slices > 1:
+                                        time_step = time_step[:, self.consecutive_slices // 2]
+                                    time_step = (
+                                        torch.view_as_complex(time_step.type(torch.float32))
+                                        .cpu()
+                                        .numpy()
+                                    )
+                                    # time_step = np.abs(time_step/np.max(np.abs(time_step)))
+                                    time_steps.append(time_step)
+                                var_cascade = np.var(np.array(time_steps), axis=0)
+                                cascades_var.append(var_cascade)
+                        predictions = predictions[-1]
+                    else:
+                        predictions = predictions[-1]
 
-        # If "16" or "16-mixed" fp is used, ensure complex type will be supported when saving the predictions.
-        if predictions.shape[-1] == 2:
-            predictions = torch.view_as_complex(predictions.type(torch.float32))
-        else:
-            predictions = torch.view_as_complex(torch.view_as_real(predictions).type(torch.float32))
-        predictions = predictions.detach().cpu().numpy()
+        if torch.is_complex(target) and target.shape[-1] != 2:
+            target = torch.view_as_real(target)
+        if torch.is_complex(predictions) and predictions.shape[-1] != 2:
+            predictions = torch.view_as_real(predictions)
+            # If "16" or "16-mixed" fp is used, ensure complex type will be supported when saving the predictions.
+        predictions = (
+            torch.view_as_complex(predictions.type(torch.float32))
+            .detach()
+            .cpu()
+            .numpy()
+        )
+        targets = (
+            torch.view_as_complex(target.type(torch.float32))
+            .cpu()
+            .numpy()
 
-        self.test_step_outputs.append([fname, slice_idx, predictions])
+        )
+
+        self.test_step_outputs.append([str(fname[0]), slice_idx, predictions])  # type: ignore
+        self.test_step_targets.append([str(fname[0]), slice_idx, targets])
+        self.test_step_var.append([str(fname[0]), slice_idx, cascades_var])
 
     def on_validation_epoch_end(self):
         """Called at the end of validation epoch to aggregate outputs."""
@@ -1160,6 +1217,9 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
         nmse_vals = defaultdict(dict)
         ssim_vals = defaultdict(dict)
         psnr_vals = defaultdict(dict)
+        haarpsi_vals = defaultdict(dict)
+        vsi_vals = defaultdict(dict)
+
         for k, v in self.mse_vals.items():
             mse_vals[k].update(v)
         for k, v in self.nmse_vals.items():
@@ -1168,6 +1228,10 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
             ssim_vals[k].update(v)
         for k, v in self.psnr_vals.items():
             psnr_vals[k].update(v)
+        for k, v in self.haarpsi_vals.items():
+            haarpsi_vals[k].update(v)
+        for k, v in self.vsi_vals.items():
+            vsi_vals[k].update(v)
 
         # Parse metrics and log them.
         metrics = {
@@ -1175,6 +1239,8 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
             "NMSE": 0,
             "SSIM": 0,
             "PSNR": 0,
+            "HaarPSI": 0,
+            "VSI": 0,
         }
         local_examples = 0
         for fname in mse_vals:
@@ -1189,12 +1255,20 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
             metrics["PSNR"] = metrics["PSNR"] + torch.mean(
                 torch.cat([v.view(-1) for _, v in psnr_vals[fname].items()])
             )
+            metrics["HaarPSI"] = metrics["HaarPSI"] + torch.mean(
+                torch.cat([v.view(-1) for _, v in haarpsi_vals[fname].items()])
+            )
+            metrics["VSI"] = metrics["VSI"] + torch.mean(
+                torch.cat([v.view(-1) for _, v in vsi_vals[fname].items()])
+            )
 
         # reduce across ddp via sum
         metrics["MSE"] = self.MSE(metrics["MSE"])
         metrics["NMSE"] = self.NMSE(metrics["NMSE"])
         metrics["SSIM"] = self.SSIM(metrics["SSIM"])
         metrics["PSNR"] = self.PSNR(metrics["PSNR"])
+        metrics["HaarPSI"] = self.HAARPSI(metrics["HaarPSI"])
+        metrics["VSI"] = self.VSI(metrics["VSI"])
         tot_examples = self.TotExamples(torch.tensor(local_examples))
 
         for metric, value in metrics.items():
@@ -1207,6 +1281,8 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
         nmse_vals = defaultdict(dict)
         ssim_vals = defaultdict(dict)
         psnr_vals = defaultdict(dict)
+        haarpsi_vals = defaultdict(dict)
+        vsi_vals = defaultdict(dict)
 
         for k, v in self.mse_vals.items():
             mse_vals[k].update(v)
@@ -1216,18 +1292,25 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
             ssim_vals[k].update(v)
         for k, v in self.psnr_vals.items():
             psnr_vals[k].update(v)
+        for k, v in self.haarpsi_vals.items():
+            haarpsi_vals[k].update(v)
+        for k, v in self.vsi_vals.items():
+            vsi_vals[k].update(v)
 
-        # apply means across image volumes
+        # Parse metrics and log them.
         metrics = {
             "MSE": 0,
             "NMSE": 0,
             "SSIM": 0,
             "PSNR": 0,
+            "HaarPSI": 0,
+            "VSI": 0,
         }
         local_examples = 0
         for fname in mse_vals:
             local_examples += 1
-            metrics["MSE"] = metrics["MSE"] + torch.mean(torch.cat([v.view(-1) for _, v in mse_vals[fname].items()]))
+            metrics["MSE"] = metrics["MSE"] + torch.mean(
+                torch.cat([v.view(-1) for _, v in mse_vals[fname].items()]))
             metrics["NMSE"] = metrics["NMSE"] + torch.mean(
                 torch.cat([v.view(-1) for _, v in nmse_vals[fname].items()])
             )
@@ -1237,13 +1320,23 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
             metrics["PSNR"] = metrics["PSNR"] + torch.mean(
                 torch.cat([v.view(-1) for _, v in psnr_vals[fname].items()])
             )
+            metrics["HaarPSI"] = metrics["HaarPSI"] + torch.mean(
+                torch.cat([v.view(-1) for _, v in haarpsi_vals[fname].items()])
+            )
+            metrics["VSI"] = metrics["VSI"] + torch.mean(
+                torch.cat([v.view(-1) for _, v in vsi_vals[fname].items()])
+            )
 
         # reduce across ddp via sum
         metrics["MSE"] = self.MSE(metrics["MSE"])
         metrics["NMSE"] = self.NMSE(metrics["NMSE"])
         metrics["SSIM"] = self.SSIM(metrics["SSIM"])
         metrics["PSNR"] = self.PSNR(metrics["PSNR"])
+        metrics["HaarPSI"] = self.PSNR(metrics["HaarPSI"])
+        metrics["VSI"] = self.PSNR(metrics["VSI"])
         tot_examples = self.TotExamples(torch.tensor(local_examples))
+
+
 
         for metric, value in metrics.items():
             self.log(f"test_metrics/{metric}", value / tot_examples, prog_bar=True, sync_dist=True)
@@ -1308,21 +1401,27 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
             mask_func = [create_masker(mask_type, center_fractions, accelerations)]
 
         dataset_format = cfg.get("dataset_format", None)
-        if dataset_format.lower() == "cc359":
-            dataloader = CC359ReconstructionMRIDataset
-        elif dataset_format.lower() == "stanford_knees":
-            dataloader = StanfordKneesReconstructionMRIDataset
-        elif dataset_format.lower() in (
-            "skm-tea-echo1",
-            "skm-tea-echo2",
-            "skm-tea-echo1+echo2",
-            "skm-tea-echo1+echo2-mc",
-        ):
-            dataloader = SKMTEAReconstructionMRIDataset
-        elif dataset_format.lower() == "ahead":
-            dataloader = AHEADqMRIDataset
+        if isinstance(dataset_format,ListConfig):
+            if any(s.lower() in (
+                "skm-tea-echo1",
+                "skm-tea-echo2",
+                "skm-tea-echo1+echo2",
+                "skm-tea-echo1+echo2-mc") for s in dataset_format):
+
+                if any(a.lower() == "lateral" for a in dataset_format):
+                    dataloader = SKMTEAReconstructionMRIDatasetlateral
+
+                else:
+                    dataloader = SKMTEAReconstructionMRIDataset
         else:
-            dataloader = ReconstructionMRIDataset
+            if dataset_format.lower() == "cc359":
+                dataloader = CC359ReconstructionMRIDataset
+            elif dataset_format.lower() == "stanford_knees":
+                dataloader = StanfordKneesReconstructionMRIDataset
+            elif dataset_format.lower() == "ahead":
+                dataloader = AHEADqMRIDataset
+            else:
+                dataloader = ReconstructionMRIDataset
 
         # Get dataset.
         dataset = dataloader(

@@ -238,6 +238,17 @@ def main(args):
             maps = np.transpose(new_arr, (0, 1, 2, 4, 3))
             print('Interpolated all Sensitivity Coils', maps.shape)
 
+            #### Crop Sensitivity Maps #######
+            #maps = maps[48:-48, :, 40:-40, ...]
+            #maps = maps[int(maps.shape[0] / 2 - (maps.shape[0] * crop_scale[0] / 2)):int(
+            #     maps.shape[0] / 2 + (maps.shape[0] * crop_scale[0] / 2)),
+            #          int(maps.shape[1] / 2 - (maps.shape[1] * crop_scale[1] / 2)):int(
+            #              maps.shape[1] / 2 + (maps.shape[1] * crop_scale[1] / 2)),
+            #          int(maps.shape[2] / 2 - (maps.shape[2] * crop_scale[2] / 2)):int(
+            #              maps.shape[2] / 2 + (maps.shape[2] * crop_scale[2] / 2)),
+            #          :,
+            #          :]
+            # maps = np.transpose(maps, (2, 0, 1, 4, 3))
 
             with h5py.File(wfname, "w") as wf:
                 wf.create_dataset('kspace',data=kspace)
@@ -249,11 +260,12 @@ def main(args):
 
 
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("data_path", type=Path, default=None, help="Path to the annotations json file.")
     parser.add_argument("annotations_path", type=Path, default=None, help="Path to the annotations json file.")
     parser.add_argument("--data_type", choices=["raw", "image"], default="raw", help="Type of data to split.")
-    parser.add_argument("--crop_scale", type=list, default=[1,1,1], help="List with scalers for croppig")
+    parser.add_argument("--crop_scale", type=list, default=[0.5,0.5,1], help="List with scalers for croppig")
     args = parser.parse_args()
     main(args)

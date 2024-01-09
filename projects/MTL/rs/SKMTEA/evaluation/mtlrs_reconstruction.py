@@ -4,20 +4,24 @@ __author__ = "Dimitris Karkalousos"
 import json
 import os
 from pathlib import Path
-
+import pandas as pd
 import h5py
 import numpy as np
 from tqdm import tqdm
-
+import torch
 from atommic.collections.reconstruction.metrics.reconstruction_metrics import (
     ReconstructionMetrics,
     mse,
     nmse,
     psnr,
     ssim,
-)
+haarpsi3d,
+vsi3d
 
-METRIC_FUNCS = {"MSE": mse, "NMSE": nmse, "PSNR": psnr, "SSIM": ssim}
+)
+import matplotlib.pyplot as plt
+
+METRIC_FUNCS = {"MSE": mse, "NMSE": nmse, "PSNR": psnr, "SSIM": ssim, "HaarPSI":haarpsi3d,"VSI":vsi3d}
 
 
 def main(args):
@@ -30,40 +34,60 @@ def main(args):
         targets = list(Path(args.targets_dir).iterdir())
 
     evaluation_type = args.evaluation_type
-
-    scores = ReconstructionMetrics(METRIC_FUNCS)
+    dataframe = pd.DataFrame()
     for target in tqdm(targets):
+        scores = ReconstructionMetrics(METRIC_FUNCS)
+        #For now reconstruction made based on ksapce and maps not saved in file yet
         reconstruction = h5py.File(Path(args.reconstructions_dir) / str(target).rsplit("/", maxsplit=1)[-1], "r")[
             "reconstruction"
         ][()].squeeze()
-
-        target = h5py.File(target, "r")["reconstruction"][()].squeeze()
+        if'target_reconstruction' in h5py.File(Path(args.reconstructions_dir) / str(target).rsplit("/", maxsplit=1)[-1], "r").keys():
+            target_scan = h5py.File(Path(args.reconstructions_dir) / str(target).rsplit("/", maxsplit=1)[-1], "r")[
+                "target_reconstruction"
+            ][()].squeeze()
+            print('go')
+        else:
+            kspace = h5py.File(target, "r")["kspace"][()]
+            maps = h5py.File(target, "r")["maps"][()]
+            target_scan = np.zeros(reconstruction.shape)
+            for i in range(target.shape[0]):
+                kspace_fft_4 = torch.fft.ifftshift(torch.from_numpy(kspace[i, :, :, :, :]), dim=(0, 1))
+                kspace_fft_5 = torch.fft.ifft2(kspace_fft_4, dim=(0, 1))
+                kspace_fft_6 = torch.fft.fftshift(kspace_fft_5, dim=(0, 1))
+                image_fft = kspace_fft_6 * torch.conj(torch.as_tensor(maps[i, :, :, :, :]))
+                target_scan[i,...] = torch.sum(image_fft, dim=-1, keepdim=False)[:,:,0].numpy() ##Select which echo to compare
 
         # normalize per slice
-        for sl in range(target.shape[0]):
-            target[sl] = target[sl] / np.max(np.abs(target[sl]))
+        for sl in range(target_scan.shape[0]):
+            target_scan[sl] = target_scan[sl] / np.max(np.abs(target_scan[sl]))
             reconstruction[sl] = reconstruction[sl] / np.max(np.abs(reconstruction[sl]))
         reconstruction = np.abs(reconstruction).real.astype(np.float32)
-        target = np.abs(target).real.astype(np.float32)
-
-        maxvalue = max(np.max(target) - np.min(target), np.max(reconstruction) - np.min(reconstruction))
+        target_scan = np.abs(target_scan).real.astype(np.float32)
+        maxvalue = max(np.max(target_scan), np.max(reconstruction))
 
         if evaluation_type == "per_slice":
-            for sl in range(target.shape[0]):
-                scores.push(target[sl], reconstruction[sl], maxval=maxvalue)
+            for sl in range(target_scan.shape[0]):
+                scores.push(target_scan[sl], reconstruction[sl], maxval=maxvalue)
+
         elif evaluation_type == "per_volume":
             scores.push(target, reconstruction, maxval=maxvalue)
 
-    model = args.reconstructions_dir.split("/")
-    model = model[-4] if model[-4] != "default" else model[-5]
-    print(f"{model}: {repr(scores)}")
-
+        model = args.reconstructions_dir.split("/")
+        model = model[-4] if model[-4] != "default" else model[-5]
+        print(f"{model+'_'+ str(target).rsplit('/', maxsplit=1)[-1]}: {repr(scores)}")
+        new_row = {"patiend_id": str(target).rsplit('/', maxsplit=1)[-1].replace('.h5', "")}
+        new_row.update(scores.means())
+        dataframe = dataframe._append(new_row, ignore_index=True)
+        if args.output_dir is not None:
+            output_dir = Path(args.output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            # if file exists dont' overwrite, but append in a new line
+            with open(output_dir / "results_reconstruction.txt", "a", encoding="utf-8") as f:
+                f.write(f"{model+'_'+ str(target).rsplit('/', maxsplit=1)[-1]}: {repr(scores)}\n")
     if args.output_dir is not None:
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        # if file exists dont' overwrite, but append in a new line
-        with open(output_dir / "results.txt", "a", encoding="utf-8") as f:
-            f.write(f"{model}: {repr(scores)}\n")
+        dataframe.to_csv(output_dir / "results_reconstruction.csv")
 
 
 if __name__ == "__main__":

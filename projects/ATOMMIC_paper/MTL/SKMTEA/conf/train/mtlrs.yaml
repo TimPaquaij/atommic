@@ -113,7 +113,8 @@ model:
     mask_path: None
     noise_path: None
     initial_predictions_path: None
-    dataset_format: skm-tea-echo1
+    dataset_format:
+    - skm-tea-echo1
     sample_rate: 1
     volume_sample_rate: None
     use_dataset_cache: false
@@ -151,7 +152,7 @@ model:
       - -1
     coil_dim: 1
     use_seed: false
-    segmentations_path: parent_data_dir/skm-tea/v1-release/segmentation_masks/raw-data-track
+    segmentations_path: /data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track/
     segmentation_classes: 4
     complex_data: true
     batch_size: 1
@@ -161,12 +162,13 @@ model:
     drop_last: false
 
   validation_ds:
-    data_path: parent_data_dir/skm-tea/v1-release/json/files_recon_calib-24_val.json
+    data_path: /data/projects/recon/data/public/multitask//skm-tea/v1-release/json/files_recon_calib-24_val.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
     initial_predictions_path: None
-    dataset_format: skm-tea-echo1
+    dataset_format:
+    - skm-tea-echo1
     sample_rate: 1
     volume_sample_rate: None
     use_dataset_cache: false
@@ -205,7 +207,7 @@ model:
       - -1
     coil_dim: 1
     use_seed: true
-    segmentations_path: parent_data_dir/skm-tea/v1-release/segmentation_masks/raw-data-track
+    segmentations_path: /data/projects/recon/data/public/multitask//skm-tea/v1-release/segmentation_masks/raw-data-track/
     segmentation_classes: 4
     complex_data: true
     batch_size: 1
@@ -241,6 +243,9 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: output_data_dir/atommic/MTL/trained_models/SKMTEA/MTLRS_SENSE
-  create_tensorboard_logger: true
-  create_wandb_logger: false
+  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA/MTLRS_SENSE
+  create_tensorboard_logger: false
+  create_wandb_logger: true
+  wandb_logger_kwargs:
+    project: MTLRS
+  files_to_copy: [ ]

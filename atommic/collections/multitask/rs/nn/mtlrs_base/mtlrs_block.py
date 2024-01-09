@@ -13,7 +13,7 @@ from atommic.collections.reconstruction.nn.unet_base.unet_block import Unet
 from atommic.collections.segmentation.nn.attentionunet_base.attentionunet_block import AttentionUnet
 from atommic.collections.segmentation.nn.lambdaunet_base.lambdaunet_block import LambdaBlock
 from atommic.collections.segmentation.nn.vnet_base.vnet_block import VNet
-from atommic.core.models_uq.model.sequential import *
+
 __all__ = ["MTLRSBlock"]
 
 
@@ -82,7 +82,6 @@ class MTLRSBlock(torch.nn.Module):
         self.spatial_dims = spatial_dims
         self.coil_dim = coil_dim
         self.dimensionality = dimensionality
-        self.uncertainty = False
         if self.dimensionality != 2:
             raise NotImplementedError(f"Currently only 2D is supported for segmentation, got {self.dimensionality}D.")
         self.consecutive_slices = consecutive_slices
@@ -132,7 +131,7 @@ class MTLRSBlock(torch.nn.Module):
             std_init_range = 1 / self.reconstruction_module_recurrent_filters[0] ** 0.5
             self.reconstruction_module.apply(lambda module: rnn_weights_init(module, std_init_range))
         self.dc_weight = torch.nn.Parameter(torch.ones(1))
-        self.reconstruction_module_accumulate_predictions = self.reconstruction_module_params["accumulate_predictions"]
+        self.accumulate_predictions = self.reconstruction_module_params["accumulate_predictions"]
 
         # Segmentation module parameters
         self.segmentation_module_params = segmentation_module_params
@@ -146,7 +145,6 @@ class MTLRSBlock(torch.nn.Module):
                 num_pool_layers=self.segmentation_module_params["pooling_layers"],
                 drop_prob=self.segmentation_module_params["dropout"],
             )
-            print(segmentation_module)
         elif segmentation_module.lower() == "attentionunet":
             segmentation_module = AttentionUnet(
                 in_chans=self.input_channels,
@@ -226,36 +224,44 @@ class MTLRSBlock(torch.nn.Module):
         if self.consecutive_slices > 1 and self.reconstruction_module_dimensionality == 2:
             # Do per slice reconstruction
             pred_reconstruction_slices = []
+            temp_hx = []
             for slice_idx in range(self.consecutive_slices):
                 y_slice = y[:, slice_idx, ...]
                 prediction_slice = y_slice.clone()
                 sensitivity_maps_slice = sensitivity_maps[:, slice_idx, ...]
                 mask_slice = mask[:, 0, ...]
                 init_reconstruction_pred_slice = init_reconstruction_pred[:, slice_idx, ...]
+                if not hx[0].shape:
+                    hx_slice =hx
+                else:
+                    hx_slice = [x[:,slice_idx,...] for x in hx]
+
                 _pred_reconstruction_slice = (
                     None
                     if init_reconstruction_pred_slice is None or init_reconstruction_pred_slice.dim() < 4
                     else init_reconstruction_pred_slice
                 )
                 cascades_predictions = []
+                cascades_hx_predictions = []
                 for i, cascade in enumerate(self.reconstruction_module):
                     # Forward pass through the cascades
-                    if self.uncertainty:
-                        cascade = RNN_uncertainty_wrapper(cascade)
-                    prediction_slice, hx = cascade(
+                    prediction_slice, hx_slice= cascade(
                         prediction_slice,
                         y_slice,
                         sensitivity_maps_slice,
                         mask_slice,
                         _pred_reconstruction_slice,
-                        hx,
+                        hx_slice,
                         sigma,
                         keep_prediction=False if i == 0 else self.keep_prediction,
                     )
                     time_steps_predictions = [torch.view_as_complex(pred) for pred in prediction_slice]
                     cascades_predictions.append(torch.stack(time_steps_predictions, dim=0))
                 pred_reconstruction_slices.append(torch.stack(cascades_predictions, dim=0))
+                temp_hx.append(torch.stack(hx_slice,dim=0))
             preds = torch.stack(pred_reconstruction_slices, dim=3)
+            hx = torch.stack(temp_hx,dim=2)
+
 
             cascades_predictions = [
                 [
@@ -275,9 +281,6 @@ class MTLRSBlock(torch.nn.Module):
             cascades_predictions = []
             for i, cascade in enumerate(self.reconstruction_module):
                 # Forward pass through the cascades
-                if self.uncertainty:
-                    parameters = cascade.get_parameter()
-                    print(parameters)
                 prediction, hx = cascade(
                     prediction,
                     y,

@@ -40,12 +40,14 @@ model:
   depth: 2
   time_steps: 8
   conv_dim: 2
-  num_cascades: 8
+  num_cascades: 5
   no_dc: true
   keep_prediction: true
   accumulate_predictions: true
   dimensionality: 2
-  reconstruction_loss: l1
+  reconstruction_loss:
+    l1: 1
+    ssim: 1
   normalization_type: max
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
@@ -65,13 +67,16 @@ model:
   consecutive_slices: 1
 
   train_ds:
-    data_path: data_parent_dir/skm-tea/v1-release/json/files_recon_calib-24_train.json
+    data_path: /data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_train.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
     initial_predictions_path: None
-    dataset_format: skm-tea-echo1+echo2  # skm-tea-echo1, skm-tea-echo2, skm-tea-echo1+echo2, skm-tea-echo1+echo2-mc
-    sample_rate: 1
+    dataset_format:
+      - custom_masking
+      - skm-tea-echo1
+      - lateral
+    sample_rate: 0.1
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
@@ -85,14 +90,9 @@ model:
     coil_combination_method: SENSE
     dimensionality: 2
     mask_args:
-      type: poisson2d  # the mask will be loaded from the dataset, but we need to specify the type here
+      type: gaussian2d  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
         - 4  # 4, 6, 8, 10, 12, 16
-        - 6  # 4, 6, 8, 10, 12, 16
-        - 8  # 4, 6, 8, 10, 12, 16
-        - 10  # 4, 6, 8, 10, 12, 16
-        - 12  # 4, 6, 8, 10, 12, 16
-        - 16  # 4, 6, 8, 10, 12, 16
       shift_mask: false
       use_seed: false
     partial_fourier_percentage: 0.0
@@ -121,13 +121,17 @@ model:
     drop_last: false
 
   validation_ds:
-    data_path: data_parent_dir/skm-tea/v1-release/json/files_recon_calib-24_val.json
+    data_path: /data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
     initial_predictions_path: None
-    dataset_format: skm-tea-echo1+echo2  # skm-tea-echo1, skm-tea-echo2, skm-tea-echo1+echo2, skm-tea-echo1+echo2-mc
-    sample_rate: 1
+    dataset_format:
+      - custom_masking
+      - skm-tea-echo1
+      - lateral
+    sample_rate: 0.1
+    log_images_rate: 0.04
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
@@ -141,14 +145,9 @@ model:
     coil_combination_method: SENSE
     dimensionality: 2
     mask_args:
-      type: poisson2d  # the mask will be loaded from the dataset, but we need to specify the type here
+      type: gaussian2d  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
         - 4  # 4, 6, 8, 10, 12, 16
-        - 6  # 4, 6, 8, 10, 12, 16
-        - 8  # 4, 6, 8, 10, 12, 16
-        - 10  # 4, 6, 8, 10, 12, 16
-        - 12  # 4, 6, 8, 10, 12, 16
-        - 16  # 4, 6, 8, 10, 12, 16
       shift_mask: false
       use_seed: true
     partial_fourier_percentage: 0.0
@@ -203,10 +202,10 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: output_dir/atommic/reconstruction/trained_models/SKM-TEA_poisson2d_4x_6x_8x_10x_12x_16x/CIRIM/
+  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA/CIRIM_sense
   ema:
     enable: false
-  create_tensorboard_logger: true
-  create_wandb_logger: false
+  create_tensorboard_logger: false
+  create_wandb_logger: true
   wandb_logger_kwargs:
-    project: atommic.reconstruction.trained_models.SKM-TEA_poisson2d_4x_6x_8x_10x_12x_16x
+    project: CIRIM

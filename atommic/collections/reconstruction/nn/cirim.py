@@ -181,8 +181,8 @@ class CIRIM(BaseMRIReconstructionModel):
         elif not self.unnormalize_loss_inputs:
             # Ensure loss inputs are both viewed in the same way.
             target = self.__abs_output__(target)
-            # Normalize inputs to [0, 1]
-            target = torch.abs(target / torch.max(torch.abs(target)))
+            # Normalize inputs
+            target = target / torch.max(torch.abs(target))
 
         def compute_reconstruction_loss(t, p, s):
             if self.unnormalize_loss_inputs:
@@ -209,19 +209,33 @@ class CIRIM(BaseMRIReconstructionModel):
             elif not self.unnormalize_loss_inputs:
                 p = self.__abs_output__(p)
                 # Normalize inputs to [0, 1]
-                p = torch.abs(p / torch.max(torch.abs(p)))
+                target = p / torch.max(torch.abs(p))
 
             if "ssim" in str(loss_func).lower():
-                return loss_func(
-                    t.unsqueeze(dim=self.coil_dim),
-                    p.unsqueeze(dim=self.coil_dim),
-                    data_range=torch.tensor(
-                        [max(torch.max(t).item(), torch.max(p).item()) - min(torch.min(t).item(), torch.min(p).item())]
-                    )
-                    .unsqueeze(dim=0)
-                    .to(t.device),
-                )
+                if torch.is_complex(p) or torch.is_complex(t):
+                    t = torch.abs(t)
+                    p = torch.abs(p)
 
+                return loss_func(t, p,
+                                 data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(
+                                     dim=0).to(t))
+
+            if "haarpsi" in str(loss_func).lower():
+                if torch.is_complex(p) or torch.is_complex(t):
+                    t = torch.abs(t)
+                    p = torch.abs(p)
+
+                return loss_func(t, p,
+                                 data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(
+                                     dim=0).to(t))
+            if "vsi" in str(loss_func).lower():
+                if torch.is_complex(p) or torch.is_complex(t):
+                    t = torch.abs(t)
+                    p = torch.abs(p)
+
+                return loss_func(t, p,
+                                 data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(
+                                     dim=0).to(t))
             return loss_func(t, p)
 
         if self.accumulate_predictions:

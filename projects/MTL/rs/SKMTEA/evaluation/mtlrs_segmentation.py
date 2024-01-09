@@ -9,6 +9,7 @@ import h5py
 import nibabel as nib
 import numpy as np
 from tqdm import tqdm
+import pandas as pd
 
 from atommic.collections.segmentation.metrics.segmentation_metrics import (
     SegmentationMetrics,
@@ -21,7 +22,7 @@ from atommic.collections.segmentation.metrics.segmentation_metrics import (
 METRIC_FUNCS = {
     "DICE": dice_metric,
     "F1": f1_per_class_metric,
-    "HD95": lambda x, y: hausdorff_distance_95_metric(x, y, batched=False, sum_method="sum"),
+    "HD95": lambda x, y: hausdorff_distance_95_metric(x, y, batched=True, sum_method="sum"),
     "IOU": iou_metric,
 }
 
@@ -75,9 +76,9 @@ def main(args):
         targets = list(Path(args.targets_dir).iterdir())
 
     evaluation_type = args.evaluation_type
-
-    scores = SegmentationMetrics(METRIC_FUNCS)
+    dataframe = pd.DataFrame()
     for target in tqdm(targets):
+        scores = SegmentationMetrics(METRIC_FUNCS)
         fname = str(target).rsplit("/", maxsplit=1)[-1]
         if ".h5" in fname:
             fname = fname.split(".h5")[0]
@@ -88,29 +89,34 @@ def main(args):
         predictions = np.abs(predictions.astype(np.float32))
         predictions = np.where(predictions > 0.5, 1, 0)
 
-        segmentation_labels = nib.load(Path(args.segmentations_dir) / f"{fname}.nii.gz").get_fdata()
-        segmentation_labels = process_segmentation_labels(segmentation_labels)
+        segmentation_labels = h5py.File(Path(args.predictions_dir) / f"{fname}.h5", "r")["target_segmentation"][()].squeeze()
+        #segmentation_labels = np.transpose(segmentation_labels, (0, 3, 1, 2))
+        #segmentation_labels = process_segmentation_labels(segmentation_labels)
         segmentation_labels = np.abs(segmentation_labels.astype(np.float32))
         segmentation_labels = np.where(segmentation_labels > 0.5, 1, 0)
-
         if evaluation_type == "per_slice":
             for sl in range(segmentation_labels.shape[0]):
-                if segmentation_labels[sl].sum() > 0:
-                    scores.push(segmentation_labels[sl].copy(), predictions[sl].copy())
+                #if segmentation_labels[sl].sum() > 0:
+                scores.push(segmentation_labels[sl].copy(), predictions[sl].copy())
         elif evaluation_type == "per_volume":
             scores.push(segmentation_labels, predictions)
 
-    model = args.predictions_dir.split("/")
-    model = model[-4] if model[-4] != "default" else model[-5]
-    print(f"{model}: {repr(scores)}")
-
+        model = args.predictions_dir.split("/")
+        model = model[-4] if model[-4] != "default" else model[-5]
+        print(f"{model+'_'+ str(target).rsplit('/', maxsplit=1)[-1]}: {repr(scores)}")
+        new_row = {"patiend_id":str(target).rsplit('/', maxsplit=1)[-1].replace('.h5',"")}
+        new_row.update(scores.means())
+        dataframe= dataframe._append(new_row,ignore_index=True)
+        if args.output_dir is not None:
+            output_dir = Path(args.output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            # if file exists dont' overwrite, but append in a new line
+            with open(output_dir / "results_segmentation.txt", "a", encoding="utf-8") as f:
+                f.write(f"{model+'_'+ str(target).rsplit('/', maxsplit=1)[-1]}: {repr(scores)}")
     if args.output_dir is not None:
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        # if file exists dont' overwrite, but append in a new line
-        with open(output_dir / "results.txt", "a", encoding="utf-8") as f:
-            f.write(f"{model}: {repr(scores)}\n")
-
+        dataframe.to_csv(output_dir / "results_segmentation.csv")
 
 if __name__ == "__main__":
     import argparse
@@ -125,7 +131,7 @@ if __name__ == "__main__":
     parser.add_argument("--fill_target_path", action="store_true")
     parser.add_argument("--fill_pred_path", action="store_true")
     args = parser.parse_args()
-
+    print(args)
     if args.fill_target_path:
         input_dir = ""
         for root, dirs, files in os.walk(args.targets_dir, topdown=False):

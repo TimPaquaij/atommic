@@ -23,5 +23,5 @@ echo "Please enter the output directory for the generated json files:"
 read OUTPUT_DIR
 
 # Run the json generation script
-python projects/MTL/rs/SKMTEA/scripts/split_sets_json.py $INPUT_DIR $OUTPUT_DIR --data_type raw
+
 echo "Done!"

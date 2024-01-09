@@ -1126,6 +1126,7 @@ class RSMRIDataTransforms:
                 }
             if prediction.shape[-1] != 2 and torch.is_complex(prediction):
                 prediction = torch.view_as_real(prediction)
+
         return prediction, pre_normalization_vars  # type: ignore
 
     def __parse_normalization_vars__(  # noqa: MC0001

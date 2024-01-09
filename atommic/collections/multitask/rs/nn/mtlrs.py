@@ -67,8 +67,7 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
             "depth": cfg_dict.get("reconstruction_module_depth"),
             "conv_dim": conv_dim,
             "pretrained": cfg_dict.get("pretrained"),
-            "accumulate_predictions": self.reconstruction_module_accumulate_predictions,
-        }
+            "accumulate_predictions": self.reconstruction_module_accumulate_predictions,}
 
         self.segmentation_module_output_channels = cfg_dict.get("segmentation_module_output_channels", 2)
         segmentation_module_params = {
@@ -85,7 +84,6 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
 
         self.coil_dim = cfg_dict.get("coil_dim", 1)
         self.consecutive_slices = cfg_dict.get("consecutive_slices", 1)
-
         self.rs_cascades = cfg_dict.get("joint_reconstruction_segmentation_module_cascades", 1)
         self.rs_module = torch.nn.ModuleList(
             [
@@ -160,34 +158,49 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
             init_reconstruction_pred = pred_reconstruction[-1][-1]
 
             if self.task_adaption_type == "multi_task_learning":
-                hidden_states = [
-                    torch.cat(
-                        [torch.abs(init_reconstruction_pred.unsqueeze(self.coil_dim) * pred_segmentation)]
-                        * (f // self.segmentation_module_output_channels),
-                        dim=self.coil_dim,
-                    )
-                    for f in self.reconstruction_module_recurrent_filters
-                    if f != 0
-                ]
-
                 if self.consecutive_slices > 1:
-                    hx = [x.unsqueeze(1) for x in hx]
+                    hidden_states = [
+                        torch.cat(
+                            [torch.abs(init_reconstruction_pred.unsqueeze(self.coil_dim) * pred_segmentation)]
+                            * (f // self.segmentation_module_output_channels),
+                            dim=self.coil_dim,
+                        )
+                        for f in self.reconstruction_module_recurrent_filters
+                        if f != 0
+                    ]
+
+
+
+                else:
+                    hidden_states = [
+                        torch.cat(
+                            [torch.abs(init_reconstruction_pred.unsqueeze(
+                                self.coil_dim) * pred_segmentation)]
+                            * (f // self.segmentation_module_output_channels),
+                            dim=self.coil_dim,
+                        )
+                        for f in self.reconstruction_module_recurrent_filters
+                        if f != 0
+                    ]
+
+
 
                 # Check if the concatenated hidden states are the same size as the hidden state of the RNN
-                if hidden_states[0].shape[self.coil_dim] != hx[0].shape[self.coil_dim]:
-                    prev_hidden_states = hidden_states
-                    hidden_states = []
-                    for hs in prev_hidden_states:
-                        new_hidden_state = hs
-                        for _ in range(hx[0].shape[1] - prev_hidden_states[0].shape[1]):
-                            new_hidden_state = torch.cat(
-                                [new_hidden_state, torch.zeros_like(hx[0][:, 0, :, :]).unsqueeze(self.coil_dim)],
-                                dim=self.coil_dim,
-                            )
-                        hidden_states.append(new_hidden_state)
+                # if hidden_states[0].shape[self.coil_dim] != hx[0].shape[self.coil_dim]:
+                #     prev_hidden_states = hidden_states
+                #     hidden_states = []
+                #     for hs in prev_hidden_states:
+                #         new_hidden_state = hs
+                #         for _ in range(hx[0].shape[1] - prev_hidden_states[0].shape[1]):
+                #             new_hidden_state = torch.cat(
+                #                 [new_hidden_state, torch.zeros_like(hx[0][:, 0, :, :]).unsqueeze(self.coil_dim)],
+                #                 dim=self.coil_dim,
+                #             )
+                #         hidden_states.append(new_hidden_state)
 
+                # for i in range(len(hx)):
+                #     hx[i,:,self.consecutive_slices//2] = hx[i,:,self.consecutive_slices//2] + hidden_states[i]
                 hx = [hx[i] + hidden_states[i] for i in range(len(hx))]
-
             init_reconstruction_pred = torch.view_as_real(init_reconstruction_pred)
 
         return pred_reconstructions, pred_segmentation
@@ -245,7 +258,8 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
             # Ensure loss inputs are both viewed in the same way.
             target = self.__abs_output__(target / torch.max(torch.abs(target)))
         elif not self.unnormalize_loss_inputs:
-            target = self.__abs_output__(target / torch.max(torch.abs(target)))
+            target = self.__abs_output__(target)
+            target = target / torch.max(torch.abs(target))
 
         def compute_reconstruction_loss(t, p, s):
             if self.unnormalize_loss_inputs:
@@ -270,50 +284,59 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                 # Ensure loss inputs are both viewed in the same way.
                 p = self.__abs_output__(p / torch.max(torch.abs(p)))
             elif not self.unnormalize_loss_inputs:
-                p = self.__abs_output__(p / torch.max(torch.abs(p)))
+                p = self.__abs_output__(p)
+                p = p / torch.max(torch.abs(p))
 
             if "ssim" in str(loss_func).lower():
-                p = torch.abs(p / torch.max(torch.abs(p)))
-                t = torch.abs(t / torch.max(torch.abs(t)))
+                if torch.is_complex(p) or torch.is_complex(t):
+                    t= torch.abs(t)
+                    p= torch.abs(p)
 
-                return loss_func(
-                    t,
-                    p,
-                    data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(dim=0).to(t),
-                )
+                return loss_func(t,p,data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(dim=0).to(t))
+
             if "haarpsi" in str(loss_func).lower():
-                p = torch.abs(p / torch.max(torch.abs(p)))
-                t = torch.abs(t / torch.max(torch.abs(t)))
+                if torch.is_complex(p) or torch.is_complex(t):
+                    t = torch.abs(t)
+                    p = torch.abs(p)
 
-                return loss_func(
-                    t,
-                    p,
-                    data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(dim=0).to(t))
+                return loss_func(t, p,
+                                 data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(
+                                     dim=0).to(t))
             if "vsi" in str(loss_func).lower():
+                if torch.is_complex(p) or torch.is_complex(t):
+                    t = torch.abs(t)
+                    p = torch.abs(p)
 
-                p = torch.abs(p / torch.max(torch.abs(p)))
-                t = torch.abs(t / torch.max(torch.abs(t)))
+                return loss_func(t, p, data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(
+                    dim=0).to(t))
+            return loss_func(t,p)
 
-                return loss_func(
-                    t,
-                    p,
-                    data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(dim=0).to(t))
-
-            return loss_func(t, p)
-
-        if self.accumulate_predictions:
+        if self.reconstruction_module_accumulate_predictions:
             rs_cascades_weights = torch.logspace(-1, 0, steps=len(prediction)).to(target.device)
             rs_cascades_loss = []
             for rs_cascade_pred in prediction:
                 cascades_weights = torch.logspace(-1, 0, steps=len(rs_cascade_pred)).to(target.device)
                 cascades_loss = []
                 for cascade_pred in rs_cascade_pred:
-                    time_steps_weights = torch.logspace(-1, 0, steps=self.time_steps).to(target.device)
-                    time_steps_loss = [
-                        compute_reconstruction_loss(target, time_step_pred, sensitivity_maps)
-                        for time_step_pred in cascade_pred
-                    ]
-                    cascade_loss = sum(x * w for x, w in zip(time_steps_loss, time_steps_weights)) / self.time_steps
+                    if self.consecutive_slices >1:
+                        time_steps_weights = torch.logspace(-1, 0, steps=self.reconstruction_module_time_steps).to(target.device)
+                        time_steps_loss = [
+                            compute_reconstruction_loss(target[:,self.consecutive_slices//2], time_step_pred[:,self.consecutive_slices//2], sensitivity_maps[:,self.consecutive_slices//2])
+                            for time_step_pred in cascade_pred
+                        ]
+                    else:
+                        time_steps_weights = torch.logspace(-1, 0, steps=self.reconstruction_module_time_steps).to(
+                            target.device)
+                        time_steps_loss = [
+                            compute_reconstruction_loss(target,
+                                                        time_step_pred,
+                                                        sensitivity_maps)
+                            for time_step_pred in cascade_pred
+                        ]
+
+
+                    cascade_loss = sum(x * w for x, w in
+                                       zip(time_steps_loss, time_steps_weights)) / self.reconstruction_module_time_steps
                     cascades_loss.append(cascade_loss)
                 rs_cascade_loss = sum(x * w for x, w in zip(cascades_loss, cascades_weights)) / len(rs_cascade_pred)
                 rs_cascades_loss.append(rs_cascade_loss)
@@ -321,5 +344,11 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
         else:
             # keep the last prediction of the last cascade of the last rs cascade
             prediction = prediction[-1][-1][-1]
-            loss = compute_reconstruction_loss(target, prediction, sensitivity_maps)
+            time_steps_weights = torch.logspace(-1, 0, steps=self.consecutive_slices).to(
+                target.device)
+            slices_loss = [
+                compute_reconstruction_loss(target[:, i, ...], prediction[:, i, ...], sensitivity_maps[:, i, ...])
+                for i in range(self.consecutive_slices)]
+            loss = sum(x * w for x, w in zip(slices_loss,
+                                                       time_steps_weights)) / self.consecutive_slices
         return loss
