@@ -131,7 +131,7 @@ class MTLRSBlock(torch.nn.Module):
             std_init_range = 1 / self.reconstruction_module_recurrent_filters[0] ** 0.5
             self.reconstruction_module.apply(lambda module: rnn_weights_init(module, std_init_range))
         self.dc_weight = torch.nn.Parameter(torch.ones(1))
-        self.reconstruction_module_accumulate_predictions = self.reconstruction_module_params["accumulate_predictions"]
+        self.accumulate_predictions = self.reconstruction_module_params["accumulate_predictions"]
 
         # Segmentation module parameters
         self.segmentation_module_params = segmentation_module_params
