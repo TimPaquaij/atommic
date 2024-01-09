@@ -120,7 +120,7 @@ model:
     - custom_masking
     - skm-tea-echo1
     - lateral
-    sample_rate: 0.5
+    sample_rate: 0.1
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
@@ -176,7 +176,7 @@ model:
     - custom_masking
     - SKM-TEA-echo1
     - lateral
-    sample_rate: 0.5
+    sample_rate: 0.1
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None

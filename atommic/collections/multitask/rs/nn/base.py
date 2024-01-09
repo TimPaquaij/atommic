@@ -149,7 +149,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
 
             # Refers to the type of the complex-valued data. It can be either "stacked" or "complex_abs" or
             # "complex_sqrt_abs".
-            self.complex_valued_type = cfg_dict.get("complex_valued_type", "stacked")
+            self.complex_valued_type = cfg_dict.get("complex_valued_type", "complex_sqrt_abs")
 
         # Set normalization parameters for logging
         self.unnormalize_loss_inputs = cfg_dict.get("unnormalize_loss_inputs", False)
@@ -581,9 +581,11 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         losses = {}
         for name, loss_func in self.segmentation_losses.items():
             loss = loss_func(target, prediction)
+
             if isinstance(loss, tuple):
                 # In case of the dice loss, the loss is a tuple of the form (dice, dice loss)
                 loss = loss[1]
+
             losses[name] = loss
         return self.total_segmentation_loss(**losses) * self.total_segmentation_loss_weight
 
@@ -632,8 +634,8 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             batch_size, slices = target_segmentation.shape[:2]
             target_segmentation = target_segmentation.reshape(batch_size * slices, *target_segmentation.shape[2:])
 
-        segmentation_loss = self.process_segmentation_loss(target_segmentation, predictions_segmentation, attrs)
 
+        segmentation_loss = self.process_segmentation_loss(target_segmentation, predictions_segmentation, attrs)
         if self.use_reconstruction_module:
             if predictions_reconstruction_n2r is not None and not attrs["n2r_supervised"]:
                 # Noise-to-Recon with/without SSDU
@@ -702,27 +704,17 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         if isinstance(predictions_segmentation, list):
             while isinstance(predictions_segmentation, list):
                 predictions_segmentation = predictions_segmentation[-1]
-
+        target_reconstruction = self.__abs_output__(target_reconstruction)
+        predictions_reconstruction = self.__abs_output__(predictions_reconstruction)
         if self.consecutive_slices > 1:
             # reshape the target and prediction to [batch_size, self.consecutive_slices, nr_classes, n_x, n_y]
-            batch_size = target_segmentation.shape[0] // self.consecutive_slices
-            target_segmentation = target_segmentation.reshape(
-                batch_size, self.consecutive_slices, *target_segmentation.shape[1:]
-            )
-            target_reconstruction = target_reconstruction.reshape(
-                batch_size, self.consecutive_slices, *target_reconstruction.shape[2:]
-            )
+            batch_size = predictions_segmentation.shape[0] // self.consecutive_slices
             predictions_segmentation = predictions_segmentation.reshape(
-                batch_size, self.consecutive_slices, *predictions_segmentation.shape[2:]
-            )
-            predictions_reconstruction = predictions_reconstruction.reshape(
-                batch_size, self.consecutive_slices, *predictions_reconstruction.shape[1:]
-            )
+                batch_size, self.consecutive_slices, predictions_segmentation.shape[-3],predictions_segmentation.shape[-2],predictions_segmentation.shape[-1])
             target_segmentation = target_segmentation[:, self.consecutive_slices // 2]
             target_reconstruction = target_reconstruction[:, self.consecutive_slices // 2]
             predictions_segmentation = predictions_segmentation[:, self.consecutive_slices // 2]
             predictions_reconstruction = predictions_reconstruction[:, self.consecutive_slices // 2]
-
         fname = attrs["fname"]
         slice_idx = attrs["slice_idx"]
 
@@ -763,18 +755,18 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
 
             output_predictions_reconstruction = output_predictions_reconstruction.detach().cpu()
             output_target_reconstruction = output_target_reconstruction.detach().cpu()
-            output_target_segmentation = output_target_segmentation.detach().cpu()
-            output_predictions_segmentation = output_predictions_segmentation.detach().cpu()
+            output_target_segmentation = torch.where(torch.abs(output_target_segmentation.detach().cpu()) > 0.5,1,0).float()
+            output_predictions_segmentation = torch.where(torch.abs(output_predictions_segmentation.detach().cpu())  > 0.5,1,0).float()
 
             # Normalize target and predictions to [0, 1] for logging.
             if torch.is_complex(output_target_reconstruction) and output_target_reconstruction.shape[-1] != 2:
                 output_target_reconstruction = torch.view_as_real(output_target_reconstruction)
 
             if output_target_reconstruction.shape[-1] == 2:
-                output_target_reconstruction = complex_abs(output_target_reconstruction)
-            output_target_reconstruction = output_target_reconstruction / torch.max(
-                torch.abs(output_target_reconstruction)
-            )
+                output_target_reconstruction = torch.view_as_complex(output_target_reconstruction)
+                output_target_reconstruction = output_target_reconstruction / torch.max(torch.abs(output_target_reconstruction))
+            output_target_reconstruction = torch.abs(output_target_reconstruction)
+            output_target_reconstruction = torch.clip(output_target_reconstruction,0,1)
             output_target_reconstruction = output_target_reconstruction.detach().cpu()
 
             if (
@@ -783,10 +775,11 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             ):
                 output_predictions_reconstruction = torch.view_as_real(output_predictions_reconstruction)
             if output_predictions_reconstruction.shape[-1] == 2:
-                output_predictions_reconstruction = complex_abs(output_predictions_reconstruction)
-            output_predictions_reconstruction = output_predictions_reconstruction / torch.max(
-                torch.abs(output_predictions_reconstruction)
-            )
+                output_predictions_reconstruction = torch.view_as_complex(output_predictions_reconstruction)
+                output_predictions_reconstruction = output_predictions_reconstruction / torch.max(
+                    torch.abs(output_predictions_reconstruction))
+            output_predictions_reconstruction = torch.abs(output_predictions_reconstruction)
+            output_predictions_reconstruction = torch.clip(output_predictions_reconstruction, 0, 1)
             output_predictions_reconstruction = output_predictions_reconstruction.detach().cpu()
             # Log target and predictions, if log_image is True for this slice.
             if attrs["log_image"][_batch_idx_]:
@@ -800,7 +793,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
 
                 if self.use_reconstruction_module:
                     self.log_image(
-                        f"{key}/a/reconstruction/target/predictions/error",
+                        f"{key}/a/reconstruction_abs/target/predictions/error",
                         torch.cat(
                             [
                                 output_target_reconstruction,
@@ -829,7 +822,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             # Compute metrics and log them.
             output_predictions_reconstruction = output_predictions_reconstruction.numpy()
             output_target_reconstruction = output_target_reconstruction.numpy()
-            max_value = max(np.max(output_target_reconstruction), np.max(output_predictions_reconstruction))
+            max_value = max(np.max(output_target_reconstruction)-np.min(output_target_reconstruction), np.max(output_predictions_reconstruction)-np.min(output_predictions_reconstruction))
             self.mse_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
                 mse(output_target_reconstruction, output_predictions_reconstruction,maxval = max_value)
             ).view(1)
@@ -842,7 +835,8 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             self.psnr_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
                 psnr(output_target_reconstruction, output_predictions_reconstruction, maxval=max_value)
             ).view(1)
-
+            max_value = max(np.max(output_target_reconstruction),
+                            np.max(output_predictions_reconstruction))
             self.haarpsi_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
                 haarpsi3d(output_target_reconstruction, output_predictions_reconstruction, maxval=max_value)
             ).view(1)
@@ -1123,7 +1117,6 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         kspace, y, mask, initial_prediction_reconstruction, target_reconstruction, r = self.__process_inputs__(
             kspace, y, mask, initial_prediction_reconstruction, target_reconstruction
         )
-
         # Process inputs if Noise-to-Recon and/or SSDU are used.
         n2r_y, n2r_mask, n2r_initial_prediction_reconstruction, mask, loss_mask = self.__process_unsupervised_inputs__(
             n2r_y, mask, n2r_mask, n2r_initial_prediction_reconstruction, attrs, r
@@ -1158,6 +1151,10 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             target_reconstruction,
             attrs["noise"],
         )
+        if self.consecutive_slices > 1:
+            #reshape the target and prediction to [batch_size * consecutive_slices, nr_classes, n_x, n_y]
+            batch_size, slices = predictions_segmentation.shape[:2]
+            predictions_segmentation = predictions_segmentation.reshape(batch_size * slices, *predictions_segmentation.shape[2:])
 
         if not is_none(self.segmentation_classes_thresholds):
             for class_idx, thres in enumerate(self.segmentation_classes_thresholds):
@@ -1311,7 +1308,8 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             outputs["attrs"],
             outputs["r"],
         )
-
+        if torch.isnan(train_loss):
+             print(outputs["attrs"]['fname'],outputs["attrs"]['slice_idx'])
         # Log loss for the chosen acceleration factor and the learning rate in the selected logger.
         logs = {
             f'train_loss_{outputs["acceleration"]}x': train_loss.item(),
@@ -1399,8 +1397,8 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         target_reconstruction = outputs["target_reconstruction"]
         predictions_segmentation = outputs["predictions_segmentation"]
         target_segmentation = outputs["target_segmentation"]
-
         # Compute loss
+
         val_loss = self.__compute_loss__(
             predictions_reconstruction,
             predictions_reconstruction_n2r,
@@ -1412,6 +1410,8 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             outputs["attrs"],
             outputs["r"],
         )
+        if torch.isnan(val_loss):
+             print(outputs["attrs"]['fname'],outputs["attrs"]['slice_idx'])
 
         self.validation_step_outputs.append({"val_loss": val_loss})
 
@@ -1472,7 +1472,6 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             acceleration,
             attrs,
         ) = batch
-
         outputs = self.inference_step(
             kspace,
             y,
@@ -1486,10 +1485,10 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             acceleration,
             attrs,  # type: ignore
         )
-
         predictions_reconstruction = outputs["predictions_reconstruction"]
         predictions_segmentation = outputs["predictions_segmentation"]
-
+        target_reconstruction =outputs["target_reconstruction"]
+        target_segmentation = outputs["target_segmentation"]
         # Compute metrics and log them and log outputs.
         self.__compute_and_log_metrics_and_outputs__(
             predictions_reconstruction,
@@ -1503,29 +1502,80 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             while isinstance(predictions_segmentation, list):
                 predictions_segmentation = predictions_segmentation[-1]
 
-        predictions_segmentation = predictions_segmentation.detach().cpu().numpy()
 
+        cascades_var = []
         if self.use_reconstruction_module:
             if isinstance(predictions_reconstruction, list):
-                while len(predictions_reconstruction) != 5:
-                    predictions_reconstruction = predictions_reconstruction[0][-1]
+                while isinstance(predictions_reconstruction, list):
+                    if len(predictions_reconstruction) == self.rs_cascades:
+                        for cascade in predictions_reconstruction:
+                            while len(cascade) != self.reconstruction_module_time_steps:
+                                cascade=cascade[-1]
+                            if len(cascade) == self.reconstruction_module_time_steps:
+                                time_steps = []
+                                for time_step in cascade:
+                                    if torch.is_complex(time_step) and time_step.shape[-1] != 2:
+                                        time_step = torch.view_as_real(time_step)
+                                    if self.consecutive_slices >1:
+                                        time_step = time_step[:,self.consecutive_slices // 2]
+                                    time_step = (
+                                                torch.view_as_complex(time_step.type(torch.float32))
+                                                .cpu()
+                                                .numpy()
+                                                )
+                                    #time_step = np.abs(time_step/np.max(np.abs(time_step)))
+                                    time_steps.append(time_step)
+                                var_cascade = np.var(np.array(time_steps), axis=0)
+                                cascades_var.append(var_cascade)
+                        predictions_reconstruction = predictions_reconstruction[-1]
+                    else:
+                        predictions_reconstruction = predictions_reconstruction[-1]
+        if self.consecutive_slices > 1:
+            # reshape the target and prediction to [batch_size, self.consecutive_slices, nr_classes, n_x, n_y]
+            batch_size = predictions_segmentation.shape[0] // self.consecutive_slices
+            predictions_segmentation = predictions_segmentation.reshape(
+                batch_size, self.consecutive_slices, predictions_segmentation.shape[-3],predictions_segmentation.shape[-2],predictions_segmentation.shape[-1])
+            target_segmentation = target_segmentation[:, self.consecutive_slices // 2]
+            target_reconstruction = target_reconstruction[:, self.consecutive_slices // 2]
+            predictions_segmentation = predictions_segmentation[:, self.consecutive_slices // 2]
+            predictions_reconstruction = predictions_reconstruction[:, self.consecutive_slices // 2]
 
+        if torch.is_complex(target_reconstruction) and target_reconstruction.shape[-1] != 2:
+            target_reconstruction = torch.view_as_real(target_reconstruction)
+        if torch.is_complex(predictions_reconstruction) and predictions_reconstruction.shape[-1] != 2:
+            predictions_reconstruction = torch.view_as_real(predictions_reconstruction)
+        # If "16" or "16-mixed" fp is used, ensure complex type will be supported when saving the predictions.
+        predictions_reconstruction = (
+           torch.view_as_complex(predictions_reconstruction.type(torch.float32))
+           .detach()
+           .cpu()
+           .numpy()
+       )
+        target_reconstruction = (
+           torch.view_as_complex(target_reconstruction.type(torch.float32))
+            .cpu()
+           .numpy()
 
-            # If "16" or "16-mixed" fp is used, ensure complex type will be supported when saving the predictions.
-            predictions_reconstruction = (
-                torch.view_as_complex(torch.view_as_real(predictions_reconstruction).type(torch.float32))
-                .detach()
-                .cpu()
-                .numpy()
-            )
+       )
+        target_segmentation = torch.where(torch.abs(target_segmentation.detach().cpu()) > 0.5, 1,
+                                                 0).float()
+        predictions_segmentation = torch.where(torch.abs(predictions_segmentation.detach().cpu()) > 0.5,
+                                                      1, 0).float()
 
         predictions = (
             (predictions_segmentation, predictions_reconstruction)
             if self.use_reconstruction_module
             else (predictions_segmentation, predictions_segmentation)
         )
+        targets = (
+            (target_segmentation, target_reconstruction)
+            if self.use_reconstruction_module
+            else (target_segmentation, target_segmentation)
+        )
 
         self.test_step_outputs.append([str(fname[0]), slice_idx, predictions])  # type: ignore
+        self.test_step_targets.append([str(fname[0]), slice_idx, targets])
+        self.test_step_var.append([str(fname[0]), slice_idx, cascades_var])
 
     def on_validation_epoch_end(self):  # noqa: MC0001
         """Called at the end of validation epoch to aggregate outputs.
@@ -1720,33 +1770,50 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                 self.log(f"test_metrics/{metric}", value / tot_examples, prog_bar=True, sync_dist=True)
 
         segmentations = defaultdict(list)
+        targets_segmentations = defaultdict(list)
         for fname, slice_num, output in self.test_step_outputs:
             segmentations_pred, _ = output
             segmentations[fname].append((slice_num, segmentations_pred))
 
+        for fname, slice_num, target in self.test_step_targets:
+            segmentations_tar, _ = target
+            targets_segmentations[fname].append((slice_num, segmentations_tar))
+
         for fname in segmentations:
             segmentations[fname] = np.stack([out for _, out in sorted(segmentations[fname])])
+        for fname in targets_segmentations:
+            targets_segmentations[fname] = np.stack([out for _, out in sorted(targets_segmentations[fname])])
 
-        if self.consecutive_slices > 1:
-            # iterate over the slices and always keep the middle slice
-            for fname in segmentations:
-                segmentations[fname] = segmentations[fname][:, self.consecutive_slices // 2]
+        # if self.consecutive_slices > 1:
+        #     # iterate over the slices and always keep the middle slice
+        #     for fname in segmentations:
+        #         segmentations[fname] = segmentations[fname][:, self.consecutive_slices // 2]
 
         if self.use_reconstruction_module:
             reconstructions = defaultdict(list)
+            targets_reconstructions = defaultdict(list)
+            var_reconstructions = defaultdict(list)
             for fname, slice_num, output in self.test_step_outputs:
                 _, reconstructions_pred = output
                 reconstructions[fname].append((slice_num, reconstructions_pred))
+            for fname, slice_num, output in self.test_step_targets:
+                _, reconstructions_tar = output
+                targets_reconstructions[fname].append((slice_num, reconstructions_tar))
+            for fname, slice_num, output in self.test_step_var:
+                reconstructions_var = output
+                var_reconstructions[fname].append((slice_num, reconstructions_var))
 
             for fname in reconstructions:
                 reconstructions[fname] = np.stack([out for _, out in sorted(reconstructions[fname])])
+            for fname in targets_reconstructions:
+                targets_reconstructions[fname] = np.stack([out for _, out in sorted(targets_reconstructions[fname])])
+            for fname in var_reconstructions:
+                var_reconstructions[fname] = np.stack([out for _, out in sorted(var_reconstructions[fname])])
 
-            if self.consecutive_slices > 1:
-                # iterate over the slices and always keep the middle slice
-                for fname in reconstructions:
-                    reconstructions[fname] = reconstructions[fname][:, self.consecutive_slices // 2]
         else:
             reconstructions = None
+            targets_reconstructions = None
+            var_reconstructions = None
 
         if "wandb" in self.logger.__module__.lower():
             out_dir = Path(os.path.join(self.logger.save_dir, "predictions"))
@@ -1755,12 +1822,15 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         out_dir.mkdir(exist_ok=True, parents=True)
 
         if reconstructions is not None:
-            for (fname, segmentations_pred), (_, reconstructions_pred) in zip(
-                segmentations.items(), reconstructions.items()
+            for (fname, segmentations_pred), (_, reconstructions_pred),(_,segmentations_tar), (_,reconstructions_tar), (_,reconstructions_var) in zip(
+                segmentations.items(), reconstructions.items(), targets_segmentations.items(),targets_reconstructions.items(), var_reconstructions.items()
             ):
                 with h5py.File(out_dir / fname, "w") as hf:
                     hf.create_dataset("segmentation", data=segmentations_pred)
                     hf.create_dataset("reconstruction", data=reconstructions_pred)
+                    hf.create_dataset("target_reconstruction", data=reconstructions_tar)
+                    hf.create_dataset("target_segmentation", data=segmentations_tar)
+                    hf.create_dataset("uncertainty", data=reconstructions_var)
         else:
             for fname, segmentations_pred in segmentations.items():
                 with h5py.File(out_dir / fname, "w") as hf:
@@ -1808,11 +1878,8 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             "skm-tea-echo1",
             "skm-tea-echo2",
             "skm-tea-echo1+echo2",
-            "skm-tea-echo1+echo2-mc",
-        ) for s in dataset_format):
-            if any(s.lower() in (
-                    "lateral"
-            ) for s in dataset_format):
+            "skm-tea-echo1+echo2-mc") for s in dataset_format):
+            if any(a.lower() == "lateral" for a in dataset_format):
                 dataloader = mrirs_loader.SKMTEARSMRIDatasetlateral
             else:
                 dataloader = mrirs_loader.SKMTEARSMRIDataset
