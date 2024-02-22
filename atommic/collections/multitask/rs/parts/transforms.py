@@ -2,7 +2,7 @@
 __author__ = "Dimitris Karkalousos"
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
-
+from skimage.filters import gaussian
 import numpy as np
 import torch
 
@@ -98,6 +98,8 @@ class RSMRIDataTransforms:
         spatial_dims: Sequence[int] = None,
         coil_dim: int = 0,
         consecutive_slices: int = 1,  # pylint: disable=unused-argument
+        construct_knee_label: bool =True,
+        include_background_label: bool =True,
         use_seed: bool = True,
     ):
         """Inits :class:`RSMRIDataTransforms`.
@@ -439,8 +441,10 @@ class RSMRIDataTransforms:
 
         self.cropping = Composer([self.cropping])  # type: ignore
         self.normalization = Composer([self.normalization])  # type: ignore
-
+        self.construct_knee_label = construct_knee_label
+        self.include_background_label = include_background_label
         self.use_seed = use_seed
+        self.consecutive_slices =consecutive_slices
 
     def __call__(
         self,
@@ -573,6 +577,54 @@ class RSMRIDataTransforms:
         if segmentation_labels.dtype == torch.bool:
             segmentation_labels = segmentation_labels.float()
         segmentation_labels = torch.abs(segmentation_labels)
+        if self.construct_knee_label == True:
+            if self.consecutive_slices > 1:
+                segmentation_labels_new = np.zeros((segmentation_labels.shape[0],segmentation_labels.shape[1]+1,segmentation_labels.shape[2],segmentation_labels.shape[3]))
+                for i in range(target_reconstruction.shape[0]):
+                    if target_reconstruction.shape[-1] == 2:
+                        scan = torch.view_as_complex(target_reconstruction[i])
+                    else:
+                        scan = target_reconstruction[i]
+                    scan = torch.abs(scan / torch.max(torch.abs(scan)))
+                    mask_1 = (scan > 0.04) * 1
+                    scan_filt = scan + 10 * mask_1
+                    scan_filt = torch.as_tensor(gaussian(scan_filt, sigma=5))
+                    scan_filt_nrom = scan_filt / torch.max(scan_filt)
+                    knee_label = ((scan_filt_nrom > 0.5) * 1)
+                    sgementation_labels_sum = torch.sum(segmentation_labels[i], dim=0)
+                    segmentation_labels_new[i] = torch.concat(
+                    (segmentation_labels[i], (knee_label - sgementation_labels_sum).unsqueeze(0)), dim=0)
+                segmentation_labels=segmentation_labels_new
+            else:
+                if target_reconstruction.shape[-1] == 2:
+                    scan = torch.view_as_complex(target_reconstruction)
+                else:
+                    scan = target_reconstruction
+                scan = torch.abs(scan / torch.max(torch.abs(scan)))
+                mask_1 = (scan > 0.04) * 1
+                scan_filt = scan + 10 * mask_1
+                scan_filt = torch.as_tensor(gaussian(scan_filt, sigma=5))
+                scan_filt_nrom = scan_filt / torch.max(scan_filt)
+                knee_label = ((scan_filt_nrom > 0.5) * 1)
+                sgementation_labels_sum = torch.sum(segmentation_labels,dim =0)
+                segmentation_labels = torch.concat(
+                    (segmentation_labels, (knee_label - sgementation_labels_sum).unsqueeze(0)), dim=0)
+        if self.include_background_label ==True:
+            if self.consecutive_slices >1:
+                segmentation_labels_bg = torch.zeros((segmentation_labels.shape[0],segmentation_labels.shape[2],segmentation_labels.shape[3]))
+                segmentation_labels_new = torch.zeros(
+                    (segmentation_labels.shape[0],segmentation_labels.shape[1]+1, segmentation_labels.shape[2], segmentation_labels.shape[3]))
+                for i in range(target_reconstruction.shape[0]):
+                    idx_background = torch.where(torch.sum(segmentation_labels[i], dim=0) ==0)
+                    segmentation_labels_bg[i][idx_background] = 1
+                    segmentation_labels_new[i] = torch.concat((segmentation_labels_bg[i].unsqueeze(0),segmentation_labels[i]), dim=0)
+                segmentation_labels =segmentation_labels_new
+            else:
+                segmentation_labels_bg = torch.zeros((segmentation_labels.shape[-2], segmentation_labels.shape[-1]))
+                idx_background = torch.where(torch.sum(segmentation_labels, dim=0) == 0)
+                segmentation_labels_bg[idx_background] = 1
+                segmentation_labels = torch.concat((segmentation_labels_bg.unsqueeze(0),segmentation_labels), dim=0)
+
 
         attrs.update(
             self.__parse_normalization_vars__(

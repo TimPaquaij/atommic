@@ -151,7 +151,7 @@ model:
       warmup_ratio: 0.1
 
 trainer:
-  strategy: ddp_find_unused_parameters_false
+  strategy: ddp_find_unused_parameters_true
   accelerator: gpu
   devices: 1
   num_nodes: 1

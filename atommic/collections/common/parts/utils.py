@@ -446,7 +446,7 @@ def complex_abs(x: torch.Tensor) -> torch.Tensor:
     >>> import torch
     >>> data = torch.tensor([1+1j, 2+2j, 3+3j])
     >>> complex_abs(data)
-    tensor([1.4142, 2.8284, 4.2426])
+    tensor([2., 8., 18.])
     """
     if x.shape[-1] != 2:
         if torch.is_complex(x):
@@ -476,7 +476,7 @@ def complex_abs_sq(x: torch.Tensor) -> torch.Tensor:
     >>> import torch
     >>> data = torch.tensor([1+1j, 2+2j, 3+3j])
     >>> complex_abs_sq(data)
-    tensor([2., 8., 18.])
+    tensor([1.4142, 2.8284, 4.2426])
     """
     if x.shape[-1] != 2:
         if torch.is_complex(x):

@@ -21,6 +21,14 @@ model:
     - true
     - true
     - false
+  conv_dropout:
+    - 0.2
+    - 0.2
+    - 0
+  conv_activations:
+    - RELU
+    - RELU
+    - None
   recurrent_filters:
     - 64
     - 64
@@ -37,6 +45,10 @@ model:
     - true
     - true
     - false
+  recurrent_dropout:
+    - 0
+    - 0
+    - 0
   depth: 2
   time_steps: 8
   conv_dim: 2
@@ -48,7 +60,7 @@ model:
   reconstruction_loss:
     l1: 1
     ssim: 1
-  normalization_type: max
+  normalization_type: minmax
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
   kspace_reconstruction_loss: false
@@ -76,7 +88,7 @@ model:
       - custom_masking
       - skm-tea-echo1
       - lateral
-    sample_rate: 0.1
+    sample_rate: 0.5
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
@@ -92,7 +104,7 @@ model:
     mask_args:
       type: gaussian2d  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
-        - 4  # 4, 6, 8, 10, 12, 16
+        - 8  # 4, 6, 8, 10, 12, 16
       shift_mask: false
       use_seed: false
     partial_fourier_percentage: 0.0
@@ -105,7 +117,7 @@ model:
     crop_before_masking: true
     kspace_zero_filling_size: None
     normalize_inputs: true
-    normalization_type: max
+    normalization_type: minmax
     kspace_normalization: false
     fft_centered: true
     fft_normalization: ortho
@@ -130,8 +142,8 @@ model:
       - custom_masking
       - skm-tea-echo1
       - lateral
-    sample_rate: 0.1
-    log_images_rate: 0.04
+    sample_rate: 0.5
+    log_images_rate: 0.01
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
@@ -147,7 +159,7 @@ model:
     mask_args:
       type: gaussian2d  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
-        - 4  # 4, 6, 8, 10, 12, 16
+        - 8  # 4, 6, 8, 10, 12, 16
       shift_mask: false
       use_seed: true
     partial_fourier_percentage: 0.0
@@ -160,7 +172,7 @@ model:
     crop_before_masking: true
     kspace_zero_filling_size: None
     normalize_inputs: true
-    normalization_type: max
+    normalization_type: minmax
     kspace_normalization: false
     fft_centered: true
     fft_normalization: ortho
@@ -189,11 +201,11 @@ model:
       warmup_ratio: 0.1
 
 trainer:
-  strategy: ddp_find_unused_parameters_false
+  strategy: ddp_find_unused_parameters_true
   accelerator: gpu
   devices: 1
   num_nodes: 1
-  max_epochs: 50
+  max_epochs: 10
   precision: 16-mixed
   enable_checkpointing: false
   logger: false
@@ -208,4 +220,4 @@ exp_manager:
   create_tensorboard_logger: false
   create_wandb_logger: true
   wandb_logger_kwargs:
-    project: CIRIM
+    project: CIRIM_SKMTEA

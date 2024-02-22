@@ -1,0 +1,207 @@
+
+defaults:
+  - override hydra/launcher: atommic_launcher
+
+hydra:
+  # Helper arguments to ensure all hyper parameter runs are from the directory that launches the script.
+  sweep:
+    dir: "."
+    subdir: "."
+
+  # Define all the hyper parameters here
+  sweeper:
+    params:
+      # Place all the parameters you wish to search over here (corresponding to the rest of the config)
+      # NOTE: Make sure that there are no spaces between the commas that separate the config params !
+      model.mc_run: 1,2,3,4,5
+
+  # Arguments to the process launcher
+  launcher:
+    num_gpus: -1  # Number of gpus to use. Each run works on a single GPU.
+    jobs_per_gpu: 1  # If each GPU has large memory, you can run multiple jobs on the same GPU for faster results (until OOM)
+
+pretrained: true
+checkpoint: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA/CIRIM_sense/default/2024-01-17_16-12-16/checkpoints/default--val_loss=0.0288-epoch=10-last.ckpt
+mode: test
+
+model:
+  model_name: CIRIM
+  mc_run: 5
+  recurrent_layer: IndRNN
+  conv_filters:
+    - 64
+    - 64
+    - 2
+  conv_kernels:
+    - 5
+    - 3
+    - 3
+  conv_dilations:
+    - 1
+    - 2
+    - 1
+  conv_bias:
+    - true
+    - true
+    - false
+  conv_dropout:
+    - 0.2
+    - 0.2
+    - 0
+  conv_activations:
+    - relu
+    - relu
+    - none
+  recurrent_filters:
+    - 64
+    - 64
+    - 0
+  recurrent_kernels:
+    - 1
+    - 1
+    - 0
+  recurrent_dilations:
+    - 1
+    - 1
+    - 0
+  recurrent_bias:
+    - true
+    - true
+    - false
+  recurrent_dropout:
+    - 0.2
+    - 0.2
+    - 0
+  depth: 2
+  time_steps: 8
+  conv_dim: 2
+  num_cascades: 5
+  no_dc: true
+  keep_prediction: true
+  accumulate_predictions: true
+  dimensionality: 2
+  reconstruction_loss:
+    l1: 1
+    ssim: 1
+  normalization_type: minmax
+  unnormalize_loss_inputs: false
+  unnormalize_log_outputs: false
+  kspace_reconstruction_loss: false
+  total_reconstruction_loss_weight: 1.0
+  complex_valued_type: stacked  # stacked, complex_abs, complex_sqrt_abs
+  coil_combination_method: SENSE
+  ssdu: false
+  n2r: false
+  fft_centered: true
+  fft_normalization: ortho
+  spatial_dims:
+    - -2
+    - -1
+  coil_dim: 1
+  estimate_coil_sensitivity_maps_with_nn: false
+  consecutive_slices: 1
+
+  test_ds:
+    data_path: /data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_MTR_005_test.json
+    coil_sensitivity_maps_path: None
+    mask_path: None
+    noise_path: None
+    initial_predictions_path: None
+    dataset_format:
+      - custom_masking
+      - skm-tea-echo1
+      - lateral # skm-tea-echo1, skm-tea-echo2, skm-tea-echo1+echo2, skm-tea-echo1+echo2-mc
+    sample_rate: 1
+    volume_sample_rate: None
+    use_dataset_cache: false
+    dataset_cache_file: None
+    num_cols: None
+    consecutive_slices: 1
+    data_saved_per_slice: false
+    complex_target: true
+    apply_prewhitening: false
+    apply_gcc: false
+    estimate_coil_sensitivity_maps: false
+    coil_combination_method: SENSE
+    dimensionality: 2
+    mask_args:
+      type: gaussian2d  # the mask will be loaded from the dataset, but we need to specify the type here
+      accelerations:
+        - 8  # 4, 6, 8, 10, 12, 16
+      shift_mask: false
+      use_seed: true
+    partial_fourier_percentage: 0.0
+    remask: false
+    ssdu: false
+    n2r: false
+    unsupervised_masked_target: false
+    crop_size: None
+    kspace_crop: false
+    crop_before_masking: true
+    kspace_zero_filling_size: None
+    normalize_inputs: true
+    normalization_type: minmax
+    kspace_normalization: false
+    fft_centered: true
+    fft_normalization: ortho
+    spatial_dims:
+      - -2
+      - -1
+    coil_dim: 1
+    use_seed: true
+    batch_size: 1
+    shuffle: false
+    num_workers: 8
+    pin_memory: false
+    drop_last: false
+
+  optim:
+    name: adam
+    lr: 1e-4
+    betas:
+      - 0.9
+      - 0.999
+    weight_decay: 0.0
+    sched:
+      name: InverseSquareRootAnnealing
+      min_lr: 0.0
+      last_epoch: -1
+      warmup_ratio: 0.1
+
+
+trainer:
+  strategy: ddp_find_unused_parameters_true
+  accelerator: gpu
+  devices: 1
+  num_nodes: 1
+  max_epochs: 1
+  precision: 16-mixed
+  enable_checkpointing: false
+  logger: false
+  log_every_n_steps: 50
+  check_val_every_n_epoch: -1
+  max_steps: -1
+
+exp_manager:
+
+
+  # Add a unique name for all hyper parameter arguments to allow continued training.
+  # NOTE: It is necessary to add all hyperparameter arguments to the name !
+  # This ensures successful restoration of model runs in case HP search crashes.
+  name: CIRIM--MC-${model.mc_run}
+
+  exp_dir: /data/projects/utwente/recon/SKM-TEA/v1-release/predictions/CIRIM_SENSE/predictions_8x/2024-01-17_16-12-16 # Can be set by the user.
+  checkpoint_callback_params:
+    save_top_k: 1  # Dont save too many .ckpt files during HP search
+    always_save_atommic: True # saves the checkpoints as atommic files for fast checking of results later
+
+
+  # We highly recommend use of any experiment tracking took to gather all the experiments in one location
+  create_wandb_logger: false
+  wandb_logger_kwargs:
+    project: "CIRIM_Multi_run"
+
+  # HP Search may crash due to various reasons, best to attempt continuation in order to
+  # resume from where the last failure case occured.
+  resume_if_exists: true
+  resume_ignore_no_checkpoint: true

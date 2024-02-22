@@ -27,10 +27,13 @@ class RIMBlock(torch.nn.Module):
         conv_kernels=None,
         conv_dilations=None,
         conv_bias=None,
+        conv_dropout=None,
+        conv_activations=None,
         recurrent_filters=None,
         recurrent_kernels=None,
         recurrent_dilations=None,
         recurrent_bias=None,
+        recurrent_dropout=None,
         depth: int = 2,
         time_steps: int = 8,
         conv_dim: int = 2,
@@ -95,15 +98,16 @@ class RIMBlock(torch.nn.Module):
 
         self.layers = torch.nn.ModuleList()
         for (
-            (conv_features, conv_k_size, conv_dilation, l_conv_bias, nonlinear),
-            (rnn_features, rnn_k_size, rnn_dilation, rnn_bias, rnn_type),
+            (conv_features, conv_k_size, conv_dilation, l_conv_bias,l_conv_dropout, nonlinear),
+            (rnn_features, rnn_k_size, rnn_dilation, rnn_bias,rnn_dropout, rnn_type),
         ) in zip(
-            zip(conv_filters, conv_kernels, conv_dilations, conv_bias, ["relu", "relu", None]),
+            zip(conv_filters, conv_kernels, conv_dilations, conv_bias,conv_dropout, conv_activations),
             zip(
                 recurrent_filters,
                 recurrent_kernels,
                 recurrent_dilations,
                 recurrent_bias,
+                recurrent_dropout,
                 [recurrent_layer, recurrent_layer, None],
             ),
         ):
@@ -117,6 +121,7 @@ class RIMBlock(torch.nn.Module):
                     kernel_size=conv_k_size,
                     dilation=conv_dilation,
                     bias=l_conv_bias,
+                    dropout= l_conv_dropout,
                     nonlinear=nonlinear,
                 )
                 self.input_size = conv_features
@@ -138,6 +143,7 @@ class RIMBlock(torch.nn.Module):
                     kernel_size=rnn_k_size,
                     dilation=rnn_dilation,
                     bias=rnn_bias,
+                    dropout=rnn_dropout
                 )
 
                 self.input_size = rnn_features
@@ -235,6 +241,7 @@ class RIMBlock(torch.nn.Module):
             prediction = prediction.reshape([batch * slices, *prediction.shape[2:]])
 
         predictions = []
+        log_likelihoods = []
         for _ in range(self.time_steps):
             log_likelihood_gradient_prediction = rim_utils.log_likelihood_gradient(
                 prediction,
@@ -265,7 +272,6 @@ class RIMBlock(torch.nn.Module):
                 log_likelihood_gradient_prediction = hx[h]
 
             log_likelihood_gradient_prediction = self.final_layer(log_likelihood_gradient_prediction)
-
             if self.dimensionality == 2:
                 log_likelihood_gradient_prediction = log_likelihood_gradient_prediction.permute(0, 2, 3, 1)
             elif self.dimensionality == 3:
@@ -275,6 +281,7 @@ class RIMBlock(torch.nn.Module):
 
             prediction = prediction + log_likelihood_gradient_prediction
 
+            log_likelihoods.append(log_likelihood_gradient_prediction.contiguous())
             predictions.append(prediction)
 
         if self.consecutive_slices > 1 or self.dimensionality == 3:
@@ -282,9 +289,9 @@ class RIMBlock(torch.nn.Module):
                 predictions[i] = pred.reshape([batch, slices, *pred.shape[1:]])
 
         if self.no_dc:
-            return predictions, hx
+            return predictions, hx, log_likelihoods
 
-        soft_dc = torch.where(mask, y - masked_kspace, self.zero.to(masked_kspace)) * self.dc_weight
+        soft_dc = torch.where(mask.bool(), y - masked_kspace, self.zero.to(masked_kspace)) * self.dc_weight
         current_kspace = [
             masked_kspace
             - soft_dc
@@ -297,4 +304,14 @@ class RIMBlock(torch.nn.Module):
             for e in predictions
         ]
 
-        return current_kspace, hx
+        predictions = [coil_combination_method(
+                    ifft2(kspace, self.fft_centered, self.fft_normalization, self.spatial_dims),
+                    sensitivity_maps,
+                    method=self.coil_combination_method,
+                    dim=self.coil_dim,
+                ) for kspace in current_kspace]
+
+
+
+
+        return predictions, hx, log_likelihoods

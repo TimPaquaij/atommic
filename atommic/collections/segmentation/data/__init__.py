@@ -6,4 +6,6 @@ from atommic.collections.segmentation.data.mri_segmentation_loader import (  # n
     ISLES2022SubAcuteStrokeSegmentationMRIDataset,
     SegmentationMRIDataset,
     SKMTEASegmentationMRIDataset,
+    SKMTEASegmentationMRIDatasetLateral,
+
 )

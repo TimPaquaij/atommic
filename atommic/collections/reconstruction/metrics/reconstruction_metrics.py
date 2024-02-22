@@ -114,7 +114,7 @@ def psnr(x: np.ndarray, y: np.ndarray, maxval: np.ndarray = None) -> float:
     return peak_signal_noise_ratio(x, y, data_range=maxval)
 
 
-def ssim(x: np.ndarray, y: np.ndarray, maxval: np.ndarray = None) -> float:
+def ssim(x: np.ndarray, y: np.ndarray,  maxval: np.ndarray = None) -> float:
     """Computes Structural Similarity Index Measure (SSIM).
 
     Parameters
@@ -165,7 +165,7 @@ def ssim(x: np.ndarray, y: np.ndarray, maxval: np.ndarray = None) -> float:
     )
     return ssim_score / x.shape[0]
 
-def haarpsi3d(gt: np.ndarray, pred: np.ndarray, maxval: np.ndarray = None) -> float:
+def haarpsi3d(gt: np.ndarray, pred: np.ndarray,maxval: np.ndarray = None) -> float:
     """Compute Structural Similarity Index Metric (SSIM)"""
     if gt.ndim == 2:
         gt = gt[np.newaxis, :, :]
@@ -192,7 +192,7 @@ def haarpsi3d(gt: np.ndarray, pred: np.ndarray, maxval: np.ndarray = None) -> fl
 
     return __haarpsi / gt.shape[0]
 
-def vsi3d(gt: np.ndarray, pred: np.ndarray, maxval: np.ndarray = None) -> float:
+def vsi3d(gt: np.ndarray, pred: np.ndarray,maxval: np.ndarray = None) -> float:
     """Compute Structural Similarity Index Metric (SSIM)"""
     if gt.ndim == 2:
         gt = gt[np.newaxis, :, :]
@@ -222,11 +222,11 @@ def vsi3d(gt: np.ndarray, pred: np.ndarray, maxval: np.ndarray = None) -> float:
         _vsi(torch.from_numpy(gt[slice_num]).unsqueeze(0).float(),
              torch.from_numpy(pred[slice_num]).unsqueeze(0).float()) for slice_num in
         range(gt.shape[0])
-    )
+    ).numpy()
 
     return __vsi / gt.shape[0]
 
-METRIC_FUNCS = dict(MSE=mse, NMSE=nmse, PSNR=psnr, SSIM=ssim, HaarPSI=haarpsi3d, VSI=vsi3d)
+METRIC_FUNCS = dict(SSIM=ssim, HaarPSI=haarpsi3d, VSI=vsi3d)
 
 
 

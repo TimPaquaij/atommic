@@ -413,7 +413,7 @@ class SKMTEARSMRIDataset(RSMRIDataset):
 
         else:
             dataset_format = None
-            masking = "custom"
+            masking = "default"
 
         fname, dataslice, metadata = self.examples[i]
         with h5py.File(fname, "r") as hf:
@@ -552,7 +552,7 @@ class SKMTEARSMRIDatasetlateral(RSMRIDataset):
     def __getitem__(self, i: int):  # noqa: MC0001
         """Get item from :class:`SKMTEARSMRIDataset`."""
         if not is_none(self.dataset_format):
-            masking = "custom"
+            masking = "default"
             dataset_format = None
             for s in self.dataset_format:
                 if s.lower() in (
@@ -570,9 +570,9 @@ class SKMTEARSMRIDatasetlateral(RSMRIDataset):
 
         else:
             dataset_format = None
-            masking = "custom"
+            masking = "default"
 
-        fname, dataslice, metadata = self.examples[i]
+        fname, dataslice, metadata, slice_in_data = self.examples[i]
         with h5py.File(fname, "r") as hf:
             kspace = self.get_consecutive_slices(hf, "kspace", dataslice).astype(np.complex64)
             if not is_none(dataset_format) and dataset_format == "skm-tea-echo1":
@@ -635,7 +635,7 @@ class SKMTEARSMRIDatasetlateral(RSMRIDataset):
 
 
 
-        attrs["log_image"] = bool(dataslice in self.indices_to_log)
+        attrs["log_image"] = bool(slice_in_data in self.indices_to_log)
 
         return (
             (

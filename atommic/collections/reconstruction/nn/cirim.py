@@ -45,7 +45,9 @@ class CIRIM(BaseMRIReconstructionModel):
 
         # make time-steps size divisible by 8 for fast fp16 training
         self.time_steps = 8 * math.ceil(cfg_dict.get("time_steps") / 8)
+        self.cascades= cfg_dict.get("num_cascades")
         self.no_dc = cfg_dict.get("no_dc")
+        self.accumulate_predictions = cfg_dict.get("accumulate_predictions")
         self.reconstruction_module = torch.nn.ModuleList(
             [
                 RIMBlock(
@@ -54,10 +56,13 @@ class CIRIM(BaseMRIReconstructionModel):
                     conv_kernels=cfg_dict.get("conv_kernels"),
                     conv_dilations=cfg_dict.get("conv_dilations"),
                     conv_bias=cfg_dict.get("conv_bias"),
+                    conv_activations=cfg_dict.get("conv_activations"),
+                    conv_dropout=cfg_dict.get("conv_dropout"),
                     recurrent_filters=cfg_dict.get("recurrent_filters"),
                     recurrent_kernels=cfg_dict.get("recurrent_kernels"),
                     recurrent_dilations=cfg_dict.get("recurrent_dilations"),
                     recurrent_bias=cfg_dict.get("recurrent_bias"),
+                    recurrent_dropout=cfg_dict.get("recurrent_dropout"),
                     depth=cfg_dict.get("depth"),
                     time_steps=self.time_steps,
                     conv_dim=cfg_dict.get("conv_dim"),
@@ -69,7 +74,7 @@ class CIRIM(BaseMRIReconstructionModel):
                     dimensionality=cfg_dict.get("dimensionality"),
                     coil_combination_method=self.coil_combination_method,
                 )
-                for _ in range(cfg_dict.get("num_cascades"))
+                for _ in range(self.cascades)
             ]
         )
 
@@ -110,9 +115,10 @@ class CIRIM(BaseMRIReconstructionModel):
         initial_prediction = None if initial_prediction is None or initial_prediction.dim() < 4 else initial_prediction
         hx = None
         cascades_predictions = []
+        cascades_log_like = []
         for i, cascade in enumerate(self.reconstruction_module):
             # Forward pass through the cascades
-            prediction, hx = cascade(
+            prediction, hx, log_like_pred = cascade(
                 prediction,
                 y,
                 sensitivity_maps,
@@ -123,8 +129,9 @@ class CIRIM(BaseMRIReconstructionModel):
                 keep_prediction=False if i == 0 else self.keep_prediction,
             )
             cascades_predictions.append([check_stacked_complex(p) for p in prediction])
+            cascades_log_like.append([check_stacked_complex(l) for l in log_like_pred])
             prediction = prediction[-1]
-        return cascades_predictions
+        return cascades_predictions,cascades_log_like
 
     def process_reconstruction_loss(  # noqa: MC0001
         self,
@@ -182,7 +189,7 @@ class CIRIM(BaseMRIReconstructionModel):
             # Ensure loss inputs are both viewed in the same way.
             target = self.__abs_output__(target)
             # Normalize inputs
-            target = target / torch.max(torch.abs(target))
+            #target = torch.abs(target / torch.max(torch.abs(target)))
 
         def compute_reconstruction_loss(t, p, s):
             if self.unnormalize_loss_inputs:
@@ -209,29 +216,21 @@ class CIRIM(BaseMRIReconstructionModel):
             elif not self.unnormalize_loss_inputs:
                 p = self.__abs_output__(p)
                 # Normalize inputs to [0, 1]
-                target = p / torch.max(torch.abs(p))
+                #p = torch.abs(p / torch.max(torch.abs(p)))
 
             if "ssim" in str(loss_func).lower():
-                if torch.is_complex(p) or torch.is_complex(t):
-                    t = torch.abs(t)
-                    p = torch.abs(p)
-
+                p = torch.abs(p / torch.max(torch.abs(p)))
+                t = torch.abs(t / torch.max(torch.abs(t)))
                 return loss_func(t, p,
                                  data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(
                                      dim=0).to(t))
 
             if "haarpsi" in str(loss_func).lower():
-                if torch.is_complex(p) or torch.is_complex(t):
-                    t = torch.abs(t)
-                    p = torch.abs(p)
 
                 return loss_func(t, p,
                                  data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(
                                      dim=0).to(t))
             if "vsi" in str(loss_func).lower():
-                if torch.is_complex(p) or torch.is_complex(t):
-                    t = torch.abs(t)
-                    p = torch.abs(p)
 
                 return loss_func(t, p,
                                  data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(
@@ -262,9 +261,9 @@ class CIRIM(BaseMRIReconstructionModel):
                         compute_reconstruction_loss(target, time_step_pred, sensitivity_maps)
                         for time_step_pred in cascade_pred
                     ]
-                cascade_loss = sum(x * w for x, w in zip(time_steps_loss, time_steps_weights)) / self.time_steps
+                cascade_loss = sum(x * w for x, w in zip(time_steps_loss, time_steps_weights)) / sum(time_steps_weights)
                 cascades_loss.append(cascade_loss)
-            loss = sum(x * w for x, w in zip(cascades_loss, cascades_weights)) / len(prediction)
+            loss = sum(x * w for x, w in zip(cascades_loss, cascades_weights)) / sum(prediction)
         else:
             # keep the last prediction of the last cascade
             prediction = prediction[-1][-1]

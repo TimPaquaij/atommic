@@ -11,7 +11,7 @@ from typing import Dict, Tuple, Union
 import h5py
 import numpy as np
 import torch
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf,ListConfig
 from pytorch_lightning import Trainer
 from torch.utils.data import DataLoader
 
@@ -25,6 +25,7 @@ from atommic.collections.segmentation.data.mri_segmentation_loader import (
     ISLES2022SubAcuteStrokeSegmentationMRIDataset,
     SegmentationMRIDataset,
     SKMTEASegmentationMRIDataset,
+    SKMTEASegmentationMRIDatasetLateral,
 )
 from atommic.collections.segmentation.losses.cross_entropy import CrossEntropyLoss
 from atommic.collections.segmentation.losses.dice import Dice
@@ -423,7 +424,9 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
                     Attributes dictionary.
         """
         # Model forward pass
+        print(image.shape)
         prediction = self.forward(image)
+        print(prediction.shape)
 
         if self.consecutive_slices > 1:
             # reshape the target and prediction to [batch_size * consecutive_slices, nr_classes, n_x, n_y]
@@ -835,7 +838,19 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
         complex_data = cfg.get("complex_data", True)
 
         dataset_format = cfg.get("dataset_format", None)
-        if dataset_format.lower() == "brats2023adultglioma":
+        if isinstance(dataset_format,ListConfig):
+            if any(s.lower() in (
+                "skm-tea-echo1",
+                "skm-tea-echo2",
+                "skm-tea-echo1+echo2",
+                "skm-tea-echo1+echo2-mc") for s in dataset_format):
+
+                if any(a.lower() == "lateral" for a in dataset_format):
+                    dataloader = SKMTEASegmentationMRIDatasetLateral
+
+                else:
+                    dataloader = SKMTEASegmentationMRIDataset
+        elif dataset_format.lower() == "brats2023adultglioma":
             dataloader = BraTS2023AdultGliomaSegmentationMRIDataset
         elif dataset_format.lower() == "isles2022subacutestroke":
             dataloader = ISLES2022SubAcuteStrokeSegmentationMRIDataset

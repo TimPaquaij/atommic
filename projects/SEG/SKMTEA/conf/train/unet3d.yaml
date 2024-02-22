@@ -14,7 +14,8 @@ model:
   segmentation_module_normalize: false
   segmentation_module_norm_groups: 2
   segmentation_loss:
-    dice: 1.0
+    dice: 0.1
+    cross_entropy: 0.9
   dice_loss_include_background: true  # always set to true if the background is removed
   dice_loss_to_onehot_y: false
   dice_loss_sigmoid: false
@@ -41,41 +42,52 @@ model:
   dice_metric_batch: true
   segmentation_classes_thresholds: [0.5, 0.5, 0.5, 0.5]
   segmentation_activation: sigmoid
-  magnitude_input: true
+  cross_entropy_loss_classes_weight: [ 1, 1, 1, 1 ]
+  cross_entropy_loss_num_samples: 50
+  cross_entropy_loss_ignore_index: -100
+  cross_entropy_loss_reduction: none
+  cross_entropy_loss_label_smoothing: 0.0
+  magnitude_input: false
   log_multiple_modalities: false  # log all modalities in the same image, e.g. T1, T2, T1ce, FLAIR will be concatenated
   normalization_type: minmax
   normalize_segmentation_output: true
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
-  complex_data: false
-  consecutive_slices: 3
+  complex_data: true
+  consecutive_slices: 7
   dimensionality: 3
-  coil_combination_method: None
-  coil_dim: None
+  coil_combination_method: Sense
+  coil_dim: 2
 
   train_ds:
-    data_path: data_parent_dir/skm-tea/v1-release/json/image_files_train.json
+    data_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_train.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_train.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_train.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
     initial_predictions_path: None
-    dataset_format: skm-tea-echo1
-    sample_rate: 1
+    dataset_format:
+      - custom_masking
+      - skm-tea-echo1
+      - lateral
+    sample_rate: 0.01
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
     num_cols: None
-    consecutive_slices: 3
+    consecutive_slices: 7
     data_saved_per_slice: false
+    complex_target: true
     apply_prewhitening: false
     apply_gcc: false
-    estimate_coil_sensitivity_maps: false
-    coil_combination_method: None
-    dimensionality: 3
+    coil_combination_method: SENSE
+    dimensionality: 2
     mask_args:
-      type: none
+      type: none  # the mask will be loaded from the dataset, but we need to specify the type here
     partial_fourier_percentage: 0.0
     remask: false
+    ssdu: false
+    n2r: false
+    unsupervised_masked_target: false
     crop_size: None
     kspace_crop: false
     crop_before_masking: true
@@ -83,42 +95,52 @@ model:
     normalize_inputs: true
     normalization_type: minmax
     kspace_normalization: false
-    coil_dim: None
+    fft_centered: true
+    fft_normalization: ortho
+    spatial_dims:
+      - -2
+      - -1
+    coil_dim: 2
     use_seed: false
-    segmentations_path: None
+    segmentations_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
     segmentation_classes: 4
-    complex_data: false
+    complex_data: true
     batch_size: 1
     shuffle: true
-    num_workers: 8
+    num_workers: 4
     pin_memory: false
     drop_last: false
 
   validation_ds:
-    data_path: data_parent_dir/skm-tea/v1-release/json/image_files_val.json
+    data_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
     initial_predictions_path: None
-    dataset_format: skm-tea-echo1
-    sample_rate: 1
+    dataset_format:
+      - custom_masking
+      - SKM-TEA-echo1
+      - lateral
+    sample_rate: 0.01
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
     num_cols: None
-    consecutive_slices: 3
+    consecutive_slices: 7
     data_saved_per_slice: false
-    complex_target: false
-    log_images_rate: 0.05
+    complex_target: true
+    log_images_rate: 0.5
     apply_prewhitening: false
     apply_gcc: false
-    estimate_coil_sensitivity_maps: false
-    coil_combination_method: None
-    dimensionality: 3
+    coil_combination_method: SENSE
+    dimensionality: 2
     mask_args:
-      type: none
+      type: none  # the mask will be loaded from the dataset, but we need to specify the type here
     partial_fourier_percentage: 0.0
     remask: false
+    ssdu: false
+    n2r: false
+    unsupervised_masked_target: false
     crop_size: None
     kspace_crop: false
     crop_before_masking: true
@@ -126,14 +148,19 @@ model:
     normalize_inputs: true
     normalization_type: minmax
     kspace_normalization: false
-    coil_dim: None
+    fft_centered: true
+    fft_normalization: ortho
+    spatial_dims:
+      - -2
+      - -1
+    coil_dim: 2
     use_seed: true
-    segmentations_path: None
+    segmentations_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
     segmentation_classes: 4
-    complex_data: false
+    complex_data: true
     batch_size: 1
     shuffle: false
-    num_workers: 8
+    num_workers: 4
     pin_memory: false
     drop_last: false
 
@@ -164,8 +191,9 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: output_dir/atommic/segmentation/trained_models/SKMTEA/UNet3D
-  ema:
-    enable: false
-  create_tensorboard_logger: true
-  create_wandb_logger: false
+  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/Unet3D_SENSE
+  create_tensorboard_logger: false
+  create_wandb_logger: true
+  wandb_logger_kwargs:
+    project: Unet3D
+  files_to_copy: [ ]

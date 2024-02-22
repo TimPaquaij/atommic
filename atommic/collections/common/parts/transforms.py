@@ -866,7 +866,7 @@ class Masker:
         data: torch.Tensor,
         mask: Union[List, torch.Tensor, np.ndarray] = None,
         padding: Optional[Tuple] = None,
-        seed: Optional[int] = None,
+        seed: Optional[Tuple] = None,
     ) -> Tuple[
         List[float | torch.Tensor | Any],
         List[torch.Tensor | Any] | List[torch.Tensor | np.ndarray | None | Any],

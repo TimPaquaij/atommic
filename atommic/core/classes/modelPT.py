@@ -190,10 +190,18 @@ class ModelPT(LightningModule, Model):
         if self._test_dl and isinstance(self._test_dl, list) and len(self._test_dl) > 1:
             for _ in range(len(self._test_dl)):
                 self.test_step_targets.append([])
-        self.test_step_var: List = []
+        self.test_step_loglike: List = []
         if self._test_dl and isinstance(self._test_dl, list) and len(self._test_dl) > 1:
             for _ in range(len(self._test_dl)):
-                self.test_step_targets.append([])
+                self.test_step_loglike.append([])
+        self.test_step_innit: List = []
+        if self._test_dl and isinstance(self._test_dl, list) and len(self._test_dl) > 1:
+            for _ in range(len(self._test_dl)):
+                self.test_step_innit.append([])
+        self.test_step_inter_pred: List = []
+        if self._test_dl and isinstance(self._test_dl, list) and len(self._test_dl) > 1:
+            for _ in range(len(self._test_dl)):
+                self.test_step_inter_pred.append([])
         # ModelPT wrappers over subclass implementations
         self.training_step = atommic.utils.model_utils.wrap_training_step(  # pylint: disable=no-value-for-parameter
             self.training_step  # type: ignore

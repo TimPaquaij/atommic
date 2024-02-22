@@ -936,7 +936,7 @@ class StanfordKneesReconstructionMRIDataset(MRIDataset):
         mask = None
         prediction = None
         target = np.array([])
-
+        print(sensitivity_map.shape)
         return (
             (
                 kspace,

@@ -85,15 +85,6 @@ class ConvGRUCellBase(nn.Module):
             return nn.Conv3d
         raise NotImplementedError("No convolution of this dimensionality implemented")
 
-    def extra_repr(self):
-        """Extra information to be printed when printing the model."""
-        s = "{input_size}, {hidden_size}"
-        if "bias" in self.__dict__ and self.bias is not True:
-            s += ", bias={bias}"
-        if "nonlinearity" in self.__dict__ and self.nonlinearity != "tanh":
-            s += ", nonlinearity={nonlinearity}"
-        return s.format(**self.__dict__)
-
     def check_forward_input(self, _input: torch.Tensor):
         """Check forward input."""
         if _input.size(1) != self.input_size:
@@ -348,7 +339,9 @@ class IndRNNCellBase(nn.Module):
         conv_dim: int,
         kernel_size: int,
         dilation: int,
+        dropout: int,
         bias: bool = True,
+
     ):
         """Inits :class:`IndRNNCellBase`.
 
@@ -375,7 +368,8 @@ class IndRNNCellBase(nn.Module):
         self.bias = bias
         self.conv_dim = conv_dim
         self.conv_class = self.determine_conv_class(conv_dim)
-
+        self.dropout_class = self.determine_dropout_class(conv_dim)
+        self.dropout_layer = self.dropout_class(dropout)
         self.ih = self.conv_class(
             input_size,
             hidden_size,
@@ -419,6 +413,17 @@ class IndRNNCellBase(nn.Module):
             return nn.Conv2d
         if n_dim == 3:
             return nn.Conv3d
+        raise NotImplementedError("No convolution of this dimensionality implemented")
+
+    @staticmethod
+    def determine_dropout_class(n_dim: int) -> nn.Module:
+        """Determine the convolutional class."""
+        if n_dim == 1:
+            return nn.Dropout1d
+        if n_dim == 2:
+            return nn.Dropout2d
+        if n_dim == 3:
+            return nn.Dropout3d
         raise NotImplementedError("No convolution of this dimensionality implemented")
 
     def extra_repr(self):
@@ -465,7 +470,9 @@ class IndRNNCell(IndRNNCellBase):
         conv_dim: int,
         kernel_size: int,
         dilation: int,
+        dropout: int,
         bias: bool = True,
+
     ):
         """Inits :class:`IndRNNCell`.
 
@@ -484,7 +491,7 @@ class IndRNNCell(IndRNNCellBase):
         bias : bool
             Whether to use bias. Default is ``True``.
         """
-        super().__init__(input_size, hidden_size, conv_dim, kernel_size, dilation, bias)
+        super().__init__(input_size, hidden_size, conv_dim, kernel_size, dilation, dropout,bias)
         self.conv_dim = conv_dim
 
     def forward(self, _input: torch.Tensor, hx: torch.Tensor) -> torch.Tensor:
@@ -494,4 +501,4 @@ class IndRNNCell(IndRNNCellBase):
             _input = _input.unsqueeze(0)
             hx = hx.permute(1, 0, 2, 3).unsqueeze(0)
 
-        return nn.ReLU()(self.ih(_input) + self.hh * hx)
+        return nn.ReLU()(self.dropout_layer((self.ih(_input) + self.hh * hx)))

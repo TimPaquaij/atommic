@@ -72,7 +72,7 @@ model:
     mask_path: None
     noise_path: None
     initial_predictions_path: None
-    dataset_format: fastmri
+    dataset_format: con_1
     sample_rate: 1
     volume_sample_rate: None
     use_dataset_cache: false

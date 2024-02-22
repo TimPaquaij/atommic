@@ -144,5 +144,5 @@ class RecSegUNet(BaseMRIReconstructionSegmentationModel):
         if self.consecutive_slices > 1:
             pred_reconstruction = pred_reconstruction.view([batch, slices, *pred_reconstruction.shape[1:]])
             pred_segmentation = pred_segmentation.view([batch, slices, *pred_segmentation.shape[1:]])
-
-        return pred_reconstruction, pred_segmentation
+        log_like = torch.empty([])
+        return pred_reconstruction, pred_segmentation, log_like

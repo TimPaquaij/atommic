@@ -6,6 +6,7 @@ model:
   model_name: SEGMENTATIONLAMBDAUNET
   use_reconstruction_module: false
   segmentation_module: LambdaUNet
+  segmentation_module_3d: false
   segmentation_module_input_channels: 1
   segmentation_module_output_channels: 4
   segmentation_module_channels: 32

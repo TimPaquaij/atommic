@@ -183,7 +183,7 @@ model:
     coil_combination_method: SENSE
     dimensionality: 2
     mask_args:
-      type: poisson2d  # the mask will be loaded from the dataset, but we need to specify the type here
+      type: gaussian2d  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
         - 4  # 4, 6, 8, 10, 12, 16
       shift_mask: false

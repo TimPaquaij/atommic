@@ -339,26 +339,27 @@ class Gaussian1DMaskFunc(MaskFunc):
         Tuple[torch.Tensor, int]
             A tuple of the generated mask and the acceleration factor.
         """
-        dims = [1 for _ in shape]
-        self.shape = tuple(shape[-3:-1])
-        self.shape = (self.shape[1], self.shape[0])
-        dims[-2] = self.shape[-2]
+        with temp_seed(self.rng, seed):
+            dims = [1 for _ in shape]
+            self.shape = tuple(shape[-3:-1])
+            self.shape = (self.shape[1], self.shape[0])
+            dims[-2] = self.shape[-2]
 
-        full_width_half_maximum, acceleration = self.choose_acceleration()
+            full_width_half_maximum, acceleration = self.choose_acceleration()
 
-        self.full_width_half_maximum = full_width_half_maximum
-        self.acceleration = acceleration
-        self.center_scale = center_scale
+            self.full_width_half_maximum = full_width_half_maximum
+            self.acceleration = acceleration
+            self.center_scale = center_scale
+            mask = self.gaussian_kspace()
 
-        mask = self.gaussian_kspace()
-        mask[tuple(self.gaussian_coordinates())] = 1.0
+            mask[tuple(self.gaussian_coordinates())] = 1.0
 
-        mask = np.fft.ifftshift(np.fft.ifftshift(np.fft.ifftshift(mask, axes=0), axes=0), axes=(0, 1))
+            mask = np.fft.ifftshift(np.fft.ifftshift(np.fft.ifftshift(mask, axes=0), axes=0), axes=(0, 1))
 
-        if partial_fourier_percentage != 0:
-            mask[:, : int(np.round(mask.shape[1] * partial_fourier_percentage))] = 0.0
+            if partial_fourier_percentage != 0:
+                mask[:, : int(np.round(mask.shape[1] * partial_fourier_percentage))] = 0.0
 
-        return torch.from_numpy(np.transpose(mask, (1, 0))[0].reshape(*dims).astype(np.float32)), acceleration
+            return torch.from_numpy(np.transpose(mask, (1, 0))[0].reshape(*dims).astype(np.float32)), acceleration
 
     def gaussian_kspace(self) -> np.ndarray:
         """Creates a Gaussian sampled k-space center."""
@@ -387,7 +388,7 @@ class Gaussian1DMaskFunc(MaskFunc):
         from `gaussian_kernel`.
         """
         n_sample = int(self.shape[0] / self.acceleration)
-        idxs = np.random.choice(range(self.shape[0]), size=n_sample, replace=False, p=self.gaussian_kernel())
+        idxs = self.rng.choice(range(self.shape[0]), size=n_sample, replace=False, p=self.gaussian_kernel())
         xsamples = np.concatenate([np.tile(i, self.shape[1]) for i in idxs])
         ysamples = np.concatenate([range(self.shape[1]) for _ in idxs])
         return xsamples, ysamples
@@ -476,6 +477,7 @@ class Gaussian2DMaskFunc(MaskFunc):
         ValueError
             If the `shape` parameter has less than 3 dimensions.
         """
+        self.seed =seed
         dims = [1 for _ in shape]
         self.shape = tuple(shape[-3:-1])
         dims[-3:-1] = self.shape
@@ -520,10 +522,11 @@ class Gaussian2DMaskFunc(MaskFunc):
         `self.shape[0] / self.acceleration`. The selection of the samples is based on the probabilities calculated \
         from `gaussian_kernel`.
         """
-        n_sample = int(self.shape[0] * self.shape[1] / self.acceleration)
-        cartesian_prod = list(np.ndindex(self.shape))
-        kernel = self.gaussian_kernel()
-        idxs = np.random.choice(range(len(cartesian_prod)), size=n_sample, replace=False, p=kernel.flatten())
+        with temp_seed(self.rng,self.seed):
+            n_sample = int(self.shape[0] * self.shape[1] / self.acceleration)
+            cartesian_prod = list(np.ndindex(self.shape))
+            kernel = self.gaussian_kernel()
+            idxs = self.rng.choice(range(len(cartesian_prod)), size=n_sample, replace=False, p=kernel.flatten())
         return list(zip(*list(map(cartesian_prod.__getitem__, idxs))))
 
     def gaussian_kernel(self) -> np.ndarray:
@@ -858,7 +861,7 @@ class Random1DMaskFunc(MaskFunc):
 
 
 def create_masker(
-    mask_type_str: str, center_fractions: Union[Sequence[float], float], accelerations: Union[Sequence[int], int]
+    mask_type_str: str, center_fractions: Union[Sequence[float], float], accelerations: Union[Sequence[int], int],
 ) -> MaskFunc:
     """Creates a MaskFunc object based on the specified mask type.
 
@@ -911,5 +914,5 @@ def create_masker(
     if mask_type_str == "gaussian2d":
         return Gaussian2DMaskFunc(center_fractions, accelerations)
     if mask_type_str == "poisson2d":
-        return Poisson2DMaskFunc(center_fractions, accelerations)
+        return Poisson2DMaskFunc(center_fractions, accelerations,seed)
     raise NotImplementedError(f"{mask_type_str} not supported")

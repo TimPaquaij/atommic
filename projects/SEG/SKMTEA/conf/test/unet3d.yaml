@@ -111,7 +111,7 @@ model:
     consecutive_slices: 3
     data_saved_per_slice: false
     complex_target: false
-    log_images_rate: 0.05
+    log_images_rate: 0.5
     apply_prewhitening: false
     apply_gcc: false
     estimate_coil_sensitivity_maps: false

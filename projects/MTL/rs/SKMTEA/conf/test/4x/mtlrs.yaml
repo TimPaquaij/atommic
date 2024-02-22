@@ -1,11 +1,12 @@
-pretrained: test
-checkpoint: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA/MTLRS_SENSE/default/2024-01-07_11-56-42/checkpoints/default--val_loss=0.0095-epoch=50-last.ckpt
-mode: true
+pretrained: true
+checkpoint: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA/MTLRS_SENSE/default/2024-01-15_17-43-55/checkpoints/default--val_loss=0.0058-epoch=10-last.ckpt
+mode: test
 
 model:
   model_name: MTLRS
   joint_reconstruction_segmentation_module_cascades: 5
   task_adaption_type: multi_task_learning
+  cascade_nr_hidden_states: 1
   use_reconstruction_module: true
   reconstruction_module_recurrent_layer: IndRNN
   reconstruction_module_conv_filters:
@@ -56,7 +57,7 @@ model:
   segmentation_module_dropout: 0.0
   segmentation_loss:
     dice: 1.0
-    cross_entropy: 1.0
+    cross_entropy: 1
   dice_loss_include_background: true  # always set to true if the background is removed
   dice_loss_to_onehot_y: false
   dice_loss_sigmoid: false
@@ -85,10 +86,11 @@ model:
   segmentation_activation: sigmoid
   reconstruction_loss:
     l1: 1.0
-    ssim: 1
+    ssim: 1.0
   kspace_reconstruction_loss: false
   total_reconstruction_loss_weight: 0.9
   total_segmentation_loss_weight: 0.1
+  complex_valued_type: stacked  # stacked, complex_abs, complex_sqrt_abs
   fft_centered: true
   fft_normalization: ortho
   spatial_dims:
@@ -127,13 +129,13 @@ model:
     consecutive_slices: 1
     data_saved_per_slice: false
     complex_target: true
-    log_images_rate: 1e-4
+    log_images_rate: 1e-2
     apply_prewhitening: false
     apply_gcc: false
     coil_combination_method: SENSE
     dimensionality: 2
     mask_args:
-      type: gaussian2d  # the mask will be loaded from the dataset, but we need to specify the type here
+      type: poisson2d  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
         - 4  # 4, 6, 8, 10, 12, 16
       shift_mask: false
@@ -171,7 +173,7 @@ model:
     lr: 1e-4
     betas:
       - 0.9
-      - 0.98
+      - 0.99
     weight_decay: 0.0
     sched:
       name: InverseSquareRootAnnealing
@@ -184,7 +186,7 @@ trainer:
   accelerator: gpu
   devices: 1
   num_nodes: 1
-  max_epochs: 20
+  max_epochs: 1
   precision: 16-mixed
   enable_checkpointing: false
   logger: false
@@ -193,9 +195,9 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA/MTLRS_SENSE/predictions_4x/2024-01-07_11-56-42/checkpoints/default--val_loss=0.0095-epoch=50-last
+  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA/MTLRS_SENSE/predictions_4x/2024-01-15_17-43-55
   create_tensorboard_logger: false
-  create_wandb_logger: true
+  create_wandb_logger: True
   wandb_logger_kwargs:
-    project: MTLRS
+    project: MTLRS_SKMTEA
   files_to_copy: [ ]

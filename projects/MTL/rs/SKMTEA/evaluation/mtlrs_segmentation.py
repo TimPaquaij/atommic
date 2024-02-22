@@ -123,7 +123,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("targets_dir", type=str)
-    parser.add_argument("segmentations_dir", type=str)
+    #parser.add_argument("segmentations_dir", type=str)
     parser.add_argument("predictions_dir", type=str)
     parser.add_argument("--output_dir", type=str)
     parser.add_argument("--dataset_format", choices=["skm-tea", "brats", "private"], default="private")

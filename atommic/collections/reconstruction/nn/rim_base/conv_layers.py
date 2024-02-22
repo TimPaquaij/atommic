@@ -53,6 +53,7 @@ class ConvNonlinear(nn.Module):
         kernel_size: int,
         dilation: int,
         bias: bool,
+        dropout: int,
         nonlinear: Union[str, None] = "ReLU",
     ):
         """Inits :class:`ConvNonlinear`.
@@ -81,14 +82,16 @@ class ConvNonlinear(nn.Module):
         self.kernel_size = kernel_size
         self.dilation = dilation
         self.bias = bias
+        self.dropout =dropout
         self.conv_dim = conv_dim
-        self.conv_class = self.determine_conv_class(conv_dim)
 
+        self.conv_class = self.determine_conv_class(conv_dim)
+        self.dropout_class = self.determine_dropout_class(conv_dim)
         if nonlinear is not None and nonlinear.upper() == "RELU":
             self.nonlinear = torch.nn.ReLU()
         elif nonlinear is not None and nonlinear.upper() == "LEAKYRELU":
             self.nonlinear = torch.nn.LeakyReLU()
-        elif nonlinear is None:
+        elif nonlinear is None or nonlinear.upper() == "NONE":
             self.nonlinear = lambda x: x
         else:
             raise ValueError("Please specify a proper nonlinearity")
@@ -107,6 +110,9 @@ class ConvNonlinear(nn.Module):
             dilation=dilation,
             bias=bias,
         )
+
+        self.dropout_layer = self.dropout_class(dropout)
+
 
         self.reset_parameters()
 
@@ -128,6 +134,18 @@ class ConvNonlinear(nn.Module):
             return nn.Conv3d
         raise ValueError(f"Convolution of: {n_dim} dims is not implemented")
 
+    @staticmethod
+    def determine_dropout_class(n_dim: int) -> nn.Module:
+        """Determines the convolutional layer class."""
+        if n_dim == 1:
+            return nn.Dropout1d
+        if n_dim == 2:
+            return nn.Dropout2d
+        if n_dim == 3:
+            return nn.Dropout3d
+        raise ValueError(f"Convolution of: {n_dim} dims is not implemented")
+
+
     def extra_repr(self):
         """Extra information about the layer."""
         s = "{input_size}, {features}"
@@ -144,4 +162,4 @@ class ConvNonlinear(nn.Module):
 
     def forward(self, _input: torch.Tensor) -> torch.Tensor:
         """Forward pass of :class:`ConvNonlinear`."""
-        return self.nonlinear(self.conv_layer(self.padding(_input)))
+        return self.nonlinear(self.dropout_layer(self.conv_layer(self.padding(_input))))

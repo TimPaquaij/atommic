@@ -3,9 +3,11 @@ __author__ = "Dimitris Karkalousos"
 
 from abc import ABC
 from typing import Dict, Optional, Sequence, Tuple
-
 import torch
 import wandb
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
 from omegaconf import DictConfig
 from pytorch_lightning import Trainer
 from torch import nn
@@ -140,6 +142,25 @@ class BaseMRIModel(modelPT.ModelPT, ABC):
         """
         raise NotImplementedError
 
+    def log_plot(self, name, data):
+        """Logs an image.
+
+        Parameters
+        ----------
+        name : str
+            Name of the image.
+        image : torch.Tensor
+            Image to log.
+        """
+
+        if ".h5" in name:
+            name = name.replace(".h5", "")
+
+        if "wandb" in self.logger.__module__.lower():
+            plt.plot(range(1,len(data)+1),data)
+            self.logger.experiment.log({name: wandb.Image(plt)})
+            plt.close()
+
     def log_image(self, name, image):
         """Logs an image.
 
@@ -165,7 +186,6 @@ class BaseMRIModel(modelPT.ModelPT, ABC):
 
         if "tensorboard" in self.logger.__module__.lower():
             self.logger.experiment.add_image(name, image, global_step=self.global_step)
-
     def on_validation_epoch_end(self):
         """Called at the end of validation epoch to aggregate outputs."""
         raise NotImplementedError

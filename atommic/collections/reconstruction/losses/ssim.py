@@ -58,26 +58,26 @@ class SSIMLoss(Loss):
 
         # This is necessary to first assign self.w to CUDA and then in case of fp32 to avoid RuntimeError: Inference
         # tensors cannot be saved for backward.
-        self.w = self.w.to(Y).clone()  # type: ignore
+        w = self.w.to(Y).clone()  # type: ignore
 
         if data_range is None:
             data_range = torch.tensor([max(X.max() - X.min(), Y.max() - Y.min())]).to(Y)
         if isinstance(data_range, int):
             data_range = torch.tensor([data_range]).to(Y)
-
-        data_range = data_range[:, None, None, None]
-        C1 = (self.k1 * data_range) ** 2
-        C2 = (self.k2 * data_range) ** 2
-        ux = F.conv2d(X, self.w)
-        uy = F.conv2d(Y, self.w)
-        uxx = F.conv2d(X * X, self.w)
-        uyy = F.conv2d(Y * Y, self.w)
-        uxy = F.conv2d(X * Y, self.w)
-        vx = self.cov_norm * (uxx - ux * ux)
-        vy = self.cov_norm * (uyy - uy * uy)
-        vxy = self.cov_norm * (uxy - ux * uy)
-        A1, A2, B1, B2 = (2 * ux * uy + C1, 2 * vxy + C2, ux**2 + uy**2 + C1, vx + vy + C2)
-        D = B1 * B2
-        S = (A1 * A2) / D
-
-        return 1 - S.mean()
+        for i in range(Y.shape[0]):
+            data_range = data_range[:, None, None, None]
+            C1 = (self.k1 * data_range) ** 2
+            C2 = (self.k2 * data_range) ** 2
+            ux = F.conv2d(X[i].unsqueeze(0), w)
+            uy = F.conv2d(Y[i].unsqueeze(0), w)
+            uxx = F.conv2d(X[i].unsqueeze(0) * X[i].unsqueeze(0), w)
+            uyy = F.conv2d(Y[i].unsqueeze(0) * Y[i].unsqueeze(0), w)
+            uxy = F.conv2d(X[i].unsqueeze(0) * Y[i].unsqueeze(0), w)
+            vx = self.cov_norm * (uxx - ux * ux)
+            vy = self.cov_norm * (uyy - uy * uy)
+            vxy = self.cov_norm * (uxy - ux * uy)
+            A1, A2, B1, B2 = (2 * ux * uy + C1, 2 * vxy + C2, ux**2 + uy**2 + C1, vx + vy + C2)
+            D = B1 * B2
+            S = (A1 * A2) / D
+            loss =+ 1 - S.mean()
+        return loss/Y.shape[0]

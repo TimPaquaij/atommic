@@ -171,7 +171,7 @@ class MRIDataset(Dataset):
 
         self.recons_key = "reconstruction"
         self.examples = []
-
+        self.int_total_slices = 0
         # Check if our dataset is in the cache. If yes, use that metadata, if not, then regenerate the metadata.
         if dataset_cache.get(root) is None or not use_dataset_cache:
             if str(root).endswith(".json"):
@@ -199,8 +199,8 @@ class MRIDataset(Dataset):
                     if fname in n2r_supervised_files:
                         metadata["n2r_supervised"] = True
 
-                self.examples += [(fname, slice_ind, metadata) for slice_ind in range(num_slices) if slice_ind not in (0,1,2,77,78,79)]
-
+                self.examples += [(fname, slice_ind, metadata,self.int_total_slices+i) for i,slice_ind in enumerate(range(num_slices)) if slice_ind > 20 and slice_ind <60]
+                self.int_total_slices = self.examples[-1][3]
             if dataset_cache.get(root) is None and use_dataset_cache:
                 dataset_cache[root] = self.examples
                 logging.info("Saving dataset cache to %s.", self.dataset_cache_file)

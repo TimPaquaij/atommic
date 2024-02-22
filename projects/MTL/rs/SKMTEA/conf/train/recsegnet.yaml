@@ -45,8 +45,8 @@ model:
   reconstruction_loss:
     l1: 1.0
   kspace_reconstruction_loss: false
-  total_reconstruction_loss_weight: 0.5
-  total_segmentation_loss_weight: 0.5
+  total_reconstruction_loss_weight: 0.9
+  total_segmentation_loss_weight: 0.1
   fft_centered: true
   fft_normalization: ortho
   spatial_dims:
@@ -59,22 +59,26 @@ model:
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
   complex_data: true
+  complex_valued_type: complex_sqrt_abs
   consecutive_slices: 1
   dimensionality: 2
-  coil_combination_method: RSS
+  coil_combination_method: SENSE
   coil_dim: 1
   estimate_coil_sensitivity_maps_with_nn: false
   ssdu: false
   n2r: false
 
   train_ds:
-    data_path: data_parent_dir/skm-tea/v1-release/json/files_recon_calib-24_train.json
+    data_path: /data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_train.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_train.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_train.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
     initial_predictions_path: None
-    dataset_format: skm-tea-echo1
-    sample_rate: 1
+    dataset_format:
+      - custom_masking
+      - skm-tea-echo1
+      - lateral
+    sample_rate: 0.1
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
@@ -84,12 +88,12 @@ model:
     complex_target: true
     apply_prewhitening: false
     apply_gcc: false
-    coil_combination_method: RSS
+    coil_combination_method: SENSE
     dimensionality: 2
     mask_args:
-      type: poisson2d  # the mask will be loaded from the dataset, but we need to specify the type here
+      type: gaussian2d  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
-        - 4  # 4, 6, 8, 10, 12, 16
+        - 8  # 4, 6, 8, 10, 12, 16
       shift_mask: false
       use_seed: false
     partial_fourier_percentage: 0.0
@@ -111,7 +115,7 @@ model:
       - -1
     coil_dim: 1
     use_seed: false
-    segmentations_path: data_parent_dir/skm-tea/v1-release/segmentation_masks/raw-data-track
+    segmentations_path: /data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
     segmentation_classes: 4
     complex_data: true
     batch_size: 1
@@ -121,13 +125,16 @@ model:
     drop_last: false
 
   validation_ds:
-    data_path: data_parent_dir/skm-tea/v1-release/json/files_recon_calib-24_val.json
+    data_path: /data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
     initial_predictions_path: None
-    dataset_format: skm-tea-echo1
-    sample_rate: 1
+    dataset_format:
+      - custom_masking
+      - SKM-TEA-echo1
+      - lateral
+    sample_rate: 0.1
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
@@ -135,15 +142,16 @@ model:
     consecutive_slices: 1
     data_saved_per_slice: false
     complex_target: true
-    log_images_rate: 1
+    log_images_rate: 0.04
     apply_prewhitening: false
     apply_gcc: false
-    coil_combination_method: RSS
+    estimate_coil_sensitivity_maps: false
+    coil_combination_method: SENSE
     dimensionality: 2
     mask_args:
-      type: poisson2d  # the mask will be loaded from the dataset, but we need to specify the type here
+      type: gaussian2d  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
-        - 4  # 4, 6, 8, 10, 12, 16
+        - 8 # 4, 6, 8, 10, 12, 16
       shift_mask: false
       use_seed: true
     partial_fourier_percentage: 0.0
@@ -165,7 +173,7 @@ model:
       - -1
     coil_dim: 1
     use_seed: true
-    segmentations_path: data_parent_dir/skm-tea/v1-release/segmentation_masks/raw-data-track
+    segmentations_path: /data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
     segmentation_classes: 4
     complex_data: true
     batch_size: 1
@@ -174,12 +182,13 @@ model:
     pin_memory: false
     drop_last: false
 
+
   optim:
     name: adam
     lr: 1e-4
     betas:
       - 0.9
-      - 0.98
+      - 0.99
     weight_decay: 0.0
     sched:
       name: InverseSquareRootAnnealing
@@ -192,7 +201,7 @@ trainer:
   accelerator: gpu
   devices: 1
   num_nodes: 1
-  max_epochs: 15
+  max_epochs: 10
   precision: 16-mixed
   enable_checkpointing: false
   logger: false
@@ -201,7 +210,11 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: output_dir/atommic/mltrs/trained_models/SKMTEA/RecSegNet
-  create_tensorboard_logger: true
-  create_wandb_logger: false
+  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA/RecSegNet_SENSE
+  ema:
+    enable: false
+  create_tensorboard_logger: false
+  create_wandb_logger: true
+  wandb_logger_kwargs:
+    project: RecSegNet_SKMTEA
   files_to_copy: [ ]

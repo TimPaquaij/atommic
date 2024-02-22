@@ -13,7 +13,7 @@ from atommic.collections.reconstruction.nn.unet_base.unet_block import Unet
 from atommic.collections.segmentation.nn.attentionunet_base.attentionunet_block import AttentionUnet
 from atommic.collections.segmentation.nn.lambdaunet_base.lambdaunet_block import LambdaBlock
 from atommic.collections.segmentation.nn.vnet_base.vnet_block import VNet
-
+from atommic.collections.segmentation.nn.unet3d_base.unet3d_block import UNet3D
 __all__ = ["MTLRSBlock"]
 
 
@@ -105,10 +105,13 @@ class MTLRSBlock(torch.nn.Module):
                     conv_kernels=self.reconstruction_module_params["conv_kernels"],
                     conv_dilations=self.reconstruction_module_params["conv_dilations"],
                     conv_bias=self.reconstruction_module_params["conv_bias"],
+                    conv_dropout = self.reconstruction_module_params["conv_dropout"],
+                    conv_activations = self.reconstruction_module_params["conv_activations"],
                     recurrent_filters=self.reconstruction_module_recurrent_filters,
                     recurrent_kernels=self.reconstruction_module_params["recurrent_kernels"],
                     recurrent_dilations=self.reconstruction_module_params["recurrent_dilations"],
                     recurrent_bias=self.reconstruction_module_params["recurrent_bias"],
+                    recurrent_dropout=self.reconstruction_module_params["recurrent_dropout"],
                     depth=self.reconstruction_module_params["depth"],
                     time_steps=self.reconstruction_module_time_steps,
                     conv_dim=self.reconstruction_module_params["conv_dim"],
@@ -116,7 +119,7 @@ class MTLRSBlock(torch.nn.Module):
                     fft_centered=self.fft_centered,
                     fft_normalization=self.fft_normalization,
                     spatial_dims=self.spatial_dims,
-                    coil_dim=self.coil_dim - 1,
+                    coil_dim=self.coil_dim-1,
                     dimensionality=self.reconstruction_module_dimensionality,
                     consecutive_slices=reconstruction_module_consecutive_slices,
                     coil_combination_method=self.coil_combination_method,
@@ -181,10 +184,18 @@ class MTLRSBlock(torch.nn.Module):
                     nonlinear=None,  # No nonlinear activation
                 )
             )
+        elif segmentation_module.lower() == "unet3d":
+            segmentation_module = torch.nn.Sequential(UNet3D(
+                in_chans=self.input_channels,
+                out_chans=self.segmentation_module_output_channels,
+                chans=self.segmentation_module_output_channels,
+                num_pool_layers=self.segmentation_module_params["pooling_layers"],
+                drop_prob=self.segmentation_module_params["dropout"],
+            ))
         else:
             raise ValueError(f"Segmentation module {segmentation_module} not implemented.")
         self.segmentation_module = segmentation_module
-
+        self.segmentation_3d = self.segmentation_module_params["segmentation_3d"]
         self.normalize_segmentation_output = normalize_segmentation_output
 
     def forward(  # noqa: MC0001
@@ -224,12 +235,17 @@ class MTLRSBlock(torch.nn.Module):
         if self.consecutive_slices > 1 and self.reconstruction_module_dimensionality == 2:
             # Do per slice reconstruction
             pred_reconstruction_slices = []
+            pred_loglike_slices = []
             temp_hx = []
             for slice_idx in range(self.consecutive_slices):
                 y_slice = y[:, slice_idx, ...]
                 prediction_slice = y_slice.clone()
                 sensitivity_maps_slice = sensitivity_maps[:, slice_idx, ...]
-                mask_slice = mask[:, 0, ...]
+                if mask.dim() == 1:
+                    mask_slice = mask
+                else:
+                    mask_slice = mask[:, 0, ...]
+
                 init_reconstruction_pred_slice = init_reconstruction_pred[:, slice_idx, ...]
                 if not hx[0].shape:
                     hx_slice =hx
@@ -242,24 +258,30 @@ class MTLRSBlock(torch.nn.Module):
                     else init_reconstruction_pred_slice
                 )
                 cascades_predictions = []
-                cascades_hx_predictions = []
+                cascades_log_like= []
+
                 for i, cascade in enumerate(self.reconstruction_module):
                     # Forward pass through the cascades
-                    prediction_slice, hx_slice= cascade(
+                    prediction_slice, hx_slice, log_like_slice= cascade(
                         prediction_slice,
                         y_slice,
                         sensitivity_maps_slice,
                         mask_slice,
-                        _pred_reconstruction_slice,
+                        _pred_reconstruction_slice if i == 0 else prediction_slice,
                         hx_slice,
                         sigma,
                         keep_prediction=False if i == 0 else self.keep_prediction,
                     )
                     time_steps_predictions = [torch.view_as_complex(pred) for pred in prediction_slice]
+                    log_like_predictions = [torch.view_as_complex(l) for l in log_like_slice]
                     cascades_predictions.append(torch.stack(time_steps_predictions, dim=0))
+                    cascades_log_like.append(torch.stack(log_like_predictions,dim = 0))
+                    prediction_slice = prediction_slice[-1]
                 pred_reconstruction_slices.append(torch.stack(cascades_predictions, dim=0))
+                pred_loglike_slices.append(torch.stack(cascades_log_like, dim=0))
                 temp_hx.append(torch.stack(hx_slice,dim=0))
             preds = torch.stack(pred_reconstruction_slices, dim=3)
+            log_like = torch.stack(pred_loglike_slices, dim=3)
             hx = torch.stack(temp_hx,dim=2)
 
 
@@ -279,9 +301,10 @@ class MTLRSBlock(torch.nn.Module):
             )
             sigma = 1.0
             cascades_predictions = []
+            cascades_log_like = []
             for i, cascade in enumerate(self.reconstruction_module):
                 # Forward pass through the cascades
-                prediction, hx = cascade(
+                prediction, hx, log_like = cascade(
                     prediction,
                     y,
                     sensitivity_maps,
@@ -292,7 +315,10 @@ class MTLRSBlock(torch.nn.Module):
                     keep_prediction=False if i == 0 else self.keep_prediction,
                 )
                 time_steps_predictions = [torch.view_as_complex(pred) for pred in prediction]
+                log_like_predictions = [torch.view_as_complex(l) for l in log_like]
                 cascades_predictions.append(time_steps_predictions)
+                cascades_log_like.append(log_like_predictions)
+                log_like = cascades_log_like
         pred_reconstruction = cascades_predictions
 
         _pred_reconstruction = pred_reconstruction
@@ -302,11 +328,14 @@ class MTLRSBlock(torch.nn.Module):
             _pred_reconstruction = _pred_reconstruction[-1]
         if _pred_reconstruction.shape[-1] != 2:
             _pred_reconstruction = torch.view_as_real(_pred_reconstruction)
-        if self.consecutive_slices > 1 and _pred_reconstruction.dim() == 5:
+
+        if self.consecutive_slices > 1 and _pred_reconstruction.dim() == 5 and not self.segmentation_3d:
             _pred_reconstruction = _pred_reconstruction.reshape(
                 _pred_reconstruction.shape[0] * _pred_reconstruction.shape[1],
                 *_pred_reconstruction.shape[2:],
             )
+        if self.segmentation_3d == True:
+            _pred_reconstruction.unsqueeze(2).permute(0,2,1,3,4,5)
         if _pred_reconstruction.shape[-1] == 2:
             if self.input_channels == 1:
                 _pred_reconstruction = torch.view_as_complex(_pred_reconstruction).unsqueeze(1)
@@ -320,7 +349,6 @@ class MTLRSBlock(torch.nn.Module):
                 raise ValueError(f"The input channels must be either 1 or 2. Found: {self.input_channels}")
         else:
             _pred_reconstruction = _pred_reconstruction.unsqueeze(1)
-
         pred_segmentation = self.segmentation_module(torch.abs(_pred_reconstruction))
 
         if self.normalize_segmentation_output:
@@ -330,9 +358,15 @@ class MTLRSBlock(torch.nn.Module):
 
         pred_segmentation = torch.abs(pred_segmentation)
 
-        if self.consecutive_slices > 1:
+        if self.consecutive_slices > 1 and not self.segmentation_3d:
             # get batch size and number of slices from y, because if the reconstruction module is used they will
             # not be saved before
             pred_segmentation = pred_segmentation.view([y.shape[0], y.shape[1], *pred_segmentation.shape[1:]])
 
-        return pred_reconstruction, pred_segmentation, hx  # type: ignore
+        if self.consecutive_slices > 1 and self.segmentation_3d:
+            # get batch size and number of slices from y, because if the reconstruction module is used they will
+            # not be saved before
+            pred_segmentation = pred_segmentation.permute(0,2,1,3,4)
+            pred_segmentation = pred_segmentation.view([y.shape[0], y.shape[1], *pred_segmentation.shape[2:]])
+
+        return pred_reconstruction, pred_segmentation, hx, log_like  # type: ignore
