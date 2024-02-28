@@ -1,11 +1,34 @@
+
+defaults:
+  - override hydra/launcher: atommic_launcher
+
+hydra:
+  # Helper arguments to ensure all hyper parameter runs are from the directory that launches the script.
+  sweep:
+    dir: "."
+    subdir: "."
+
+  # Define all the hyper parameters here
+  sweeper:
+    params:
+      # Place all the parameters you wish to search over here (corresponding to the rest of the config)
+      # NOTE: Make sure that there are no spaces between the commas that separate the config params !
+      model.mc_run: 1,2,3,4,5
+
+  # Arguments to the process launcher
+  launcher:
+    num_gpus: -1  # Number of gpus to use. Each run works on a single GPU.
+    jobs_per_gpu: 1  # If each GPU has large memory, you can run multiple jobs on the same GPU for faster results (until OOM)
+
 pretrained: true
-checkpoint: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/MTLRS_SENSE/default/2024-02-23_10-50-54/checkpoints/default--val_loss=0.5367-epoch=10-last.ckpt
+checkpoint: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA/MTLRS_SENSE/default/2024-01-17_16-08-12/checkpoints/default--val_loss=0.0068-epoch=10-last.ckpt
 mode: test
 
 model:
   model_name: MTLRS
+  mc_run: 1
   joint_reconstruction_segmentation_module_cascades: 5
-  task_adaption_type: no_multi_task_learning
+  task_adaption_type: multi_task_learning
   cascade_nr_hidden_states: 1
   use_reconstruction_module: true
   reconstruction_module_recurrent_layer: IndRNN
@@ -26,8 +49,8 @@ model:
     - true
     - false
   reconstruction_module_conv_dropout:
-    - 0
-    - 0
+    - 0.5
+    - 0.5
     - 0
   reconstruction_module_conv_activations:
     - RELU
@@ -50,8 +73,8 @@ model:
     - true
     - false
   reconstruction_module_recurrent_dropout:
-    - 0
-    - 0
+    - 0.5
+    - 0.5
     - 0
   reconstruction_module_depth: 2
   reconstruction_module_time_steps: 8
@@ -62,16 +85,15 @@ model:
   reconstruction_module_keep_prediction: true
   reconstruction_module_accumulate_predictions: true
   segmentation_module: AttentionUNet
-  segmentation_module_3d: false
   segmentation_module_input_channels: 1
-  segmentation_module_output_channels: 5
+  segmentation_module_output_channels: 4
   segmentation_module_channels: 64
   segmentation_module_pooling_layers: 2
   segmentation_module_dropout: 0.0
   segmentation_loss:
     dice: 1.0
     cross_entropy: 1
-  dice_loss_include_background: false  # always set to true if the background is removed
+  dice_loss_include_background: true  # always set to true if the background is removed
   dice_loss_to_onehot_y: false
   dice_loss_sigmoid: false
   dice_loss_softmax: false
@@ -83,7 +105,7 @@ model:
   dice_loss_smooth_nr: 1e-5
   dice_loss_smooth_dr: 1e-5
   dice_loss_batch: true
-  dice_metric_include_background: false  # always set to true if the background is removed
+  dice_metric_include_background: true  # always set to true if the background is removed
   dice_metric_to_onehot_y: false
   dice_metric_sigmoid: false
   dice_metric_softmax: false
@@ -95,8 +117,8 @@ model:
   dice_metric_smooth_nr: 1e-5
   dice_metric_smooth_dr: 1e-5
   dice_metric_batch: true
-  segmentation_classes_thresholds: none
-  segmentation_activation: softmax
+  segmentation_classes_thresholds: [0.5, 0.5, 0.5, 0.5]
+  segmentation_activation: sigmoid
   reconstruction_loss:
     l1: 1.0
     ssim: 1.0
@@ -123,13 +145,9 @@ model:
   estimate_coil_sensitivity_maps_with_nn: false
   ssdu: false
   n2r: false
-  log_logliklihood_gradient_std: true
-  save_logliklihood_gradient: true
-  save_zero_filled: true
-  save_intermediate_predictions: true
 
   test_ds:
-    data_path:  /data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_MTR_005_test.json
+    data_path:  /data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_MTR_005_test.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
@@ -154,7 +172,7 @@ model:
     mask_args:
       type: gaussian2d  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
-        - 4  # 4, 6, 8, 10, 12, 16
+        - 8  # 4, 6, 8, 10, 12, 16
       shift_mask: false
       use_seed: true
     partial_fourier_percentage: 0.0
@@ -176,29 +194,16 @@ model:
       - -1
     coil_dim: 1
     use_seed: true
-    segmentations_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/
-    construct_knee_label: false
-    include_background_label: true
-    segmentation_classes: 5
+    segmentations_path: /data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/
+    segmentation_classes: 4
     complex_data: true
     batch_size: 1
     shuffle: false
     num_workers: 4
     pin_memory: false
     drop_last: false
+# Hydra arguments necessary for hyperparameter optimization
 
-  optim:
-    name: adam
-    lr: 1e-4
-    betas:
-      - 0.9
-      - 0.99
-    weight_decay: 0.0
-    sched:
-      name: InverseSquareRootAnnealing
-      min_lr: 0.0
-      last_epoch: -1
-      warmup_ratio: 0.1
 
 trainer:
   strategy: ddp_find_unused_parameters_true
@@ -214,9 +219,25 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /data/projects/utwente/recon/SKM-TEA_small/v1-release/predictions/MTLRS_SENSE/predictions_4x/2024-02-23_10-50-54
-  create_tensorboard_logger: false
-  create_wandb_logger: True
+
+
+  # Add a unique name for all hyper parameter arguments to allow continued training.
+  # NOTE: It is necessary to add all hyperparameter arguments to the name !
+  # This ensures successful restoration of model runs in case HP search crashes.
+  name: MTLRS--MC-${model.mc_run}
+
+  exp_dir: /data/projects/utwente/recon/SKM-TEA/v1-release/predictions/MTLRS_SENSE/predictions_8x/2024-01-17_16-08-12 # Can be set by the user.
+  checkpoint_callback_params:
+    save_top_k: 1  # Dont save too many .ckpt files during HP search
+    always_save_atommic: True # saves the checkpoints as atommic files for fast checking of results later
+
+
+  # We highly recommend use of any experiment tracking took to gather all the experiments in one location
+  create_wandb_logger: false
   wandb_logger_kwargs:
-    project: MTLRS_SKMTEA
-  files_to_copy: [ ]
+    project: "MTLRS_Multi_run"
+
+  # HP Search may crash due to various reasons, best to attempt continuation in order to
+  # resume from where the last failure case occured.
+  resume_if_exists: true
+  resume_ignore_no_checkpoint: true

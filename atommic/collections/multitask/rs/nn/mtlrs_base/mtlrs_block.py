@@ -188,7 +188,7 @@ class MTLRSBlock(torch.nn.Module):
             segmentation_module = torch.nn.Sequential(UNet3D(
                 in_chans=self.input_channels,
                 out_chans=self.segmentation_module_output_channels,
-                chans=self.segmentation_module_output_channels,
+                chans=self.segmentation_module_params["channels"],
                 num_pool_layers=self.segmentation_module_params["pooling_layers"],
                 drop_prob=self.segmentation_module_params["dropout"],
             ))

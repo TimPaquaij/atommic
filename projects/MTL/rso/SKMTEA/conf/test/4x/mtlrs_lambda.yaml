@@ -1,12 +1,11 @@
-pretrained: true
-checkpoint: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/MTLRS_SENSE/default/2024-02-23_10-50-54/checkpoints/default--val_loss=0.5367-epoch=10-last.ckpt
-mode: test
+pretrained: test
+checkpoint: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA/MTLRS_SENSE/default/2024-01-02_10-50-10/checkpoints/default--val_loss=0.0050-epoch=100-last.ckpt
+mode: true
 
 model:
   model_name: MTLRS
   joint_reconstruction_segmentation_module_cascades: 5
-  task_adaption_type: no_multi_task_learning
-  cascade_nr_hidden_states: 1
+  task_adaption_type: multi_task_learning
   use_reconstruction_module: true
   reconstruction_module_recurrent_layer: IndRNN
   reconstruction_module_conv_filters:
@@ -25,14 +24,6 @@ model:
     - true
     - true
     - false
-  reconstruction_module_conv_dropout:
-    - 0
-    - 0
-    - 0
-  reconstruction_module_conv_activations:
-    - RELU
-    - RELU
-    - None
   reconstruction_module_recurrent_filters:
     - 64
     - 64
@@ -49,10 +40,6 @@ model:
     - true
     - true
     - false
-  reconstruction_module_recurrent_dropout:
-    - 0
-    - 0
-    - 0
   reconstruction_module_depth: 2
   reconstruction_module_time_steps: 8
   reconstruction_module_conv_dim: 2
@@ -61,17 +48,22 @@ model:
   reconstruction_module_no_dc: true
   reconstruction_module_keep_prediction: true
   reconstruction_module_accumulate_predictions: true
-  segmentation_module: AttentionUNet
-  segmentation_module_3d: false
+  segmentation_module: LambdaUNet
   segmentation_module_input_channels: 1
-  segmentation_module_output_channels: 5
-  segmentation_module_channels: 64
+  segmentation_module_output_channels: 4
+  segmentation_module_channels: 32
   segmentation_module_pooling_layers: 2
   segmentation_module_dropout: 0.0
+  segmentation_module_query_depth: 16
+  segmentation_module_intra_depth: 1
+  segmentation_module_receptive_kernel: 1
+  segmentation_module_temporal_kernel: 1
+  segmentation_module_normalize: false
+  segmentation_module_norm_groups: 2
   segmentation_loss:
     dice: 1.0
-    cross_entropy: 1
-  dice_loss_include_background: false  # always set to true if the background is removed
+    cross_entropy: 1.0
+  dice_loss_include_background: true  # always set to true if the background is removed
   dice_loss_to_onehot_y: false
   dice_loss_sigmoid: false
   dice_loss_softmax: false
@@ -83,7 +75,7 @@ model:
   dice_loss_smooth_nr: 1e-5
   dice_loss_smooth_dr: 1e-5
   dice_loss_batch: true
-  dice_metric_include_background: false  # always set to true if the background is removed
+  dice_metric_include_background: true  # always set to true if the background is removed
   dice_metric_to_onehot_y: false
   dice_metric_sigmoid: false
   dice_metric_softmax: false
@@ -95,15 +87,14 @@ model:
   dice_metric_smooth_nr: 1e-5
   dice_metric_smooth_dr: 1e-5
   dice_metric_batch: true
-  segmentation_classes_thresholds: none
-  segmentation_activation: softmax
+  segmentation_classes_thresholds: [0.5, 0.5, 0.5, 0.5]
+  segmentation_activation: sigmoid
   reconstruction_loss:
     l1: 1.0
-    ssim: 1.0
+    ssim: 1
   kspace_reconstruction_loss: false
-  total_reconstruction_loss_weight: 0.9
-  total_segmentation_loss_weight: 0.1
-  complex_valued_type: stacked  # stacked, complex_abs, complex_sqrt_abs
+  total_reconstruction_loss_weight: 0.5
+  total_segmentation_loss_weight: 0.5
   fft_centered: true
   fft_normalization: ortho
   spatial_dims:
@@ -116,20 +107,16 @@ model:
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
   complex_data: true
-  consecutive_slices: 1
+  consecutive_slices: 7
   dimensionality: 2
   coil_combination_method: SENSE
-  coil_dim: 1
+  coil_dim: 2
   estimate_coil_sensitivity_maps_with_nn: false
   ssdu: false
   n2r: false
-  log_logliklihood_gradient_std: true
-  save_logliklihood_gradient: true
-  save_zero_filled: true
-  save_intermediate_predictions: true
 
   test_ds:
-    data_path:  /data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_MTR_005_test.json
+    data_path:  /data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_MTR_080_test.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
@@ -143,7 +130,7 @@ model:
     use_dataset_cache: false
     dataset_cache_file: None
     num_cols: None
-    consecutive_slices: 1
+    consecutive_slices: 7
     data_saved_per_slice: false
     complex_target: true
     log_images_rate: 1e-2
@@ -174,12 +161,10 @@ model:
     spatial_dims:
       - -2
       - -1
-    coil_dim: 1
+    coil_dim: 2
     use_seed: true
     segmentations_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/
-    construct_knee_label: false
-    include_background_label: true
-    segmentation_classes: 5
+    segmentation_classes: 4
     complex_data: true
     batch_size: 1
     shuffle: false
@@ -192,7 +177,7 @@ model:
     lr: 1e-4
     betas:
       - 0.9
-      - 0.99
+      - 0.98
     weight_decay: 0.0
     sched:
       name: InverseSquareRootAnnealing
@@ -205,7 +190,7 @@ trainer:
   accelerator: gpu
   devices: 1
   num_nodes: 1
-  max_epochs: 1
+  max_epochs: 20
   precision: 16-mixed
   enable_checkpointing: false
   logger: false
@@ -214,9 +199,9 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /data/projects/utwente/recon/SKM-TEA_small/v1-release/predictions/MTLRS_SENSE/predictions_4x/2024-02-23_10-50-54
+  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/MTLRS_SENSE/predictions_4x/2024-01-02_10-50-10/checkpoints/default--val_loss=0.0050-epoch=100-last
   create_tensorboard_logger: false
-  create_wandb_logger: True
+  create_wandb_logger: true
   wandb_logger_kwargs:
-    project: MTLRS_SKMTEA
+    project: MTLRS_small
   files_to_copy: [ ]

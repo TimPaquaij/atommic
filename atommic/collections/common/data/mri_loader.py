@@ -228,6 +228,7 @@ class MRIDataset(Dataset):
         self.indices_to_log = np.random.choice(
             len(self.examples), int(log_images_rate * len(self.examples)), replace=False  # type: ignore
         )
+        print(self.indices_to_log)
 
     def _retrieve_metadata(self, fname: Union[str, Path]) -> Tuple[Dict, int]:
         """Retrieve metadata from a given file.

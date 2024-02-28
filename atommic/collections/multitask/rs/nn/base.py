@@ -765,18 +765,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         fname = attrs["fname"]
         slice_idx = attrs["slice_idx"]
 
-        # Ensure loss inputs are both viewed in the same way.
-        target_reconstruction = self.__abs_output__(target_reconstruction)
-        target_reconstruction = torch.abs(target_reconstruction / torch.max(torch.abs(target_reconstruction)))
-        predictions_reconstruction = self.__abs_output__(predictions_reconstruction)
-        predictions_reconstruction = torch.abs(
-            predictions_reconstruction / torch.max(torch.abs(predictions_reconstruction)))
 
-
-        if torch.max(target_reconstruction) != 1:
-            target_reconstruction = torch.clip(target_reconstruction, 0, 1)
-        if torch.max(predictions_reconstruction) != 1:
-            predictions_reconstruction = torch.clip(predictions_reconstruction, 0, 1)
 
         # Iterate over the batch and log the target and predictions.
         for _batch_idx_ in range(target_segmentation.shape[0]):
@@ -785,6 +774,17 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             output_predictions_segmentation = predictions_segmentation[_batch_idx_]
             output_target_segmentation = target_segmentation[_batch_idx_]
 
+            # Ensure loss inputs are both viewed in the same way.
+            output_target_reconstruction = self.__abs_output__(output_target_reconstruction)
+            output_target_reconstruction = torch.abs(output_target_reconstruction / torch.max(torch.abs(output_target_reconstruction)))
+            output_predictions_reconstruction = self.__abs_output__(output_predictions_reconstruction)
+            output_predictions_reconstruction = torch.abs(
+                output_predictions_reconstruction / torch.max(torch.abs(output_predictions_reconstruction)))
+
+            if torch.max(output_target_reconstruction) != 1:
+                output_target_reconstruction = torch.clip(output_target_reconstruction, 0, 1)
+            if torch.max(output_predictions_reconstruction) != 1:
+                output_predictions_reconstruction = torch.clip(output_predictions_reconstruction, 0, 1)
             if self.unnormalize_log_outputs:
                 # Unnormalize target and predictions with pre normalization values. This is only for logging purposes.
                 # For the loss computation, the self.unnormalize_loss_inputs flag is used.
@@ -1686,10 +1686,15 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
            .numpy()
 
        )
-        target_segmentation = torch.where(torch.abs(target_segmentation.detach().cpu()) > 0.5, 1,
-                                                 0).float()
-        predictions_segmentation = torch.where(torch.abs(predictions_segmentation.detach().cpu()) > 0.5,
-                                                      1, 0).float()
+        if not is_none(self.segmentation_classes_thresholds):
+            target_segmentation = torch.where(torch.abs(target_segmentation.detach().cpu()) > 0.5, 1,
+                                                     0).float()
+            predictions_segmentation = torch.where(torch.abs(predictions_segmentation.detach().cpu()) > 0.5,
+                                                          1, 0).float()
+        else:
+
+            target_segmentation = torch.abs(target_segmentation.detach().cpu()).float()
+            predictions_segmentation = torch.abs(predictions_segmentation.detach().cpu()).float()
 
         predictions = (
             (predictions_segmentation, predictions_reconstruction)

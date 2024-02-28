@@ -227,10 +227,9 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                         if f != 0
                     ]
             else:
-                if self.segmentation_activation == "sigmoid":
-                    pred_segmentation = torch.sigmoid(pred_segmentation)
-                if self.segmentation_activation == "softmax":
-                    pred_segmentation = torch.softmax(pred_segmentation, dim=1)
+                for i in range(pred_segmentation.shape[0]):
+                    if self.segmentation_activation == "softmax":
+                        pred_segmentation[i] = torch.softmax(pred_segmentation[i], dim=1)
                 if self.task_adaption_type == "multi_task_learning" and i >= self.combine_rs:
                     hidden_states = [
                         torch.cat(

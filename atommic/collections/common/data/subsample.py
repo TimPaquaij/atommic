@@ -914,5 +914,5 @@ def create_masker(
     if mask_type_str == "gaussian2d":
         return Gaussian2DMaskFunc(center_fractions, accelerations)
     if mask_type_str == "poisson2d":
-        return Poisson2DMaskFunc(center_fractions, accelerations,seed)
+        return Poisson2DMaskFunc(center_fractions, accelerations)
     raise NotImplementedError(f"{mask_type_str} not supported")

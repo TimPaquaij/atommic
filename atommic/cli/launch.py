@@ -10,6 +10,7 @@ from omegaconf import DictConfig, OmegaConf
 from atommic.collections.multitask.rs.nn.idslr import IDSLR
 from atommic.collections.multitask.rs.nn.idslr_unet import IDSLRUNet
 from atommic.collections.multitask.rs.nn.mtlrs import MTLRS
+from atommic.collections.multitask.rso.nn.mtlrso import MTLRSO
 from atommic.collections.multitask.rs.nn.recseg_unet import RecSegUNet
 from atommic.collections.multitask.rs.nn.segnet import SegNet
 from atommic.collections.multitask.rs.nn.seranet import SERANet
@@ -111,6 +112,8 @@ def main(cfg: DictConfig):  # noqa: MC0001
         model = MoDL(cfg.model, trainer=trainer)
     elif model_name == "MTLRS":
         model = MTLRS(cfg.model, trainer=trainer)
+    elif model_name == "MTLRSO":
+        model = MTLRSO(cfg.model, trainer=trainer)
     elif model_name == "MULTIDOMAINNET":
         model = MultiDomainNet(cfg.model, trainer=trainer)
     elif model_name == "PROXIMALGRADIENT":
