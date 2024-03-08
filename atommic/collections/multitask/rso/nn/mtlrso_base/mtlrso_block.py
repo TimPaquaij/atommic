@@ -201,7 +201,9 @@ class MTLRSOBlock(torch.nn.Module):
         self.segmentation_3d = self.segmentation_module_params["segmentation_3d"]
         self.normalize_segmentation_output = normalize_segmentation_output
         self.object_detection_module_params = object_detection_module_params
-        self.object_detection_module = YOLOv5(num_classes=4)
+        self.object_detection_module = YOLOv5(num_classes=object_detection_module_params['num_classes'])
+        #self.checkpoint = torch.load(object_detection_module_params['checkpoint'])
+        #self.object_detection_module.load_state_dict(self.checkpoint)
 
     def forward(  # noqa: MC0001
         self,
@@ -356,10 +358,10 @@ class MTLRSOBlock(torch.nn.Module):
             _pred_reconstruction = _pred_reconstruction.unsqueeze(1)
         pred_segmentation = self.segmentation_module(torch.abs(_pred_reconstruction))
 
-        #_pred_reconstruction= torch.concatenate((_pred_reconstruction,_pred_reconstruction,_pred_reconstruction),dim=1)
-        print(_pred_reconstruction.shape)
 
-        pred_obj_detection = self.object_detection_module(torch.abs(_pred_reconstruction),)
+
+
+        pred_obj_detection,dict_obj_detection = self.object_detection_module(torch.abs(_pred_reconstruction))
         if self.normalize_segmentation_output:
             pred_segmentation = (pred_segmentation - pred_segmentation.min()) / (
                 pred_segmentation.max() - pred_segmentation.min()
@@ -378,4 +380,4 @@ class MTLRSOBlock(torch.nn.Module):
             pred_segmentation = pred_segmentation.permute(0,2,1,3,4)
             pred_segmentation = pred_segmentation.view([y.shape[0], y.shape[1], *pred_segmentation.shape[2:]])
 
-        return pred_reconstruction, pred_segmentation, hx, log_like  # type: ignore
+        return pred_reconstruction, pred_segmentation,pred_obj_detection,dict_obj_detection, hx,  log_like  # type: ignore

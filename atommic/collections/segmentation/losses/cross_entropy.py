@@ -4,8 +4,9 @@ __author__ = "Dimitris Karkalousos"
 import torch
 from torch import nn
 from typing import Optional
+from atommic.core.classes.loss import Loss
 
-class CrossEntropyLoss(nn.Module):
+class CrossEntropyLoss(Loss):
     """Wrapper around PyTorch's CrossEntropyLoss to support 2D and 3D inputs."""
 
     def __init__(
@@ -80,7 +81,7 @@ class CrossEntropyLoss(nn.Module):
         loss = cross_entropy(noisy_pred, tiled_target).to(target).view(self.mc_samples, -1, *_input.shape[-2:]).mean(0)
         return loss.mean()
 
-class BinaryCrossEntropy_with_logits_Loss(nn.Module):
+class BinaryCrossEntropy_with_logits_Loss(Loss):
     def __init__(self, num_samples: int = 50,weight: Optional[torch.Tensor] = None, size_average=None, reduce=None, reduction: str = 'mean',
                      pos_weight: Optional[torch.Tensor] = None) -> None:
         """Inits :class:`BinaryCrossEntropy_with_logits_Loss`.

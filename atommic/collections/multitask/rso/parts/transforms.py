@@ -454,6 +454,7 @@ class RSOMRIDataTransforms:
         mask: np.ndarray,
         initial_prediction_reconstruction: np.ndarray,
         segmentation_labels: np.ndarray,
+        bbox_classes: np.ndarray,
         attrs: Dict,
         fname: str,
         slice_idx: int,
@@ -635,6 +636,31 @@ class RSOMRIDataTransforms:
                 target_pre_normalization_vars,
             )
         )
+
+        target_obj_detection=[]
+        for bbox_class in bbox_classes:
+            if len(bbox_class["boxes"]) != 0:
+
+                slice_id = bbox_class['slice_id']
+                boxes = bbox_class['boxes']
+                labels = bbox_class['labels']
+                tissues = bbox_class['tissues']
+
+                # Iterate through the unpacked values
+
+                slice_id = torch.from_numpy(slice_id)
+                boxes = self.convert_to_xyxy(torch.tensor(boxes,dtype=torch.float16))
+
+                labels= torch.tensor(labels,dtype =torch.long)
+                tissues = torch.tensor(tissues, dtype = torch.long)
+                target_obj_detection.append(dict(slice_id = slice_id,boxes=boxes, labels=labels,tissues=tissues))
+            else:
+                target_obj_detection.append(dict(slice_id=torch.from_numpy(bbox_class['slice_id']), boxes=torch.empty((0,4)), labels=torch.empty((0,),dtype=torch.long), tissues=torch.empty((0,),dtype=torch.long)))
+
+
+
+
+
         attrs["fname"] = fname
         attrs["slice_idx"] = slice_idx
 
@@ -646,6 +672,7 @@ class RSOMRIDataTransforms:
             initial_prediction_reconstruction,
             target_reconstruction,
             segmentation_labels,
+            target_obj_detection,
             fname,
             slice_idx,
             acc,
@@ -1315,3 +1342,11 @@ class RSOMRIDataTransforms:
                 normalization_vars["target_var"] = target_vars["var"]
 
         return normalization_vars
+
+    @staticmethod
+    def convert_to_xyxy(box):  # box format: (xmin, ymin, w, h)
+
+        x1, y1, w, h = box.T
+        new_box = torch.stack((x1, y1, x1 + w, y1 + h), dim=1)
+        # new_box = torch.stack((x1 + w / 2, y1 + h / 2, w, h), dim=1)
+        return new_box  # new_box format: (xmin, ymin, xmax, ymax)

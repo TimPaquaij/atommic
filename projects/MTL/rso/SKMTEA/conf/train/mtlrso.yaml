@@ -70,6 +70,10 @@ model:
   segmentation_loss:
     cross_entropy: 1
     dice: 1
+  obj_detection_module_checkpoint: /scratch/tmpaquaij/Atommic/ATOMMIC_private/projects/MTL/rso/SKMTEA/yolov5s_official_2cf45318(1).pth
+  obj_detection_module_num_classes: 12
+  obj_detection_loss:
+    objdetection: 1
   dice_loss_include_background: true  # always set to true if the background is removed
   dice_loss_to_onehot_y: false
   dice_loss_sigmoid: false

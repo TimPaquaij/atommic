@@ -11,6 +11,7 @@ def size_matched_idx(wh1, wh2, thresh):
     #inter = wh.prod(2)
     #iou = inter / (area1[:, None] + area2 - inter)
     #return torch.where(iou > thresh)
+
     
     ratios = wh1[:, None] / wh2[None]
     max_ratios = torch.max(ratios, 1. / ratios).max(2)[0]
@@ -33,8 +34,8 @@ def assign_targets_to_proposals(xy, size, overlap=0.5):
 
 # temporarily not merge box_giou and box_ciou
 def box_giou(box1, box2): # box format: (cx, cy, w, h)
-    cx1, cy1, w1, h1 = box1.T
-    cx2, cy2, w2, h2 = box2.T
+    cx1, cy1, w1, h1 = box1.mT
+    cx2, cy2, w2, h2 = box2.mT
     
     b1_x1, b1_x2 = cx1 - w1 / 2, cx1 + w1 / 2
     b1_y1, b1_y2 = cy1 - h1 / 2, cy1 + h1 / 2

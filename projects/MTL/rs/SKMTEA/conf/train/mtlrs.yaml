@@ -121,7 +121,7 @@ model:
   magnitude_input: false
   log_multiple_modalities: false  # log all modalities in the same image, e.g. T1, T2, T1ce, FLAIR will be concatenated
   normalization_type: minmax
-  normalize_segmentation_output: true
+  normalize_segmentation_output: false
   complex_valued_type: stacked
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false

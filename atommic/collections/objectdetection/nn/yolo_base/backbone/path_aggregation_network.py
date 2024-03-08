@@ -38,7 +38,7 @@ class PathAggregationNetwork(nn.Module):
             last_inner = self.inner_blocks[i](torch.cat((inner_top_down, x[i]), dim=1)) # official
             #last_inner = self.inner_blocks[i](torch.cat((x[i], inner_top_down), dim=1)) # old
             results.insert(0, last_inner if i == 0 else self.layer_blocks[i - 1](last_inner))
-            
+
         for i in range(len(x) - 1):
             outer_bottom_up = self.downsample_blocks[i](results[i])
             layer_result = results[i + 1]

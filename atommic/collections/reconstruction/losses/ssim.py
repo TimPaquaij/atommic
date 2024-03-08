@@ -5,7 +5,6 @@ __author__ = "Dimitris Karkalousos"
 
 import torch
 import torch.nn.functional as F
-
 from atommic.core.classes.loss import Loss
 
 

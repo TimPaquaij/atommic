@@ -4,8 +4,8 @@ mode: train
 
 model:
   model_name:  MTLRS
-  joint_reconstruction_segmentation_module_cascades: 5
-  task_adaption_type: multi_task_learning
+  joint_reconstruction_segmentation_module_cascades: 3
+  task_adaption_type: no_multi_task_learning
   use_reconstruction_module: true
   reconstruction_module_recurrent_layer: IndRNN
   reconstruction_module_conv_filters:
@@ -63,7 +63,7 @@ model:
   segmentation_module: UNet3D
   segmentation_module_3d: true
   segmentation_module_input_channels: 1
-  segmentation_module_output_channels: 5
+  segmentation_module_output_channels: 4
   segmentation_module_channels: 64
   segmentation_module_pooling_layers: 5
   segmentation_module_dropout: 0.2
@@ -71,7 +71,7 @@ model:
   segmentation_loss:
     dice: 1
     cross_entropy: 1
-  dice_loss_include_background: false  # always set to true if the background is removed
+  dice_loss_include_background: true  # always set to true if the background is removed
   dice_loss_to_onehot_y: false
   dice_loss_sigmoid: false
   dice_loss_softmax: false
@@ -83,7 +83,7 @@ model:
   dice_loss_smooth_nr: 1e-5
   dice_loss_smooth_dr: 1e-5
   dice_loss_batch: true
-  dice_metric_include_background: false  # always set to true if the background is removed
+  dice_metric_include_background: true  # always set to true if the background is removed
   dice_metric_to_onehot_y: false
   dice_metric_sigmoid: false
   dice_metric_softmax: false
@@ -105,14 +105,14 @@ model:
   cross_entropy_metric_reduction: none
   cross_entropy_metric_label_smoothing: 0.0
   cross_entropy_metric_classes_weight: [0,1, 1, 1, 1]
-  segmentation_classes_thresholds: none
-  segmentation_activation: softmax
+  segmentation_classes_thresholds: [0.5,0.5,0.5,0.5]
+  segmentation_activation: sigmoid
   reconstruction_loss:
     l1: 1
     ssim: 1
   kspace_reconstruction_loss: false
-  total_reconstruction_loss_weight: 0.1
-  total_segmentation_loss_weight: 0.9
+  total_reconstruction_loss_weight: 0.9
+  total_segmentation_loss_weight: 0.1
   fft_centered: true
   fft_normalization: ortho
   spatial_dims:
@@ -187,8 +187,8 @@ model:
     use_seed: false
     segmentations_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
     construct_knee_label: false
-    include_background_label: true
-    segmentation_classes: 5
+    include_background_label: false
+    segmentation_classes: 4
     complex_data: true
     batch_size: 1
     shuffle: true
@@ -245,8 +245,8 @@ model:
     use_seed: true
     segmentations_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
     construct_knee_label: false
-    include_background_label: true
-    segmentation_classes: 5
+    include_background_label: false
+    segmentation_classes: 4
     complex_data: true
     batch_size: 1
     shuffle: false

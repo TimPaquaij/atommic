@@ -95,7 +95,8 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
             "segmentation_3d" : cfg_dict.get("segmentation_module_3d", False),
         }
         object_detection_module_params = {
-            "object_detection_module": cfg_dict.get("object_detection_modue","yolov5s")
+            "num_classes": cfg_dict.get("obj_detection_module_num_classes",12),
+            "checkpoint": cfg_dict.get("obj_detection_module_checkpoint",None)
         }
 
         self.coil_dim = cfg_dict.get("coil_dim", 1)
@@ -164,8 +165,10 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
         pred_reconstructions = []
         pred_log_likelihoods = []
         pred_segmentations = []
+        pred_obj_detections = []
+        dict_obj_detections = []
         for i,cascade in enumerate(self.rs_module):
-            pred_reconstruction, pred_segmentation, hx, log_like = cascade(
+            pred_reconstruction, pred_segmentation, pred_obj_detection, dict_obj_detection, hx, log_like = cascade(
                 y=y,
                 sensitivity_maps=sensitivity_maps,
                 mask=mask,
@@ -269,9 +272,11 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
                     pred_segmentation = pred_segmentation.reshape(batch_size * slices,
                                                                   *pred_segmentation.shape[2:])
             pred_segmentations.append(pred_segmentation)
+            pred_obj_detections.append(pred_obj_detection)
+            dict_obj_detections.append(dict_obj_detection)
 
 
-        return pred_reconstructions, pred_segmentations, pred_log_likelihoods
+        return pred_reconstructions, pred_segmentations, pred_log_likelihoods, pred_obj_detections,dict_obj_detections
 
 
 
@@ -442,6 +447,38 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
         if isinstance(prediction,list):
             rs_cascades_weights = torch.logspace(-1, 0, steps=len(prediction)).to(
                 target.device)
+            rs_cascades_loss = []
+            for pred in prediction:
+                loss = loss_func(target, pred)
+                if isinstance(loss, tuple):
+                    loss = loss[1][0]
+                rs_cascades_loss.append(loss)
+            loss = sum(x * w for x, w in zip(rs_cascades_loss, rs_cascades_weights)) / sum(rs_cascades_weights)
+        return loss
+
+
+    def process_obj_detection_loss(self, target: Dict, prediction: torch.Tensor, attrs: Dict,loss_func:torch.nn.Module) -> Dict:
+        """Processes the segmentation loss.
+
+        Parameters
+        ----------
+        target : torch.Tensor
+            Target data of shape [batch_size, nr_classes, n_x, n_y].
+        prediction : torch.Tensor
+            Prediction of shape [batch_size, nr_classes, n_x, n_y].
+        attrs : Dict
+            Attributes of the data with pre normalization values.
+
+        Returns
+        -------
+        Dict
+            Dictionary containing the (multiple) loss values. For example, if the cross entropy loss and the dice loss
+            are used, the dictionary will contain the keys ``cross_entropy_loss``, ``dice_loss``, and
+            (combined) ``segmentation_loss``.
+        """
+        if isinstance(prediction,list):
+            rs_cascades_weights = torch.logspace(-1, 0, steps=len(prediction)).to(
+                target[0]['labels'].device)
             rs_cascades_loss = []
             for pred in prediction:
                 loss = loss_func(target, pred)

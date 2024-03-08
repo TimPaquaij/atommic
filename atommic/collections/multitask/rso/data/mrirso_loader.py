@@ -609,16 +609,43 @@ class SKMTEARSMRIDatasetlateral(RSMRIDataset):
 
             # get a slice
             segmentation_labels = self.get_consecutive_slices({"seg": segmentation_labels}, "seg", dataslice)
+            # Calculate half of the consecutive slices to determine the middle position
+            half_slices = self.consecutive_slices // 2
 
+            # Determine the start and end slices based on the middle position
+            start_slice = dataslice - half_slices
+            end_slice = dataslice + half_slices + 1
+
+            dataslices = range(start_slice,end_slice,1)
+            bbox_classes = []
             if not is_none(self.annotations_root):
                 with open(self.annotations_root, "r", encoding="utf-8") as f:
                     annotation_set = json.load(f)
                 for image in annotation_set["images"]:
-                    if image['file_name'] == fname:
-                        annotations = [annotation for annotation in annotation_set['annotations'] if annotation['image_id'] == image['id'] and annotation['confidence']> 2]
-                        bbox_class = [(annotation['bbox'], annotation['category_id'],annotation['tissue_id']) for annotation in annotations
-                                      if slice in range(int(annotation['bbox'][0]),
-                                                        int(annotation['bbox'][0] + annotation['bbox'][3]), 1)]
+
+                    if image['file_name'] == fname.name.split("/")[-1]:
+
+                        annotations = [annotation for annotation in annotation_set['annotations'] if annotation['image_id'] == image['id']]
+
+
+                        for dataslice in dataslices:
+                            bboxes = []
+                            categories = []
+                            tissues = []
+
+                            for annotation in annotations:
+                                if dataslice in range(int(annotation['bbox'][0]),int(annotation['bbox'][0] + annotation['bbox'][3]), 1):
+
+                                    bboxes.append([annotation['bbox'][1]/256,annotation['bbox'][2]/208,annotation['bbox'][4]/256,annotation['bbox'][5]/208])
+                                    categories.append(annotation['category_id'])
+                                    tissues.append(annotation['tissue_id'])
+                            bbox_classes.append(dict(slice_id=np.array([dataslice]), boxes=np.array(bboxes),labels=np.array(categories),tissues=np.array(tissues)))
+
+
+
+
+
+
 
             categories = annotation_set['categories']
             tissues = annotation_set['tissues']
@@ -649,8 +676,9 @@ class SKMTEARSMRIDatasetlateral(RSMRIDataset):
             attrs.update(metadata)
 
 
-
         attrs["log_image"] = bool(slice_in_data in self.indices_to_log)
+        attrs['categories'] = categories
+        attrs["tissues"] = tissues
 
         return (
             (
@@ -660,6 +688,7 @@ class SKMTEARSMRIDatasetlateral(RSMRIDataset):
                 mask,
                 initial_prediction,
                 segmentation_labels,
+                bbox_classes,
                 attrs,
                 fname.name,
                 dataslice,
@@ -672,6 +701,7 @@ class SKMTEARSMRIDatasetlateral(RSMRIDataset):
                 mask,
                 initial_prediction,
                 segmentation_labels,
+                bbox_classes,
                 attrs,
                 fname.name,
                 dataslice,
