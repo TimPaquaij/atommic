@@ -177,6 +177,11 @@ def main(cfg: DictConfig):  # noqa: MC0001
 
     if cfg.get("mode", None) == "train":
         logging.info("Validating")
+        n_params = 0
+
+        for param in model.parameters():
+            n_params += param.numel()
+        print(n_params)
         trainer.validate(model)
         logging.info("Training")
         trainer.fit(model)

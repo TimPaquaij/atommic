@@ -1,5 +1,5 @@
 import math
-
+import torchvision
 import torch
 
     
@@ -93,7 +93,7 @@ def box_iou(box1, box2): # box format: (x1, y1, x2, y2)
     
     
 def nms(boxes, scores, threshold):
-    return torch.ops.torchvision.nms(boxes, scores, threshold)
+    return torchvision.ops.nms(boxes, scores, threshold)
 
 
 def batched_nms(boxes, scores, labels, threshold, max_size): # boxes format: (x1, y1, x2, y2)
@@ -118,7 +118,7 @@ def cxcywh2xyxy(box): # box format: (cx, cy, w, h)
     return new_box
 
 
-def xyxy2cxcywh(box): # box format: (x1, y1, x2, y2)
+def xyxy2cxcywh(box): # box format: (x1, y1, x2, y2)fnms
     x1, y1, x2, y2 = box.T
     new_box = torch.stack(((x1 + x2) / 2, (y1 + y2) / 2, x2 - x1, y2 - y1), dim=1)
     return new_box

@@ -71,7 +71,10 @@ model:
     cross_entropy: 1
     dice: 1
   obj_detection_module_checkpoint: /scratch/tmpaquaij/Atommic/ATOMMIC_private/projects/MTL/rso/SKMTEA/yolov5s_official_2cf45318(1).pth
-  obj_detection_module_num_classes: 12
+  obj_detection_module_num_classes: 16
+  obj_detection_module_anchors: [[[4.375, 6.5], [ 7., 15.], [14.4375, 11.5]], [[13.125, 30.5], [27.125, 22.5], [25.8125, 59.5]], [[50.75, 45.], [68.25, 99.], [163.1875, 163.]]]
+  obj_detection_module_img_size: [208,256]
+  obj_detection_module_strides: [8,16,32]
   obj_detection_loss:
     objdetection: 1
   dice_loss_include_background: true  # always set to true if the background is removed
@@ -114,8 +117,9 @@ model:
     l1: 1
     ssim: 1
   kspace_reconstruction_loss: false
-  total_reconstruction_loss_weight: 2
-  total_segmentation_loss_weight: 1
+  total_reconstruction_loss_weight: 0.1
+  total_segmentation_loss_weight: 0.8
+  total_obj_detection_loss_weight: 0.1
   fft_centered: true
   fft_normalization: ortho
   spatial_dims:
@@ -124,15 +128,15 @@ model:
   magnitude_input: false
   log_multiple_modalities: false  # log all modalities in the same image, e.g. T1, T2, T1ce, FLAIR will be concatenated
   normalization_type: minmax
-  normalize_segmentation_output: true
+  normalize_segmentation_output: false
   complex_valued_type: stacked
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
   complex_data: true
-  consecutive_slices: 1
+  consecutive_slices: 5
   dimensionality: 2
   coil_combination_method: SENSE
-  coil_dim: 1
+  coil_dim: 2
   estimate_coil_sensitivity_maps_with_nn: false
   ssdu: false
   n2r: false
@@ -151,12 +155,12 @@ model:
     - custom_masking
     - SKM-TEA-echo1
     - lateral
-    sample_rate: 0.005
+    sample_rate: 1
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
     num_cols: None
-    consecutive_slices: 1
+    consecutive_slices: 5
     data_saved_per_slice: false
     complex_target: true
     apply_prewhitening: false
@@ -186,7 +190,7 @@ model:
     spatial_dims:
       - -2
       - -1
-    coil_dim: 1
+    coil_dim: 2
     use_seed: false
     segmentations_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
     construct_knee_label: false
@@ -210,15 +214,15 @@ model:
     - custom_masking
     - SKM-TEA-echo1
     - lateral
-    sample_rate: 0.005
+    sample_rate: 0.1
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
     num_cols: None
-    consecutive_slices: 1
+    consecutive_slices: 5
     data_saved_per_slice: false
     complex_target: true
-    log_images_rate: 0.005
+    log_images_rate: 1
     apply_prewhitening: false
     apply_gcc: false
     estimate_coil_sensitivity_maps: false
@@ -247,7 +251,7 @@ model:
     spatial_dims:
       - -2
       - -1
-    coil_dim: 1
+    coil_dim: 2
     use_seed: true
     segmentations_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
     construct_knee_label: false
@@ -288,11 +292,11 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/MTLRS_SENSE
+  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/MTLRSO_SENSE
   ema:
     enable: false
   create_tensorboard_logger: false
-  create_wandb_logger: false
+  create_wandb_logger: true
   wandb_logger_kwargs:
-    project: MTLRS_SKMTEA
+    project: MTLRSO_SKMTEA
   files_to_copy: [ ]

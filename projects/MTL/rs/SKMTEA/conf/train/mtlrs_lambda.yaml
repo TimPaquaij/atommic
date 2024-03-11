@@ -6,7 +6,7 @@ model:
   model_name: MTLRS
   joint_reconstruction_segmentation_module_cascades: 5
   segmentation_module_3d: true
-  task_adaption_type: No_MTL
+  task_adaption_type: multi_task_learning
   use_reconstruction_module: true
   reconstruction_module_recurrent_layer: IndRNN
   reconstruction_module_conv_filters:

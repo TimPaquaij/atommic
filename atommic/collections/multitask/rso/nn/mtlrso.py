@@ -95,8 +95,11 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
             "segmentation_3d" : cfg_dict.get("segmentation_module_3d", False),
         }
         object_detection_module_params = {
-            "num_classes": cfg_dict.get("obj_detection_module_num_classes",12),
-            "checkpoint": cfg_dict.get("obj_detection_module_checkpoint",None)
+            "num_classes": cfg_dict.get("obj_detection_module_num_classes",None),
+            "checkpoint": cfg_dict.get("obj_detection_module_checkpoint",None),
+            "anchors": cfg_dict.get("obj_detection_module_anchors",None),
+            "strides": cfg_dict.get("obj_detection_module_strides",None),
+            "img_size": cfg_dict.get("obj_detection_module_img_size", None),
         }
 
         self.coil_dim = cfg_dict.get("coil_dim", 1)
@@ -135,6 +138,7 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
         mask: torch.Tensor,
         init_reconstruction_pred: torch.Tensor,
         target_reconstruction: torch.Tensor,
+        target_obj_detection:torch.Tensor,
         hx: torch.Tensor = None,
         sigma: float = 1.0,
     ) -> Tuple[Union[List, torch.Tensor], torch.Tensor]:
@@ -168,12 +172,13 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
         pred_obj_detections = []
         dict_obj_detections = []
         for i,cascade in enumerate(self.rs_module):
-            pred_reconstruction, pred_segmentation, pred_obj_detection, dict_obj_detection, hx, log_like = cascade(
+            pred_reconstruction, pred_segmentation, pred_obj_detection, dict_obj_detection,tar_obj_detection, hx, log_like = cascade(
                 y=y,
                 sensitivity_maps=sensitivity_maps,
                 mask=mask,
                 init_reconstruction_pred=init_reconstruction_pred,
                 target_reconstruction=target_reconstruction,
+                target_obj_detection=target_obj_detection,
                 hx=hx,
                 sigma=sigma,
             )
@@ -276,7 +281,8 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
             dict_obj_detections.append(dict_obj_detection)
 
 
-        return pred_reconstructions, pred_segmentations, pred_log_likelihoods, pred_obj_detections,dict_obj_detections
+
+        return pred_reconstructions, pred_segmentations, pred_log_likelihoods, pred_obj_detections,dict_obj_detections,tar_obj_detection
 
 
 

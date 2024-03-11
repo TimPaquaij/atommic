@@ -42,6 +42,7 @@ from atommic.collections.reconstruction.metrics import mse, nmse, psnr, ssim, ha
 from atommic.collections.segmentation.losses.cross_entropy import CrossEntropyLoss, BinaryCrossEntropy_with_logits_Loss
 from atommic.collections.segmentation.losses.dice import Dice, one_hot
 from atommic.collections.objectdetection.losses.detectionloss import DetectionLoss
+from atommic.collections.objectdetection.parts.transform import Transformer
 
 __all__ = ["BaseMRIReconstructionSegmentationObjectDetectionModel"]
 
@@ -169,6 +170,7 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
         # Set threshold for segmentation classes. If None, no thresholding is applied.
         self.segmentation_classes_thresholds = cfg_dict.get("segmentation_classes_thresholds", None)
         self.segmentation_activation = cfg_dict.get("segmentation_activation", None)
+
         # Initialize loss related parameters.
         self.segmentation_losses = {}
         segmentation_loss = cfg_dict.get("segmentation_loss")
@@ -248,11 +250,9 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
         for name in VALID_OBJ_DETECTION_LOSSES:
             if name in obj_detection_losses_:
                 if name == "objdetection":
-                    self.obj_detection_losses[name] = DetectionLoss()
+                    self.obj_detection_losses[name] = DetectionLoss(anchors= cfg_dict.get("obj_detection_module_anchors"),strides=cfg_dict.get("obj_detection_module_strides"))
         self.obj_detection_losses = {f"loss_{i + 1}": v for i, v in enumerate(self.obj_detection_losses.values())}
-        print(self.obj_detection_losses)
         self.total_obj_detection_losses = len(self.obj_detection_losses)
-
 
         self.total_segmentation_loss_weight = cfg_dict.get("total_segmentation_loss_weight", 1.0)
         self.total_reconstruction_loss_weight = cfg_dict.get("total_reconstruction_loss_weight", 1.0)
@@ -744,10 +744,12 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
     def __compute_and_log_metrics_and_outputs__(  # noqa: MC0001
         self,
         predictions_reconstruction: Union[list, torch.Tensor],
-        target_reconstruction: torch.Tensor,
         log_like: Union[list, torch.Tensor],
+        target_reconstruction: torch.Tensor,
         predictions_segmentation: Union[list, torch.Tensor],
         target_segmentation: torch.Tensor,
+        predictions_obj_detection: Union[list, torch.Tensor],
+        target_obj_detection: Union[list, torch.Tensor],
         attrs: Dict,
     ):
         """Computes the metrics and logs the outputs.
@@ -803,6 +805,13 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
             while isinstance(predictions_reconstruction, list):
                 predictions_reconstruction = predictions_reconstruction[-1]
 
+        if isinstance(predictions_obj_detection, list):
+            while isinstance(predictions_obj_detection, list):
+                predictions_obj_detection = predictions_obj_detection[-1]
+                if len(predictions_obj_detection) == self.consecutive_slices:
+                    predictions_obj_detection = predictions_obj_detection[self.consecutive_slices // 2]
+
+
         if len(cascades_var) > 0:
             cascades_var = np.array(cascades_var)
 
@@ -821,6 +830,10 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
             target_reconstruction = target_reconstruction[:, self.consecutive_slices // 2]
             predictions_segmentation = predictions_segmentation[:, self.consecutive_slices // 2]
             predictions_reconstruction = predictions_reconstruction[:, self.consecutive_slices // 2]
+            target_obj_detection = target_obj_detection[self.consecutive_slices // 2]
+        else:
+            target_obj_detection = target_obj_detection[0]
+
 
 
         fname = attrs["fname"]
@@ -907,7 +920,7 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
             # #output_predictions_reconstruction = torch.clip(output_predictions_reconstruction, 0, 1)
             # output_predictions_reconstruction = output_predictions_reconstruction.detach().cpu()
             # Log target and predictions, if log_image is True for this slice.
-            if attrs["log_image"][_batch_idx_]:
+            if attrs["log_image"][_batch_idx_] and target_obj_detection["boxes"].reshape(-1,4).numel() != 0:
                 key = f"{fname[_batch_idx_]}_slice_{int(slice_idx[_batch_idx_])}"
 
                 if self.log_multiple_modalities:
@@ -946,6 +959,9 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
                     f"{key}/e/segmentation/error",
                     torch.abs(target_segmentation_class - output_predictions_segmentation_class),
                 )
+                self.log_boundary_box(f"{key}/f/object_detection/target",output_target_reconstruction,target_obj_detection,attrs['categories'])
+                self.log_boundary_box(f"{key}/f/object_detection/prediction", output_predictions_reconstruction,predictions_obj_detection, attrs['categories'])
+
 
             # Compute metrics and log them.
             if self.use_reconstruction_module:
@@ -1113,6 +1129,7 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
         mask: Union[List, torch.Tensor],
         initial_prediction: Union[List, torch.Tensor],
         target: Union[List, torch.Tensor],
+        target_obj_detection: Union[List, torch.Tensor],
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, int]:
         """Processes lists of inputs to torch.Tensor. In the case where multiple accelerations are used, then the
         inputs are lists. This function converts the lists to torch.Tensor by randomly selecting one acceleration. If
@@ -1156,9 +1173,11 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
         if isinstance(kspace, list):
             kspace = kspace[r]
             target = target[r]
+
         elif isinstance(target, list):
             target = target[r]
-        return kspace, y, mask, initial_prediction, target, r
+        target_obj_detection = [{key: value.squeeze(0) for key, value in tgt.items()} for tgt in target_obj_detection]
+        return kspace, y, mask, initial_prediction, target,target_obj_detection, r
 
     def inference_step(  # noqa: MC0001
         self,
@@ -1245,8 +1264,8 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
         ) = self.__check_noise_to_recon_inputs__(y, mask, initial_prediction_reconstruction, attrs)
 
         # Process inputs to randomly select one acceleration factor, in case multiple accelerations are used.
-        kspace, y, mask, initial_prediction_reconstruction, target_reconstruction, r = self.__process_inputs__(
-            kspace, y, mask, initial_prediction_reconstruction, target_reconstruction,
+        kspace, y, mask, initial_prediction_reconstruction, target_reconstruction,target_obj_detection, r = self.__process_inputs__(
+            kspace, y, mask, initial_prediction_reconstruction, target_reconstruction, target_obj_detection
         )
         # Process inputs if Noise-to-Recon and/or SSDU are used.
         n2r_y, n2r_mask, n2r_initial_prediction_reconstruction, mask, loss_mask = self.__process_unsupervised_inputs__(
@@ -1274,12 +1293,13 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
                 )
 
         # Model forward pass
-        predictions_reconstruction, predictions_segmentation, log_like, predictions_obj_detection,dict_obj_detection = self.forward(
+        predictions_reconstruction, predictions_segmentation, log_like, predictions_obj_detection,predictions_dict_obj_detection,target_obj_detection_loss = self.forward(
             y,
             sensitivity_maps,
             mask,
             initial_prediction_reconstruction,
             target_reconstruction,
+            target_obj_detection,
             attrs["noise"],
         )
 
@@ -1364,10 +1384,11 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
             "predictions_reconstruction_n2r": predictions_reconstruction_n2r,
             "predictions_segmentation": predictions_segmentation,
             "predictions_obj_detection": predictions_obj_detection,
-            "dict_obj_detection": dict_obj_detection,
+            "predictions_dict_obj_detection": predictions_dict_obj_detection,
             "target_reconstruction": target_reconstruction,
             "target_segmentation": target_segmentation,
             "target_obj_detection": target_obj_detection,
+            "target_obj_detection_loss": target_obj_detection_loss,
             "sensitivity_maps": sensitivity_maps,
             "loss_mask": loss_mask,
             "attrs": attrs,
@@ -1452,7 +1473,7 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
             outputs["predictions_segmentation"],
             outputs["target_segmentation"],
             outputs["predictions_obj_detection"],
-            outputs["target_obj_detection"],
+            outputs["target_obj_detection_loss"],
             outputs["sensitivity_maps"],
             outputs["loss_mask"],
             outputs["attrs"],
@@ -1550,7 +1571,7 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
         predictions_segmentation = outputs["predictions_segmentation"]
         target_segmentation = outputs["target_segmentation"]
         predictions_obj_detection = outputs["predictions_obj_detection"]
-        dict_obj_detection = outputs["dict_obj_detection"]
+        predictions_dict_obj_detection = outputs["predictions_dict_obj_detection"]
         target_obj_detection= outputs["target_obj_detection"]
         log_like = outputs["log_likelihood"]
         # Compute loss
@@ -1562,7 +1583,7 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
             predictions_segmentation,
             target_segmentation,
             predictions_obj_detection,
-            target_obj_detection,
+            outputs["target_obj_detection_loss"],
             outputs["sensitivity_maps"],
             outputs["loss_mask"],
             outputs["attrs"],
@@ -1576,10 +1597,12 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
         # Compute metrics and log them and log outputs.
         self.__compute_and_log_metrics_and_outputs__(
             predictions_reconstruction,
-            target_reconstruction,
             log_like,
+            target_reconstruction,
             predictions_segmentation,
             target_segmentation,
+            predictions_dict_obj_detection,
+            target_obj_detection,
             outputs["attrs"],
         )
 

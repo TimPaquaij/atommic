@@ -201,9 +201,8 @@ class MTLRSOBlock(torch.nn.Module):
         self.segmentation_3d = self.segmentation_module_params["segmentation_3d"]
         self.normalize_segmentation_output = normalize_segmentation_output
         self.object_detection_module_params = object_detection_module_params
-        self.object_detection_module = YOLOv5(num_classes=object_detection_module_params['num_classes'])
-        #self.checkpoint = torch.load(object_detection_module_params['checkpoint'])
-        #self.object_detection_module.load_state_dict(self.checkpoint)
+        self.object_detection_module = YOLOv5(num_classes=object_detection_module_params['num_classes'],anchors=object_detection_module_params["anchors"],
+                                              strides=object_detection_module_params["strides"],img_sizes=object_detection_module_params["img_size"],backbone_ckpt=object_detection_module_params["checkpoint"])
 
     def forward(  # noqa: MC0001
         self,
@@ -212,6 +211,7 @@ class MTLRSOBlock(torch.nn.Module):
         mask: torch.Tensor,
         init_reconstruction_pred: torch.Tensor,
         target_reconstruction: torch.Tensor,  # pylint: disable=unused-argument
+        target_obj_detection: torch.Tensor,
         hx: torch.Tensor = None,
         sigma: float = 1.0,
     ) -> Tuple[Union[List, torch.Tensor], torch.Tensor]:
@@ -360,8 +360,7 @@ class MTLRSOBlock(torch.nn.Module):
 
 
 
-
-        pred_obj_detection,dict_obj_detection = self.object_detection_module(torch.abs(_pred_reconstruction))
+        pred_obj_detection,dict_obj_detection,target_obj_detection = self.object_detection_module(torch.abs(_pred_reconstruction),target_obj_detection)
         if self.normalize_segmentation_output:
             pred_segmentation = (pred_segmentation - pred_segmentation.min()) / (
                 pred_segmentation.max() - pred_segmentation.min()
@@ -380,4 +379,4 @@ class MTLRSOBlock(torch.nn.Module):
             pred_segmentation = pred_segmentation.permute(0,2,1,3,4)
             pred_segmentation = pred_segmentation.view([y.shape[0], y.shape[1], *pred_segmentation.shape[2:]])
 
-        return pred_reconstruction, pred_segmentation,pred_obj_detection,dict_obj_detection, hx,  log_like  # type: ignore
+        return pred_reconstruction, pred_segmentation,pred_obj_detection,dict_obj_detection,target_obj_detection, hx,  log_like  # type: ignore

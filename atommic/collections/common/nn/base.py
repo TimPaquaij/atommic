@@ -184,8 +184,61 @@ class BaseMRIModel(modelPT.ModelPT, ABC):
                 image = image.detach().cpu()
             self.logger.experiment.log({name: wandb.Image(image.numpy())})
 
+
         if "tensorboard" in self.logger.__module__.lower():
             self.logger.experiment.add_image(name, image, global_step=self.global_step)
+
+    def log_boundary_box(self, name, image,obj_detection,categories):
+        """Logs an image.
+
+        Parameters
+        ----------
+        name : str
+            Name of the image.
+        image : torch.Tensor
+            Image to log.
+        """
+        if image.dim() > 3:
+            image = image[0, 0, :, :].unsqueeze(0)
+        elif image.shape[0] != 1:
+            image = image.unsqueeze(0)
+        if ".h5" in name:
+            name = name.replace(".h5", "")
+
+        if "wandb" in self.logger.__module__.lower():
+            if image.is_cuda:
+                image = image.detach().cpu()
+            self.logger.experiment.log({name: self.bounding_boxes(image.numpy(),obj_detection['boxes'].reshape(-1,4).detach().cpu().numpy(),obj_detection['labels'].reshape(-1).detach().cpu().numpy(),[1 for _ in range(len(obj_detection['labels'].reshape(-1)))],categories)})
+
+        if "tensorboard" in self.logger.__module__.lower():
+            self.logger.experiment.add_image(name, image, global_step=self.global_step)
+
+    def bounding_boxes(self,image, v_boxes, v_labels, v_scores, categories):
+        class_id_to_categories ={int(category['id'])-1: category['name'][0] for category in categories}
+        # load raw input photo
+        all_boxes = []
+
+        # plot each bounding box for this image
+        for b_i, box in enumerate(v_boxes):
+            # get coordinates and labels
+            box_data = {"position": {
+                "minX": int(box[0]),
+                "maxX": int(box[1]),
+                "minY": int(box[2]),
+                "maxY": int(box[3])},
+                "class_id": int(v_labels[b_i]),
+                # optionally caption each box with its class and score
+                "box_caption": "%s (%.3f)" % (class_id_to_categories[v_labels[b_i]], v_scores[b_i]),
+                "domain": "pixel",
+                "scores": {"score": v_scores[b_i]}}
+            all_boxes.append(box_data)
+            print(class_id_to_categories[v_labels[b_i]])
+
+        # log to wandb: raw image, predictions, and dictionary of class labels for each class id
+        box_image = wandb.Image(image,
+                                boxes={"predictions": {"box_data": all_boxes, "class_labels": class_id_to_categories}})
+        return box_image
+
     def on_validation_epoch_end(self):
         """Called at the end of validation epoch to aggregate outputs."""
         raise NotImplementedError

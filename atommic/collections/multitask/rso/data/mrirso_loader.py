@@ -636,7 +636,7 @@ class SKMTEARSMRIDatasetlateral(RSMRIDataset):
                             for annotation in annotations:
                                 if dataslice in range(int(annotation['bbox'][0]),int(annotation['bbox'][0] + annotation['bbox'][3]), 1):
 
-                                    bboxes.append([annotation['bbox'][1]/256,annotation['bbox'][2]/208,annotation['bbox'][4]/256,annotation['bbox'][5]/208])
+                                    bboxes.append([annotation['bbox'][1],annotation['bbox'][2],annotation['bbox'][4],annotation['bbox'][5]])
                                     categories.append(annotation['category_id'])
                                     tissues.append(annotation['tissue_id'])
                             bbox_classes.append(dict(slice_id=np.array([dataslice]), boxes=np.array(bboxes),labels=np.array(categories),tissues=np.array(tissues)))
@@ -647,8 +647,7 @@ class SKMTEARSMRIDatasetlateral(RSMRIDataset):
 
 
 
-            categories = annotation_set['categories']
-            tissues = annotation_set['tissues']
+
 
             if self.consecutive_slices > 1:
                 segmentation_labels = np.transpose(segmentation_labels, (0,3, 1, 2))
@@ -677,9 +676,8 @@ class SKMTEARSMRIDatasetlateral(RSMRIDataset):
 
 
         attrs["log_image"] = bool(slice_in_data in self.indices_to_log)
-        attrs['categories'] = categories
-        attrs["tissues"] = tissues
-
+        attrs['categories'] = annotation_set['categories']
+        attrs["tissues"] = annotation_set['tissues']
         return (
             (
                 kspace,
