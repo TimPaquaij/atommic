@@ -650,8 +650,6 @@ class RSOMRIDataTransforms:
 
                 slice_id = torch.from_numpy(slice_id)
                 boxes = self.convert_to_xyxy(torch.tensor(boxes,dtype=torch.float16))
-
-
                 labels= torch.tensor(labels,dtype =torch.long)-1
                 tissues = torch.tensor(tissues, dtype = torch.long)
                 target_obj_detection.append(dict(slice_id = slice_id,boxes=boxes, labels=labels,tissues=tissues))

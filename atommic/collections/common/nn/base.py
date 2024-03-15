@@ -215,6 +215,8 @@ class BaseMRIModel(modelPT.ModelPT, ABC):
 
     def bounding_boxes(self,image, v_boxes, v_labels, v_scores, categories):
         class_id_to_categories ={int(category['id'])-1: category['name'][0] for category in categories}
+        class_set = wandb.Classes(
+            [{"name":c,"id":i}  for i,c in class_id_to_categories.items()])
         # load raw input photo
         all_boxes = []
 
@@ -232,11 +234,17 @@ class BaseMRIModel(modelPT.ModelPT, ABC):
                 "domain": "pixel",
                 "scores": {"score": v_scores[b_i]}}
             all_boxes.append(box_data)
-            print(class_id_to_categories[v_labels[b_i]])
-
+        box_image = wandb.Image(
+            image,
+            boxes={
+                "predictions": {
+                    "box_data": all_boxes,
+                    "class_labels": class_id_to_categories,
+                }
+            },
+            classes=class_set,
+        )
         # log to wandb: raw image, predictions, and dictionary of class labels for each class id
-        box_image = wandb.Image(image,
-                                boxes={"predictions": {"box_data": all_boxes, "class_labels": class_id_to_categories}})
         return box_image
 
     def on_validation_epoch_end(self):

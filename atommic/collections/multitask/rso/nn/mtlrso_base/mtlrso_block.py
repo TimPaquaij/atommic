@@ -358,9 +358,27 @@ class MTLRSOBlock(torch.nn.Module):
             _pred_reconstruction = _pred_reconstruction.unsqueeze(1)
         pred_segmentation = self.segmentation_module(torch.abs(_pred_reconstruction))
 
+        _pred_reconstruction = pred_reconstruction
+        if isinstance(_pred_reconstruction, list):
+            _pred_reconstruction = _pred_reconstruction[-1]
+        if isinstance(_pred_reconstruction, list):
+            _pred_reconstruction = _pred_reconstruction[-1]
+        if _pred_reconstruction.shape[-1] != 2:
+            _pred_reconstruction = torch.view_as_real(_pred_reconstruction)
+        if _pred_reconstruction.shape[-1] == 2:
+            _pred_reconstruction = torch.abs(torch.view_as_complex(_pred_reconstruction))
+
+        if self.consecutive_slices >1:
+            batch_size, slices = _pred_reconstruction.shape[:2]
+            if _pred_reconstruction.dim() == 4:
+                _pred_reconstruction = _pred_reconstruction.reshape(batch_size * slices,
+                                                              *_pred_reconstruction.shape[2:])
+        _obj_pred_reconstruction = []
+        for idv_pred in range(_pred_reconstruction.shape[0]):
+            _obj_pred_reconstruction.append(torch.cat((_pred_reconstruction[idv_pred].unsqueeze(0),_pred_reconstruction[idv_pred].unsqueeze(0),_pred_reconstruction[idv_pred].unsqueeze(0)),dim=0))
 
 
-        pred_obj_detection,dict_obj_detection,target_obj_detection = self.object_detection_module(torch.abs(_pred_reconstruction),target_obj_detection)
+        pred_obj_detection,dict_obj_detection,target_obj_detection = self.object_detection_module(_obj_pred_reconstruction,target_obj_detection)
         if self.normalize_segmentation_output:
             pred_segmentation = (pred_segmentation - pred_segmentation.min()) / (
                 pred_segmentation.max() - pred_segmentation.min()

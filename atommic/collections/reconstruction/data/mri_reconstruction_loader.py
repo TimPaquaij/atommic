@@ -816,7 +816,7 @@ class SKMTEAReconstructionMRIDatasetlateral(MRIDataset):
             dataset_format = None
             masking = "custom"
 
-        fname, dataslice, metadata = self.examples[i]
+        fname, dataslice, metadata, slice_in_data = self.examples[i]
         with h5py.File(fname, "r") as hf:
             kspace = self.get_consecutive_slices(hf, "kspace", dataslice).astype(np.complex64)
             if not is_none(dataset_format) and dataset_format == "skm-tea-echo1":
@@ -866,7 +866,7 @@ class SKMTEAReconstructionMRIDatasetlateral(MRIDataset):
 
 
 
-        attrs["log_image"] = bool(dataslice in self.indices_to_log)
+        attrs["log_image"] = bool(slice_in_data in self.indices_to_log)
         return (
             (
                 kspace,

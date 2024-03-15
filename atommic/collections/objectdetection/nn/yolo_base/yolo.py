@@ -11,10 +11,8 @@ import numpy as np
 
 class YOLOv5(nn.Module):
     def __init__(self, num_classes,anchors, strides,model_size=(0.33, 0.5), img_sizes=[None],
-                 score_thresh=0.3, nms_thresh=0.3, detections=20,backbone_ckpt =None):
+                 score_thresh=0.3, nms_thresh=0.3, detections=4,backbone_ckpt =None):
         super().__init__()
-
-        loss_weights = {"loss_box": 0.05, "loss_obj": 1.0, "loss_cls": 0.5}
         
         self.backbone = darknet_pan_backbone(
             depth_multiple=model_size[0], width_multiple=model_size[1]) # 7.5M parameters
@@ -29,7 +27,7 @@ class YOLOv5(nn.Module):
         predictor = Predictor(in_channels_list, num_anchors, num_classes, strides)
         
         self.head = Head(
-            predictor, anchors, strides, loss_weights,
+            predictor, anchors, strides,
             score_thresh, nms_thresh, detections)
         
         if isinstance(img_sizes, int):

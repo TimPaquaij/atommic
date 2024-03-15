@@ -22,8 +22,8 @@ model:
     - true
     - false
   conv_dropout:
-    - 0.2
-    - 0.2
+    - 0
+    - 0
     - 0
   conv_activations:
     - RELU
@@ -77,9 +77,13 @@ model:
   coil_dim: 1
   estimate_coil_sensitivity_maps_with_nn: false
   consecutive_slices: 1
+  log_logliklihood_gradient_std: true
+  save_logliklihood_gradient: false
+  save_zero_filled: false
+  save_intermediate_predictions: false
 
   train_ds:
-    data_path: /data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_train.json
+    data_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_train.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
@@ -88,7 +92,7 @@ model:
       - custom_masking
       - skm-tea-echo1
       - lateral
-    sample_rate: 0.5
+    sample_rate: 1
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
@@ -104,7 +108,7 @@ model:
     mask_args:
       type: gaussian2d  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
-        - 8  # 4, 6, 8, 10, 12, 16
+        - 4  # 4, 6, 8, 10, 12, 16
       shift_mask: false
       use_seed: false
     partial_fourier_percentage: 0.0
@@ -133,7 +137,7 @@ model:
     drop_last: false
 
   validation_ds:
-    data_path: /data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json
+    data_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_val.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
@@ -142,8 +146,8 @@ model:
       - custom_masking
       - skm-tea-echo1
       - lateral
-    sample_rate: 0.5
-    log_images_rate: 0.01
+    sample_rate: 1
+    log_images_rate: 0.005
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
@@ -159,7 +163,7 @@ model:
     mask_args:
       type: gaussian2d  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
-        - 8  # 4, 6, 8, 10, 12, 16
+        - 4  # 4, 6, 8, 10, 12, 16
       shift_mask: false
       use_seed: true
     partial_fourier_percentage: 0.0
@@ -214,7 +218,7 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA/CIRIM_sense
+  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/CIRIM_sense
   ema:
     enable: false
   create_tensorboard_logger: false

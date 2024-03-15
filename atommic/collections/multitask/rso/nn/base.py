@@ -7,7 +7,7 @@ from abc import ABC
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Tuple, Union
-
+import matplotlib.pyplot as plt
 import h5py
 import numpy as np
 import torch
@@ -41,7 +41,7 @@ from atommic.collections.reconstruction.losses.vsi import VSILoss
 from atommic.collections.reconstruction.metrics import mse, nmse, psnr, ssim, haarpsi3d, vsi3d
 from atommic.collections.segmentation.losses.cross_entropy import CrossEntropyLoss, BinaryCrossEntropy_with_logits_Loss
 from atommic.collections.segmentation.losses.dice import Dice, one_hot
-from atommic.collections.objectdetection.losses.detectionloss import DetectionLoss
+from atommic.collections.objectdetection.losses.detectionloss import BBoxLoss,ClassLoss,ObjectLoss
 from atommic.collections.objectdetection.parts.transform import Transformer
 
 __all__ = ["BaseMRIReconstructionSegmentationObjectDetectionModel"]
@@ -242,15 +242,21 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
                     obj_detection_losses_[k] = v
         else:
             # Default object detection loss.
-            obj_detection_losses_["objdetection"] = 1.0
+            obj_detection_losses_["object"] = 0.8
+            obj_detection_losses_["bbox"] = 0.05
+            obj_detection_losses_["class"] = 0.15
         if sum(obj_detection_losses_.values()) != 1.0:
             warnings.warn("Sum of segmentation losses weights is not 1.0. Adjusting weights to sum up to 1.0.")
             total_weight = sum(obj_detection_losses_.values())
-            segmentation_losses_ = {k: v / total_weight for k, v in obj_detection_losses_.items()}
+            obj_detection_losses_ = {k: v / total_weight for k, v in obj_detection_losses_.items()}
         for name in VALID_OBJ_DETECTION_LOSSES:
             if name in obj_detection_losses_:
-                if name == "objdetection":
-                    self.obj_detection_losses[name] = DetectionLoss(anchors= cfg_dict.get("obj_detection_module_anchors"),strides=cfg_dict.get("obj_detection_module_strides"))
+                if name == "object":
+                    self.obj_detection_losses[name] = ObjectLoss(anchors= cfg_dict.get("obj_detection_module_anchors"),strides=cfg_dict.get("obj_detection_module_strides"))
+                elif name == "class":
+                    self.obj_detection_losses[name] = ClassLoss(anchors= cfg_dict.get("obj_detection_module_anchors"),strides=cfg_dict.get("obj_detection_module_strides"))
+                elif name == "bbox":
+                    self.obj_detection_losses[name] = BBoxLoss(anchors= cfg_dict.get("obj_detection_module_anchors"),strides=cfg_dict.get("obj_detection_module_strides"))
         self.obj_detection_losses = {f"loss_{i + 1}": v for i, v in enumerate(self.obj_detection_losses.values())}
         self.total_obj_detection_losses = len(self.obj_detection_losses)
 
@@ -359,7 +365,17 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
         self.DICE = atommic_common.nn.base.DistributedMetricSum()  # type: ignore
         self.cross_entropy_vals: Dict = defaultdict(dict)
         self.dice_vals: Dict = defaultdict(dict)
+
+
+        # self.CLASS_METRIC =atommic_common.nn.base.DistributedMetricSum()
+        # self.BBOX_METRIC =atommic_common.nn.base.DistributedMetricSum()
+        # self.OBJ_metric = atommic_common.nn.base.DistributedMetricSum()
+        # self.class_vals_reconstruction: Dict = defaultdict(dict)
+        # self.obj_vals_reconstruction: Dict = defaultdict(dict)
+        # self.bbox_vals_reconstruction: Dict = defaultdict(dict)
+
         self.TotExamples = atommic_common.nn.base.DistributedMetricSum()  # type: ignore
+
 
     def __abs_output__(self, x: torch.Tensor) -> torch.Tensor:
         """Converts the input to absolute value."""
@@ -730,6 +746,7 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
             reconstruction_loss = self.total_reconstruction_loss(**losses)
         else:
             reconstruction_loss = torch.tensor(0.0)
+
         loss = (
             self.total_segmentation_loss_weight * segmentation_loss
             + self.total_reconstruction_loss_weight * reconstruction_loss
@@ -773,26 +790,26 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
         if isinstance(log_like, list) and self.log_logliklihood_gradient_std:
             if len(log_like) > 0:
                     while isinstance(log_like, list):
-                        if len(log_like) == self.rs_cascades:
-                            for cascade in log_like:
-                                while len(cascade) != self.reconstruction_module_time_steps:
-                                    cascade = cascade[-1]
-                                if len(cascade) == self.reconstruction_module_time_steps:
-                                    time_steps = []
-                                    for time_step in cascade:
-                                        if torch.is_complex(time_step) and time_step.shape[-1] != 2:
-                                            time_step = torch.view_as_real(time_step)
-                                        if self.consecutive_slices > 1:
-                                            time_step = time_step[:, self.consecutive_slices // 2]
-                                        time_step = (
-                                            torch.view_as_complex(time_step.type(torch.float32))
-                                            .cpu()
-                                            .numpy()
-                                        )
-                                        # time_step = np.abs(time_step/np.max(np.abs(time_step)))
-                                        time_steps.append(time_step)
-                                    var_cascade = np.mean(np.std(np.array(time_steps), axis=0))
-                                    cascades_var.append(var_cascade)
+                        if len(log_like) == self.rso_cascades:
+                            for cascade_rso in log_like:
+                                if len(cascade_rso) == self.reconstruction_module_num_cascades:
+                                    for cascade in cascade_rso:
+                                        if len(cascade) == self.reconstruction_module_time_steps:
+                                            time_steps = []
+                                            for time_step in cascade:
+                                                if torch.is_complex(time_step) and time_step.shape[-1] != 2:
+                                                    time_step = torch.view_as_real(time_step)
+                                                if self.consecutive_slices > 1:
+                                                    time_step = time_step[:, self.consecutive_slices // 2]
+                                                time_step = (
+                                                    torch.view_as_complex(time_step.type(torch.float32))
+                                                    .cpu()
+                                                    .numpy()
+                                                )
+                                                # time_step = np.abs(time_step/np.max(np.abs(time_step)))
+                                                time_steps.append(time_step)
+                                            var_cascade = np.mean(np.std(np.array(time_steps), axis=0))
+                                            cascades_var.append(var_cascade)
                             log_like = log_like[-1]
                         else:
                             log_like = log_like[-1]
@@ -1293,6 +1310,8 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
                 )
 
         # Model forward pass
+
+
         predictions_reconstruction, predictions_segmentation, log_like, predictions_obj_detection,predictions_dict_obj_detection,target_obj_detection_loss = self.forward(
             y,
             sensitivity_maps,
@@ -1591,8 +1610,7 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
         )
         if torch.isnan(val_loss):
              print(outputs["attrs"]['fname'],outputs["attrs"]['slice_idx'])
-
-        self.validation_step_outputs.append({"val_loss": [val_loss,rec_loss,seg_loss]})
+        self.validation_step_outputs.append({"val_loss": [val_loss,rec_loss,seg_loss,obj_loss]})
 
         # Compute metrics and log them and log outputs.
         self.__compute_and_log_metrics_and_outputs__(
@@ -1698,27 +1716,27 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
             cascades_inter_loglike = []
             if isinstance(log_like, list) and self.save_logliklihood_gradient:
                 while isinstance(log_like, list):
-                    if len(log_like) == self.rs_cascades:
-                        for cascade in log_like:
-                            while len(cascade) != self.reconstruction_module_time_steps:
-                                cascade=cascade[-1]
-                            if len(cascade) == self.reconstruction_module_time_steps:
-                                time_steps = []
-                                for time_step in cascade:
-                                    if torch.is_complex(time_step) and time_step.shape[-1] != 2:
-                                        time_step = torch.view_as_real(time_step)
-                                    if self.consecutive_slices >1:
-                                        time_step = time_step[:,self.consecutive_slices // 2]
-                                    time_step = (
-                                                torch.view_as_complex(time_step.type(torch.float32))
-                                                .cpu()
-                                                .numpy()
-                                                )
-                                    #time_step = np.abs(time_step/np.max(np.abs(time_step)))
-                                    time_steps.append(time_step)
-                                var_cascade = np.std(np.array(time_steps), axis=0)
-                                cascades_var_loglike.append(var_cascade)
-                                cascades_inter_loglike.append(time_steps[-1])
+                    if len(log_like) == self.rso_cascades:
+                        for cascade_rs in log_like:
+                            if len(cascade_rs) == self.reconstruction_module_num_cascades:
+                                for cascade in cascade_rs:
+                                    if len(cascade) == self.reconstruction_module_time_steps:
+                                        time_steps = []
+                                        for time_step in cascade:
+                                            if torch.is_complex(time_step) and time_step.shape[-1] != 2:
+                                                time_step = torch.view_as_real(time_step)
+                                            if self.consecutive_slices >1:
+                                                time_step = time_step[:,self.consecutive_slices // 2]
+                                            time_step = (
+                                                        torch.view_as_complex(time_step.type(torch.float32))
+                                                        .cpu()
+                                                        .numpy()
+                                                        )
+                                            #time_step = np.abs(time_step/np.max(np.abs(time_step)))
+                                            time_steps.append(time_step)
+                                        var_cascade = np.std(np.array(time_steps), axis=0)
+                                        cascades_var_loglike.append(var_cascade)
+                                        cascades_inter_loglike.append(time_steps[-1])
                         log_like = log_like[-1]
                     else:
                         log_like = log_like[-1]
@@ -1726,27 +1744,26 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
             cascades_var_pred = []
             if isinstance(predictions_reconstruction, list) and self.save_intermediate_predictions:
                 while isinstance(predictions_reconstruction, list):
-                    if len(predictions_reconstruction) == self.rs_cascades:
-                        for cascade in predictions_reconstruction:
-                            while len(cascade) != self.reconstruction_module_time_steps:
-                                cascade = cascade[-1]
-                            if len(cascade) == self.reconstruction_module_time_steps:
-                                time_steps = []
-                                for time_step in cascade:
-                                    if torch.is_complex(time_step) and time_step.shape[-1] != 2:
-                                        time_step = torch.view_as_real(time_step)
-                                    if self.consecutive_slices > 1:
-                                        time_step = time_step[:, self.consecutive_slices // 2]
-                                    time_step = (
-                                        torch.view_as_complex(time_step.type(torch.float32))
-                                        .cpu()
-                                        .numpy()
-                                    )
-                                    time_steps.append(time_step)
-                                var_cascade = np.std(np.array(time_steps), axis=0)
-                                cascades_var_pred.append(var_cascade)
-                                cascades_inter_pred.append(time_steps[-1])
-
+                    if len(predictions_reconstruction) == self.rso_cascades:
+                        for cascade_rs in predictions_reconstruction:
+                            if len(cascade_rs) == self.reconstruction_module_num_cascades:
+                                for cascade in cascade_rs:
+                                    if len(cascade) == self.reconstruction_module_time_steps:
+                                        time_steps = []
+                                        for time_step in cascade:
+                                            if torch.is_complex(time_step) and time_step.shape[-1] != 2:
+                                                time_step = torch.view_as_real(time_step)
+                                            if self.consecutive_slices > 1:
+                                                time_step = time_step[:, self.consecutive_slices // 2]
+                                            time_step = (
+                                                torch.view_as_complex(time_step.type(torch.float32))
+                                                .cpu()
+                                                .numpy()
+                                            )
+                                            time_steps.append(time_step)
+                                        var_cascade = np.std(np.array(time_steps), axis=0)
+                                        cascades_var_pred.append(var_cascade)
+                                        cascades_inter_pred.append(time_steps[-1])
                         predictions_reconstruction = predictions_reconstruction[-1]
                     else:
                         predictions_reconstruction = predictions_reconstruction[-1]
@@ -1824,6 +1841,8 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
         self.log("val_loss", torch.stack([x["val_loss"][0] for x in self.validation_step_outputs]).mean(), sync_dist=True)
         self.log("val_rec_loss", torch.stack([x["val_loss"][1] for x in self.validation_step_outputs]).mean(), sync_dist=True)
         self.log("val_seg_loss",torch.stack([x["val_loss"][2] for x in self.validation_step_outputs]).mean(), sync_dist=True)
+        self.log("val_obj_loss", torch.stack([x["val_loss"][3] for x in self.validation_step_outputs]).mean(),
+                 sync_dist=True)
 
         # Log metrics.
         if self.cross_entropy_metric is not None:

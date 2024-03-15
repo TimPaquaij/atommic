@@ -1,10 +1,10 @@
 pretrained: true
-checkpoint: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/MTLRS_SENSE/default/2024-02-23_10-50-54/checkpoints/default--val_loss=0.5367-epoch=10-last.ckpt
+checkpoint: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/MTLRS_SENSE/default/2024-03-14_21-52-14/checkpoints/default--val_loss=0.2024-epoch=10-last.ckpt
 mode: test
 
 model:
   model_name: MTLRS
-  joint_reconstruction_segmentation_module_cascades: 5
+  joint_reconstruction_segmentation_module_cascades: 1
   task_adaption_type: no_multi_task_learning
   cascade_nr_hidden_states: 1
   use_reconstruction_module: true
@@ -56,7 +56,7 @@ model:
   reconstruction_module_depth: 2
   reconstruction_module_time_steps: 8
   reconstruction_module_conv_dim: 2
-  reconstruction_module_num_cascades: 1
+  reconstruction_module_num_cascades: 5
   reconstruction_module_dimensionality: 2
   reconstruction_module_no_dc: true
   reconstruction_module_keep_prediction: true
@@ -69,8 +69,8 @@ model:
   segmentation_module_pooling_layers: 2
   segmentation_module_dropout: 0.0
   segmentation_loss:
-    dice: 1.0
     cross_entropy: 1
+    dice: 1
   dice_loss_include_background: false  # always set to true if the background is removed
   dice_loss_to_onehot_y: false
   dice_loss_sigmoid: false
@@ -95,15 +95,24 @@ model:
   dice_metric_smooth_nr: 1e-5
   dice_metric_smooth_dr: 1e-5
   dice_metric_batch: true
+  cross_entropy_loss_classes_weight: [1,1, 1, 1, 1]
+  cross_entropy_loss_num_samples: 50
+  cross_entropy_loss_ignore_index: -100
+  cross_entropy_loss_reduction: none
+  cross_entropy_loss_label_smoothing: 0.0
+  cross_entropy_metric_num_samples: 50
+  cross_entropy_metric_ignore_index: -100
+  cross_entropy_metric_reduction: none
+  cross_entropy_metric_label_smoothing: 0.0
+  cross_entropy_metric_classes_weight: [1,1, 1, 1, 1]
   segmentation_classes_thresholds: none
   segmentation_activation: softmax
   reconstruction_loss:
-    l1: 1.0
-    ssim: 1.0
+    l1: 1
+    ssim: 1
   kspace_reconstruction_loss: false
   total_reconstruction_loss_weight: 0.9
   total_segmentation_loss_weight: 0.1
-  complex_valued_type: stacked  # stacked, complex_abs, complex_sqrt_abs
   fft_centered: true
   fft_normalization: ortho
   spatial_dims:
@@ -112,7 +121,8 @@ model:
   magnitude_input: false
   log_multiple_modalities: false  # log all modalities in the same image, e.g. T1, T2, T1ce, FLAIR will be concatenated
   normalization_type: minmax
-  normalize_segmentation_output: true
+  normalize_segmentation_output: false
+  complex_valued_type: stacked
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
   complex_data: true
@@ -214,7 +224,7 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /data/projects/utwente/recon/SKM-TEA_small/v1-release/predictions/MTLRS_SENSE/predictions_4x/2024-02-23_10-50-54
+  exp_dir: /data/projects/utwente/recon/SKM-TEA_small/v1-release/predictions/MTLRS_SENSE/predictions_4x/2024-03-14_21-52-14
   create_tensorboard_logger: false
   create_wandb_logger: True
   wandb_logger_kwargs:

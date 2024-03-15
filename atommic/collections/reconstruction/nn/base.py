@@ -136,6 +136,11 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
         self.total_reconstruction_losses = len(self.reconstruction_losses)
         self.total_reconstruction_loss_weight = cfg_dict.get("total_reconstruction_loss_weight", 1.0)
 
+        self.log_logliklihood_gradient_std = cfg_dict.get('log_logliklihood_gradient_std', False)
+        self.save_logliklihood_gradient = cfg_dict.get('save_logliklihood_gradient', False)
+        self.save_zero_filled = cfg_dict.get('save_zero_filled', False)
+        self.save_intermediate_predictions = cfg_dict.get('save_intermediate_predictions', False)
+
         # Set normalization parameters for logging
         self.unnormalize_loss_inputs = cfg_dict.get("unnormalize_loss_inputs", False)
         self.unnormalize_log_outputs = cfg_dict.get("unnormalize_log_outputs", False)
@@ -517,8 +522,6 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
             while isinstance(log_like, list):
                 if len(log_like) == self.cascades:
                     for cascade in log_like:
-                        while len(cascade) != self.time_steps:
-                            cascade = cascade[-1]
                         if len(cascade) == self.time_steps:
                             time_steps = []
                             for time_step in cascade:
@@ -531,7 +534,7 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
                                 )
                                 # time_step = np.abs(time_step/np.max(np.abs(time_step)))
                                 time_steps.append(time_step)
-                            var_cascade = np.var(np.array(time_steps), axis=0)
+                            var_cascade = np.mean(np.std(np.array(time_steps), axis=0))
                             cascades_var.append(var_cascade)
                     log_like = log_like[-1]
                 else:
@@ -540,15 +543,12 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
             while isinstance(predictions, list):
                 predictions= predictions[-1]
 
-
         cascades_var = np.array(cascades_var)
         # Ensure loss inputs are both viewed in the same way.
         target = self.__abs_output__(target)
         target = torch.abs(target/torch.max(torch.abs(target)))
         predictions = self.__abs_output__(predictions)
         predictions = torch.abs(predictions / torch.max(torch.abs(predictions)))
-
-        cascades_var = np.abs(cascades_var / np.max(np.abs(cascades_var)))
 
         if torch.max(target) != 1:
             target_reconstruction = torch.clip(target, 0, 1)
@@ -609,10 +609,8 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
                 key = f"{fname[_batch_idx_]}_slice_{int(slice_idx[_batch_idx_])}-Acc={acceleration}x"  # type: ignore
                 self.log_image(f"{key}/target", output_target)
                 self.log_image(f"{key}/reconstruction", output_predictions)
-                self.log_image(f"{key}/variance", torch.cat(
-                            [torch.as_tensor(cascades_var[i]) for i in range(len(cascades_var))],
-                            dim=-1
-                        ),)
+                if isinstance(cascades_var, np.ndarray) and self.log_logliklihood_gradient_std:
+                    self.log_plot(f"{key}/a/reconstruction_abs/logliklihood_variance", cascades_var)
                 self.log_image(f"{key}/error", torch.abs(output_target - output_predictions))
 
             # Compute metrics and log them.
@@ -1208,14 +1206,12 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
             acceleration,
         )
 
-        cascades_var = []
-        cascades_inter_log_like = []
-        if isinstance(log_like, list):
+        cascades_var_loglike = []
+        cascades_inter_loglike = []
+        if isinstance(log_like, list) and self.save_logliklihood_gradient:
             while isinstance(log_like, list):
                 if len(log_like) == self.cascades:
                     for cascade in log_like:
-                        while len(cascade) != self.time_steps:
-                            cascade = cascade[-1]
                         if len(cascade) == self.time_steps:
                             time_steps = []
                             for time_step in cascade:
@@ -1230,36 +1226,48 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
                                 )
                                 # time_step = np.abs(time_step/np.max(np.abs(time_step)))
                                 time_steps.append(time_step)
-                            var_cascade = np.var(np.array(time_steps), axis=0)
-                            cascades_inter_log_like.append(time_steps[-1])
-                            cascades_var.append(var_cascade)
+                            var_cascade = np.std(np.array(time_steps), axis=0)
+                            cascades_var_loglike.append(var_cascade)
+                            cascades_inter_loglike.append(time_steps[-1])
                     log_like = log_like[-1]
                 else:
                     log_like = log_like[-1]
         cascades_inter_pred = []
-        if isinstance(predictions, list):
+        cascades_var_pred = []
+        if isinstance(predictions, list) and self.save_intermediate_predictions:
             while isinstance(predictions, list):
                 if len(predictions) == self.cascades:
                     for cascade in predictions:
-                        while len(cascade) != self.time_steps:
-                            cascade = cascade[-1]
                         if len(cascade) == self.time_steps:
-                            inter_pred = cascade[-1]
-                            if torch.is_complex(inter_pred) and inter_pred.shape[-1] != 2:
-                                inter_pred = torch.view_as_real(inter_pred)
-                            inter_pred = (
-                                torch.view_as_complex(inter_pred.type(torch.float32))
-                                .cpu()
-                                .numpy()
-                            )
-                            cascades_inter_pred.append(inter_pred)
+                            time_steps = []
+                            for time_step in cascade:
+                                if torch.is_complex(time_step) and time_step.shape[-1] != 2:
+                                    time_step = torch.view_as_real(time_step)
+                                if self.consecutive_slices > 1:
+                                    time_step = time_step[:, self.consecutive_slices // 2]
+                                time_step = (
+                                    torch.view_as_complex(time_step.type(torch.float32))
+                                    .cpu()
+                                    .numpy()
+                                )
+                                time_steps.append(time_step)
+                            var_cascade = np.std(np.array(time_steps), axis=0)
+                            cascades_var_pred.append(var_cascade)
+                            cascades_inter_pred.append(time_steps[-1])
+
                     predictions = predictions[-1]
                 else:
                     predictions = predictions[-1]
-        cascades_inter = [cascades_inter_pred, cascades_inter_log_like]
+        cascades_loglike = [cascades_inter_loglike, cascades_var_loglike]
+        cascades_pred = [cascades_inter_pred, cascades_var_pred]
+
+
         if isinstance(predictions, list):
             while isinstance(predictions, list):
                 predictions= predictions[-1]
+        if self.consecutive_slices > 1:
+            target = target[:, self.consecutive_slices // 2]
+            predictions = predictions[:, self.consecutive_slices // 2]
         if torch.is_complex(target) and target.shape[-1] != 2:
             target = torch.view_as_real(target)
         if torch.is_complex(predictions) and predictions.shape[-1] != 2:
@@ -1286,9 +1294,12 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
 
         self.test_step_outputs.append([str(fname[0]), slice_idx, predictions])  # type: ignore
         self.test_step_targets.append([str(fname[0]), slice_idx, targets])
-        self.test_step_var.append([str(fname[0]), slice_idx, cascades_var])
-        self.test_step_innit.append([str(fname[0]), slice_idx, initial_prediction])
-        self.test_step_inter_pred.append([str(fname[0]), slice_idx, cascades_inter])
+        if self.save_logliklihood_gradient:
+            self.test_step_loglike.append([str(fname[0]), slice_idx, cascades_loglike])
+        if self.save_zero_filled:
+            self.test_step_innit.append([str(fname[0]), slice_idx, initial_prediction])
+        if self.save_intermediate_predictions:
+            self.test_step_inter_pred.append([str(fname[0]), slice_idx, cascades_pred])
 
     def on_validation_epoch_end(self):
         """Called at the end of validation epoch to aggregate outputs."""
@@ -1426,18 +1437,19 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
         # Save predictions.
         reconstructions = defaultdict(list)
         targets_reconstructions = defaultdict(list)
-        var_reconstructions = defaultdict(list)
+        loglike_reconstructions = defaultdict(list)
         innit_reconstructions = defaultdict(list)
         inter_reconstructions = defaultdict(list)
+
         for fname, slice_num, output in self.test_step_outputs:
             reconstructions_pred = output
             reconstructions[fname].append((slice_num, reconstructions_pred))
         for fname, slice_num, output in self.test_step_targets:
             reconstructions_tar = output
             targets_reconstructions[fname].append((slice_num, reconstructions_tar))
-        for fname, slice_num, output in self.test_step_var:
-            reconstructions_var = output
-            var_reconstructions[fname].append((slice_num, reconstructions_var))
+        for fname, slice_num, output in self.test_step_loglike:
+            reconstructions_loglike = output
+            loglike_reconstructions[fname].append((slice_num, reconstructions_loglike))
         for fname, slice_num, output in self.test_step_innit:
             reconstructions_innit = output
             innit_reconstructions[fname].append((slice_num, reconstructions_innit))
@@ -1449,17 +1461,20 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
             reconstructions[fname] = np.stack([out for _, out in sorted(reconstructions[fname])])
         for fname in targets_reconstructions:
             targets_reconstructions[fname] = np.stack([out for _, out in sorted(targets_reconstructions[fname])])
-        for fname in var_reconstructions:
-            var_reconstructions[fname] = np.stack([out for _, out in sorted(var_reconstructions[fname])])
-        for fname in innit_reconstructions:
-            innit_reconstructions[fname] = np.stack([out for _, out in sorted(innit_reconstructions[fname])])
-        for fname in inter_reconstructions:
-            inter_reconstructions[fname] = np.stack([out for _, out in sorted(inter_reconstructions[fname])])
+        if self.save_logliklihood_gradient:
+            for fname in loglike_reconstructions:
+                loglike_reconstructions[fname] = np.stack([out for _, out in sorted(loglike_reconstructions[fname])])
+        if self.save_logliklihood_gradient:
+            for fname in innit_reconstructions:
+                innit_reconstructions[fname] = np.stack([out for _, out in sorted(innit_reconstructions[fname])])
+        if self.save_logliklihood_gradient:
+            for fname in inter_reconstructions:
+                inter_reconstructions[fname] = np.stack([out for _, out in sorted(inter_reconstructions[fname])])
 
-        if self.consecutive_slices > 1:
-            # iterate over the slices and always keep the middle slice
-            for fname in reconstructions:
-                reconstructions[fname] = reconstructions[fname][:, self.consecutive_slices // 2]
+        # if self.consecutive_slices > 1:
+        #     # iterate over the slices and always keep the middle slice
+        #     for fname in reconstructions:
+        #         reconstructions[fname] = reconstructions[fname][:, self.consecutive_slices // 2]
 
         if "wandb" in self.logger.__module__.lower():
             out_dir = Path(os.path.join(self.logger.save_dir, "predictions"))
@@ -1467,15 +1482,18 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
             out_dir = Path(os.path.join(self.logger.log_dir, "predictions"))
         out_dir.mkdir(exist_ok=True, parents=True)
 
-        for (fname, reconstructions_pred), (_, reconstructions_tar),(_, reconstructions_var),(_, reconstructions_innit),(_, reconstructions_inter)  in zip(reconstructions.items(),
-                targets_reconstructions.items(), var_reconstructions.items(),innit_reconstructions.items(),inter_reconstructions.items()
+        for (fname, reconstructions_pred), (_, reconstructions_tar),(_,reconstructions_loglike),(_, reconstructions_innit),(_, reconstructions_inter)  in zip(reconstructions.items(),
+                targets_reconstructions.items(), loglike_reconstructions.items(),innit_reconstructions.items(),inter_reconstructions.items()
             ):
             with h5py.File(out_dir / fname, "w") as hf:
                 hf.create_dataset("reconstruction", data=reconstructions_pred)
                 hf.create_dataset("target_reconstruction", data=reconstructions_tar)
-                hf.create_dataset("uncertainty", data=reconstructions_var)
-                hf.create_dataset("zero_filled", data=reconstructions_innit)
-                hf.create_dataset("intermediate_reconstruction", data=reconstructions_inter)
+                if self.save_logliklihood_gradient:
+                    hf.create_dataset("intermediate_loglike", data=reconstructions_loglike)
+                if self.save_zero_filled:
+                    hf.create_dataset("zero_filled", data=reconstructions_innit)
+                if self.save_intermediate_predictions:
+                    hf.create_dataset("intermediate_reconstruction", data=reconstructions_inter)
 
     @staticmethod
     def _setup_dataloader_from_config(cfg: DictConfig) -> DataLoader:

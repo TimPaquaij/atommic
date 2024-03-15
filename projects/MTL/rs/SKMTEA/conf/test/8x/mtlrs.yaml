@@ -122,6 +122,10 @@ model:
   estimate_coil_sensitivity_maps_with_nn: false
   ssdu: false
   n2r: false
+  log_logliklihood_gradient_std: true
+  save_logliklihood_gradient: true
+  save_zero_filled: true
+  save_intermediate_predictions: true
 
   test_ds:
     data_path:  /data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_MTR_005_test.json

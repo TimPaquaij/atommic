@@ -71,7 +71,7 @@ class CrossEntropyLoss(Loss):
             label_smoothing=self.label_smoothing,
         )
         if self.mc_samples == 1 or pred_log_var is None:
-            return cross_entropy(_input.float(), target).mean()
+            return cross_entropy(_input.float(), target.float()).mean()
 
         pred_shape = [self.mc_samples, *_input.shape]
         noise = torch.randn(pred_shape, device=_input.device)

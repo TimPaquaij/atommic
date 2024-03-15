@@ -20,6 +20,7 @@ from atommic.collections.common.parts.utils import expand_op
 from atommic.collections.multitask.rso.nn.base import BaseMRIReconstructionSegmentationObjectDetectionModel
 from atommic.collections.multitask.rso.nn.mtlrso_base.mtlrso_block import MTLRSOBlock
 from atommic.core.classes.common import typecheck
+import matplotlib.pyplot as plt
 
 __all__ = ["MTLRSO"]
 
@@ -55,6 +56,12 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
         self.reconstruction_module_num_cascades = cfg_dict.get("reconstruction_module_num_cascades")
         self.reconstruction_module_accumulate_predictions = cfg_dict.get(
             "reconstruction_module_accumulate_predictions"
+        )
+        self.segmentation_module_accumulate_predictions = cfg_dict.get(
+            "segmentation_module_accumulate_predictions"
+        )
+        self.obj_detection_module_accumulate_predictions = cfg_dict.get(
+            "obj_detection_module_accumulate_predictions"
         )
         self.segmentation_3d = cfg_dict.get("segmentation_module_3d", False)
         conv_dim = cfg_dict.get("reconstruction_module_conv_dim")
@@ -104,9 +111,9 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
 
         self.coil_dim = cfg_dict.get("coil_dim", 1)
         self.consecutive_slices = cfg_dict.get("consecutive_slices", 1)
-        self.rs_cascades = cfg_dict.get("joint_reconstruction_segmentation_module_cascades", 1)
-        self.combine_rs = cfg_dict.get("cascade_nr_hidden_states", 1)-1
-        self.rs_module = torch.nn.ModuleList(
+        self.rso_cascades = cfg_dict.get("joint_reconstruction_segmentation_obj_detection_module_cascades", 1)
+        self.combine_rso = cfg_dict.get("cascade_nr_hidden_states", 1)-1
+        self.rso_module = torch.nn.ModuleList(
             [
                 MTLRSOBlock(
                     reconstruction_module_params=reconstruction_module_params,
@@ -123,7 +130,7 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
                     coil_combination_method=cfg_dict.get("coil_combination_method", "SENSE"),
                     normalize_segmentation_output=cfg_dict.get("normalize_segmentation_output", True),
                 )
-                for _ in range(self.rs_cascades)
+                for _ in range(self.rso_cascades)
             ]
         )
 
@@ -171,7 +178,7 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
         pred_segmentations = []
         pred_obj_detections = []
         dict_obj_detections = []
-        for i,cascade in enumerate(self.rs_module):
+        for i,cascade in enumerate(self.rso_module):
             pred_reconstruction, pred_segmentation, pred_obj_detection, dict_obj_detection,tar_obj_detection, hx, log_like = cascade(
                 y=y,
                 sensitivity_maps=sensitivity_maps,
@@ -186,26 +193,35 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
             pred_log_likelihoods.append(log_like)
             init_reconstruction_pred = pred_reconstruction[-1][-1]
 
-            if self.consecutive_slices > 1:
-                # reshape the target and prediction to [batch_size * consecutive_slices, nr_classes, n_x, n_y]
-                batch_size, slices = pred_segmentation.shape[:2]
-                if pred_segmentation.dim() == 5:
-                    pred_segmentation = pred_segmentation.reshape(batch_size * slices,
-                                                                      *pred_segmentation.shape[2:])
+
+
+
+
+            if self.task_adaption_type == "multi_task_learning_dimitirs" and i >= self.combine_rso:
+                hidden_states = [
+                    torch.cat(
+                        [torch.abs(init_reconstruction_pred.unsqueeze(self.coil_dim) * pred_segmentation)]
+                        * (f // self.segmentation_module_output_channels),
+                        dim=self.coil_dim,
+                    )
+                    for f in self.reconstruction_module_recurrent_filters
+                    if f != 0
+                ]
+
             if not is_none(self.segmentation_classes_thresholds):
+                if self.consecutive_slices > 1:
+                    # reshape the target and prediction to [batch_size * consecutive_slices, nr_classes, n_x, n_y]
+                    batch_size, slices = pred_segmentation.shape[:2]
+                    if pred_segmentation.dim() == 5:
+                        pred_segmentation = pred_segmentation.reshape(batch_size * slices,
+                                                                      *pred_segmentation.shape[2:])
                 for class_idx, thres in enumerate(self.segmentation_classes_thresholds):
                     if self.segmentation_activation == "sigmoid":
-                            cond = torch.sigmoid(pred_segmentation[:, class_idx])
+                        cond = torch.sigmoid(pred_segmentation[:, class_idx])
                     elif self.segmentation_activation == "softmax":
-                        if isinstance(pred_segmentation, list):
-                            cond = [torch.softmax(pred[:, class_idx], dim=1) for pred in pred_segmentation]
-                        else:
-                            cond = torch.softmax(pred_segmentation[:, class_idx], dim=1)
+                        cond = torch.softmax(pred_segmentation[:, class_idx].unsqueeze(1), dim=1)
                     else:
-                        if isinstance(pred_segmentation, list):
-                            cond = [pred[:, class_idx] for pred in pred_segmentation]
-                        else:
-                            cond = pred_segmentation[:, class_idx]
+                        cond = pred_segmentation[:, class_idx]
 
                     if isinstance(pred_segmentation, list):
                         for idx, pred in enumerate(pred_segmentation):
@@ -221,33 +237,33 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
                             torch.zeros_like(pred_segmentation[:, class_idx]),
                         )
 
-                if self.consecutive_slices > 1:
-                    # reshape the target and prediction to [batch_size * consecutive_slices, nr_classes, n_x, n_y]
-                    if pred_segmentation.dim() == 4:
-                        pred_segmentation = pred_segmentation.reshape(batch_size, slices,
-                                                                      *pred_segmentation.shape[1:])
-                pred_segmentation_b = torch.where(pred_segmentation > 0.5,1,0).float()
+                    if self.consecutive_slices > 1:
+                        # reshape the target and prediction to [batch_size * consecutive_slices, nr_classes, n_x, n_y]
+                        if pred_segmentation.dim() == 4:
+                            pred_segmentation = pred_segmentation.reshape(batch_size, slices,
+                                                                          *pred_segmentation.shape[1:])
                 if self.task_adaption_type == "multi_task_learning" and i >= self.combine_rs:
                     hidden_states = [
                         torch.cat(
-                            [torch.sum(torch.abs(init_reconstruction_pred.unsqueeze(
-                                self.coil_dim) * pred_segmentation_b), dim=self.coil_dim, keepdim=True)]
-                            * f,
+                            [torch.abs(init_reconstruction_pred.unsqueeze(self.coil_dim) * pred_segmentation)]
+                            * (f // self.segmentation_module_output_channels),
                             dim=self.coil_dim,
                         )
                         for f in self.reconstruction_module_recurrent_filters
                         if f != 0
                     ]
             else:
-                if self.segmentation_activation == "sigmoid":
-                    pred_segmentation = torch.sigmoid(pred_segmentation)
                 if self.segmentation_activation == "softmax":
-                    pred_segmentation = torch.softmax(pred_segmentation, dim=1)
+                    if self.consecutive_slices > 1:
+                        pred_segmentation = torch.softmax(pred_segmentation, dim=2)
+                    else:
+                        pred_segmentation = torch.softmax(pred_segmentation, dim=1)
+
                 if self.task_adaption_type == "multi_task_learning" and i >= self.combine_rs:
                     hidden_states = [
                         torch.cat(
                             [torch.sum(torch.abs(init_reconstruction_pred.unsqueeze(
-                                self.coil_dim) * pred_segmentation[...,1:,:,:]),dim=self.coil_dim,keepdim=True)]
+                                self.coil_dim) * pred_segmentation[..., 1:, :, :]), dim=self.coil_dim, keepdim=True)]
                             * f,
                             dim=self.coil_dim,
                         )
@@ -255,7 +271,7 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
                         if f != 0
                     ]
 
-            if self.task_adaption_type == "multi_task_learning" and i >= self.combine_rs:
+            if self.task_adaption_type == "multi_task_learning" or self.task_adaption_type == "multi_task_learning_dimitirs" and i >= self.combine_rs:
                 # Check if the concatenated hidden states are the same size as the hidden state of the RNN
                 if hidden_states[0].shape[self.coil_dim] != hx[0].shape[self.coil_dim]:
                     prev_hidden_states = hidden_states
@@ -269,6 +285,7 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
                             )
                         hidden_states.append(new_hidden_state)
                 hx = [hx[i] + hidden_states[i] for i in range(len(hx))]
+
             init_reconstruction_pred = torch.view_as_real(init_reconstruction_pred)
             if self.consecutive_slices > 1:
                 # reshape the target and prediction to [batch_size * consecutive_slices, nr_classes, n_x, n_y]
@@ -374,33 +391,28 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
                 loss = loss_func(t,p,data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(dim=0).to(t))
                 return loss
 
-            if "haarpsi" in str(loss_func).lower():
-
-                return loss_func(t, p,
-                                 data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(
-                                     dim=0).to(t))
-            if "vsi" in str(loss_func).lower():
-
-                return loss_func(t, p, data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(
-                    dim=0).to(t))
             return loss_func(t,p)
 
         if self.reconstruction_module_accumulate_predictions:
             if self.consecutive_slices > 1:
-                target = target.reshape((target.shape[0]*target.shape[1],*target.shape[2:]))
+                target = target.reshape((target.shape[0] * target.shape[1], *target.shape[2:]))
             rs_cascades_weights = torch.logspace(-1, 0, steps=len(prediction)).to(target.device)
             rs_cascades_loss = []
             for rs_cascade_pred in prediction:
                 cascades_weights = torch.logspace(-1, 0, steps=len(rs_cascade_pred)).to(target.device)
                 cascades_loss = []
                 for cascade_pred in rs_cascade_pred:
-                    time_steps_weights = torch.logspace(-1, 0, steps=len(rs_cascade_pred)).to(
+                    time_steps_weights = torch.logspace(-1, 0, steps=len(cascade_pred)).to(
                         target.device)
-                    if self.consecutive_slices >1:
+                    if self.consecutive_slices > 1:
                         time_steps_loss = [
                             compute_reconstruction_loss(target,
-                                                        time_step_pred.reshape((time_step_pred.shape[0]*time_step_pred.shape[1],*time_step_pred.shape[2:])),
-                                                        sensitivity_maps)
+                                                        time_step_pred.reshape((time_step_pred.shape[0] *
+                                                                                time_step_pred.shape[1],
+                                                                                *time_step_pred.shape[2:])),
+                                                        sensitivity_maps.reshape((sensitivity_maps.shape[0] *
+                                                                                  sensitivity_maps.shape[1],
+                                                                                  *sensitivity_maps.shape[2:])))
                             for time_step_pred in cascade_pred
                         ]
                     else:
@@ -411,7 +423,6 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
                             for time_step_pred in cascade_pred
                         ]
 
-
                     cascade_loss = sum(x * w for x, w in
                                        zip(time_steps_loss, time_steps_weights)) / sum(time_steps_weights)
                     cascades_loss.append(cascade_loss)
@@ -421,13 +432,7 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
         else:
             # keep the last prediction of the last cascade of the last rs cascade
             prediction = prediction[-1][-1][-1]
-            consecutative_weight = torch.logspace(-1, 0, steps=self.consecutive_slices).to(
-                target.device)
-            consecutative_loss = [
-                compute_reconstruction_loss(target[:, i, ...], prediction[:, i, ...], sensitivity_maps[:, i, ...])
-                for i in range(self.consecutive_slices)]
-            loss = sum(x * w for x, w in zip(consecutative_loss,
-                                                       consecutative_weight)) / self.consecutive_slices
+            loss = self.compute_reconstruction_loss(target, prediction, sensitivity_maps)
         return loss
 
 
@@ -450,7 +455,7 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
             are used, the dictionary will contain the keys ``cross_entropy_loss``, ``dice_loss``, and
             (combined) ``segmentation_loss``.
         """
-        if isinstance(prediction,list):
+        if self.segmentation_module_accumulate_predictions:
             rs_cascades_weights = torch.logspace(-1, 0, steps=len(prediction)).to(
                 target.device)
             rs_cascades_loss = []
@@ -460,6 +465,11 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
                     loss = loss[1][0]
                 rs_cascades_loss.append(loss)
             loss = sum(x * w for x, w in zip(rs_cascades_loss, rs_cascades_weights)) / sum(rs_cascades_weights)
+        else:
+            prediction = prediction[-1]
+            loss = loss_func(target, prediction)
+            if isinstance(loss, tuple):
+                loss = loss[1][0]
         return loss
 
 
@@ -482,16 +492,17 @@ class MTLRSO(BaseMRIReconstructionSegmentationObjectDetectionModel):
             are used, the dictionary will contain the keys ``cross_entropy_loss``, ``dice_loss``, and
             (combined) ``segmentation_loss``.
         """
-        if isinstance(prediction,list):
+        if self.obj_detection_module_accumulate_predictions:
             rs_cascades_weights = torch.logspace(-1, 0, steps=len(prediction)).to(
                 target[0]['labels'].device)
             rs_cascades_loss = []
             for pred in prediction:
                 loss = loss_func(target, pred)
-                if isinstance(loss, tuple):
-                    loss = loss[1][0]
                 rs_cascades_loss.append(loss)
             loss = sum(x * w for x, w in zip(rs_cascades_loss, rs_cascades_weights)) / sum(rs_cascades_weights)
+        else:
+            prediction = prediction[-1]
+            loss = loss_func(target, prediction)
         return loss
 
 

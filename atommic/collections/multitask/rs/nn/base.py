@@ -195,14 +195,21 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                 if name == "cross_entropy":
 
                     if not is_none(self.segmentation_classes_thresholds):
-                        self.segmentation_losses[name] = BinaryCrossEntropy_with_logits_Loss()
+                        #self.segmentation_losses[name] = BinaryCrossEntropy_with_logits_Loss()
+                        self.segmentation_losses[name] = CrossEntropyLoss(
+                            num_samples=cfg_dict.get("cross_entropy_loss_num_samples", 50),
+                            ignore_index=cfg_dict.get("cross_entropy_loss_ignore_index", -100),
+                            reduction=cfg_dict.get("cross_entropy_loss_reduction", "none"),
+                            label_smoothing=cfg_dict.get("cross_entropy_loss_label_smoothing", 0.0),
+                            weight=torch.tensor(cfg_dict.get("cross_entropy_loss_classes_weight", [1, 1, 1, 1])),
+                        )
                     else:
                         self.segmentation_losses[name] = CrossEntropyLoss(
                             num_samples=cfg_dict.get("cross_entropy_loss_num_samples", 50),
                             ignore_index=cfg_dict.get("cross_entropy_loss_ignore_index", -100),
                             reduction=cfg_dict.get("cross_entropy_loss_reduction", "none"),
                             label_smoothing=cfg_dict.get("cross_entropy_loss_label_smoothing", 0.0),
-                            weight = torch.tensor(cfg_dict.get("cross_entropy_loss_classes_weight", [0.5,0.5,0.5,0.5])),
+                            weight = torch.tensor(cfg_dict.get("cross_entropy_loss_classes_weight", [1,1,1,1])),
                         )
                 elif name == "dice":
                     self.segmentation_losses[name] = Dice(
@@ -228,7 +235,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         cross_entropy_metric_ignore_index = cfg_dict.get("cross_entropy_metric_ignore_index", -100)
         cross_entropy_metric_reduction = cfg_dict.get("cross_entropy_metric_reduction", "none")
         cross_entropy_metric_label_smoothing = cfg_dict.get("cross_entropy_metric_label_smoothing", 0.0)
-        cross_entropy_metric_classes_weight = torch.tensor(cfg_dict.get("cross_entropy_metric_classes_weight", [0.5,0.5,0.5,0.5]))
+        cross_entropy_metric_classes_weight = torch.tensor(cfg_dict.get("cross_entropy_metric_classes_weight", [1,1,1,1]))
         dice_metric_include_background = cfg_dict.get("dice_metric_include_background", False)
         dice_metric_to_onehot_y = cfg_dict.get("dice_metric_to_onehot_y", False)
         dice_metric_sigmoid = cfg_dict.get("dice_metric_sigmoid", True)
@@ -280,7 +287,14 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             self.vsi_vals_reconstruction: Dict = defaultdict(dict)
 
         if not is_none(cross_entropy_metric_classes_weight) or cross_entropy_metric_classes_weight != 0.0:
-            self.cross_entropy_metric = BinaryCrossEntropy_with_logits_Loss()
+            #self.cross_entropy_metric = BinaryCrossEntropy_with_logits_Loss()
+            self.cross_entropy_metric = CrossEntropyLoss(
+                num_samples=cross_entropy_metric_num_samples,
+                ignore_index=cross_entropy_metric_ignore_index,
+                reduction=cross_entropy_metric_reduction,
+                label_smoothing=cross_entropy_metric_label_smoothing,
+                weight=cross_entropy_metric_classes_weight,
+            )
         else:
             self.cross_entropy_metric = CrossEntropyLoss(
                 num_samples=cross_entropy_metric_num_samples,
@@ -711,25 +725,25 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             if len(log_like) > 0:
                     while isinstance(log_like, list):
                         if len(log_like) == self.rs_cascades:
-                            for cascade in log_like:
-                                while len(cascade) != self.reconstruction_module_time_steps:
-                                    cascade = cascade[-1]
-                                if len(cascade) == self.reconstruction_module_time_steps:
-                                    time_steps = []
-                                    for time_step in cascade:
-                                        if torch.is_complex(time_step) and time_step.shape[-1] != 2:
-                                            time_step = torch.view_as_real(time_step)
-                                        if self.consecutive_slices > 1:
-                                            time_step = time_step[:, self.consecutive_slices // 2]
-                                        time_step = (
-                                            torch.view_as_complex(time_step.type(torch.float32))
-                                            .cpu()
-                                            .numpy()
-                                        )
-                                        # time_step = np.abs(time_step/np.max(np.abs(time_step)))
-                                        time_steps.append(time_step)
-                                    var_cascade = np.mean(np.std(np.array(time_steps), axis=0))
-                                    cascades_var.append(var_cascade)
+                            for cascade_rs in log_like:
+                                if len(cascade_rs) == self.reconstruction_module_num_cascades:
+                                    for cascade in cascade_rs:
+                                        if len(cascade) == self.reconstruction_module_time_steps:
+                                            time_steps = []
+                                            for time_step in cascade:
+                                                if torch.is_complex(time_step) and time_step.shape[-1] != 2:
+                                                    time_step = torch.view_as_real(time_step)
+                                                if self.consecutive_slices > 1:
+                                                    time_step = time_step[:, self.consecutive_slices // 2]
+                                                time_step = (
+                                                    torch.view_as_complex(time_step.type(torch.float32))
+                                                    .cpu()
+                                                    .numpy()
+                                                )
+                                                # time_step = np.abs(time_step/np.max(np.abs(time_step)))
+                                                time_steps.append(time_step)
+                                            var_cascade = np.mean(np.std(np.array(time_steps), axis=0))
+                                            cascades_var.append(var_cascade)
                             log_like = log_like[-1]
                         else:
                             log_like = log_like[-1]
@@ -916,11 +930,11 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                 self.cross_entropy_vals[fname[_batch_idx_]][
                     str(slice_idx[_batch_idx_].item())
                 ] = 1-self.cross_entropy_metric(
-                    output_target_segmentation.to(self.device),
-                    output_predictions_segmentation.to(self.device),
+                    output_target_segmentation.unsqueeze(0).to(self.device),
+                    output_predictions_segmentation.unsqueeze(0).to(self.device),
                 )
 
-            dice_score, _ = self.dice_metric(output_target_segmentation, output_predictions_segmentation)
+            dice_score, _ = self.dice_metric(output_target_segmentation.unsqueeze(0), output_predictions_segmentation.unsqueeze(0))
             self.dice_vals[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = dice_score
 
     def __check_noise_to_recon_inputs__(
@@ -1220,13 +1234,13 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             target_reconstruction,
             attrs["noise"],
         )
+
+
         if self.consecutive_slices > 1:
-        #     # reshape the target and prediction to [batch_size * consecutive_slices, nr_classes, n_x, n_y]
+        ## reshape the target and prediction to [batch_size * consecutive_slices, nr_classes, n_x, n_y]
             batch_size, slices = target_segmentation.shape[:2]
             if target_segmentation.dim() == 5:
-              target_segmentation = target_segmentation.reshape(batch_size * slices, *target_segmentation.shape[2:])
-        #     if predictions_segmentation.dim() == 5:
-        #         predictions_segmentation = predictions_segmentation.reshape(batch_size * slices, *predictions_segmentation.shape[2:])
+                target_segmentation = target_segmentation.reshape(batch_size * slices, *target_segmentation.shape[2:])
 
         # if not is_none(self.segmentation_classes_thresholds):
         #     for class_idx, thres in enumerate(self.segmentation_classes_thresholds):
@@ -1597,26 +1611,26 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             if isinstance(log_like, list) and self.save_logliklihood_gradient:
                 while isinstance(log_like, list):
                     if len(log_like) == self.rs_cascades:
-                        for cascade in log_like:
-                            while len(cascade) != self.reconstruction_module_time_steps:
-                                cascade=cascade[-1]
-                            if len(cascade) == self.reconstruction_module_time_steps:
-                                time_steps = []
-                                for time_step in cascade:
-                                    if torch.is_complex(time_step) and time_step.shape[-1] != 2:
-                                        time_step = torch.view_as_real(time_step)
-                                    if self.consecutive_slices >1:
-                                        time_step = time_step[:,self.consecutive_slices // 2]
-                                    time_step = (
+                        for cascade_rs in log_like:
+                            if len(cascade_rs) == self.reconstruction_module_num_cascades:
+                                for cascade in cascade_rs:
+                                    if len(cascade) == self.reconstruction_module_time_steps:
+                                        time_steps = []
+                                        for time_step in cascade:
+                                            if torch.is_complex(time_step) and time_step.shape[-1] != 2:
+                                                time_step = torch.view_as_real(time_step)
+                                            if self.consecutive_slices > 1:
+                                                time_step = time_step[:, self.consecutive_slices // 2]
+                                            time_step = (
                                                 torch.view_as_complex(time_step.type(torch.float32))
                                                 .cpu()
                                                 .numpy()
-                                                )
-                                    #time_step = np.abs(time_step/np.max(np.abs(time_step)))
-                                    time_steps.append(time_step)
-                                var_cascade = np.std(np.array(time_steps), axis=0)
-                                cascades_var_loglike.append(var_cascade)
-                                cascades_inter_loglike.append(time_steps[-1])
+                                            )
+                                            # time_step = np.abs(time_step/np.max(np.abs(time_step)))
+                                            time_steps.append(time_step)
+                                        var_cascade = np.std(np.array(time_steps), axis=0)
+                                        cascades_var_loglike.append(var_cascade)
+                                        cascades_inter_loglike.append(time_steps[-1])
                         log_like = log_like[-1]
                     else:
                         log_like = log_like[-1]
@@ -1625,26 +1639,25 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             if isinstance(predictions_reconstruction, list) and self.save_intermediate_predictions:
                 while isinstance(predictions_reconstruction, list):
                     if len(predictions_reconstruction) == self.rs_cascades:
-                        for cascade in predictions_reconstruction:
-                            while len(cascade) != self.reconstruction_module_time_steps:
-                                cascade = cascade[-1]
-                            if len(cascade) == self.reconstruction_module_time_steps:
-                                time_steps = []
-                                for time_step in cascade:
-                                    if torch.is_complex(time_step) and time_step.shape[-1] != 2:
-                                        time_step = torch.view_as_real(time_step)
-                                    if self.consecutive_slices > 1:
-                                        time_step = time_step[:, self.consecutive_slices // 2]
-                                    time_step = (
-                                        torch.view_as_complex(time_step.type(torch.float32))
-                                        .cpu()
-                                        .numpy()
-                                    )
-                                    time_steps.append(time_step)
-                                var_cascade = np.std(np.array(time_steps), axis=0)
-                                cascades_var_pred.append(var_cascade)
-                                cascades_inter_pred.append(time_steps[-1])
-
+                        for cascade_rs in predictions_reconstruction:
+                            if len(cascade_rs) == self.reconstruction_module_num_cascades:
+                                for cascade in cascade_rs:
+                                    if len(cascade) == self.reconstruction_module_time_steps:
+                                        time_steps = []
+                                        for time_step in cascade:
+                                            if torch.is_complex(time_step) and time_step.shape[-1] != 2:
+                                                time_step = torch.view_as_real(time_step)
+                                            if self.consecutive_slices > 1:
+                                                time_step = time_step[:, self.consecutive_slices // 2]
+                                            time_step = (
+                                                torch.view_as_complex(time_step.type(torch.float32))
+                                                .cpu()
+                                                .numpy()
+                                            )
+                                            time_steps.append(time_step)
+                                        var_cascade = np.std(np.array(time_steps), axis=0)
+                                        cascades_var_pred.append(var_cascade)
+                                        cascades_inter_pred.append(time_steps[-1])
                         predictions_reconstruction = predictions_reconstruction[-1]
                     else:
                         predictions_reconstruction = predictions_reconstruction[-1]
@@ -1987,7 +2000,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                     hf.create_dataset("target_reconstruction", data=reconstructions_tar)
                     hf.create_dataset("target_segmentation", data=segmentations_tar)
                     if self.save_logliklihood_gradient:
-                        hf.create_dataset("uncertainty", data=reconstructions_loglike)
+                        hf.create_dataset("intermediate_loglike", data=reconstructions_loglike)
                     if self.save_zero_filled:
                         hf.create_dataset("zero_filled", data= reconstructions_innit)
                     if self.save_intermediate_predictions:

@@ -634,7 +634,7 @@ class SKMTEARSMRIDatasetlateral(RSMRIDataset):
                             tissues = []
 
                             for annotation in annotations:
-                                if dataslice in range(int(annotation['bbox'][0]),int(annotation['bbox'][0] + annotation['bbox'][3]), 1):
+                                if dataslice in range(int(annotation['bbox'][0]),int(annotation['bbox'][0] + annotation['bbox'][3]), 1) and annotation["id"]!=29:
 
                                     bboxes.append([annotation['bbox'][1],annotation['bbox'][2],annotation['bbox'][4],annotation['bbox'][5]])
                                     categories.append(annotation['category_id'])

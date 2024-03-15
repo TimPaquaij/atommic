@@ -6,4 +6,4 @@ from atommic.collections.common.losses.wasserstein import SinkhornDistance  # no
 
 VALID_RECONSTRUCTION_LOSSES = ["l1", "mse", "ssim","haarpsi","vsi" ,"noise_aware", "wasserstein"]
 VALID_SEGMENTATION_LOSSES = ["cross_entropy", "dice"]
-VALID_OBJ_DETECTION_LOSSES = ["objdetection"]
+VALID_OBJ_DETECTION_LOSSES = ["class","object","bbox"]

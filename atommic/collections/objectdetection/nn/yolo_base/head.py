@@ -6,14 +6,12 @@ from . import box_ops
 from atommic.collections.objectdetection.nn.yolo_base import box_ops
 
 class Head(nn.Module):
-    def __init__(self, predictor, anchors, strides, loss_weights,
+    def __init__(self, predictor, anchors, strides,
                  score_thresh, nms_thresh, detections):
         super().__init__()
         self.predictor = predictor
         self.register_buffer("anchors", torch.Tensor(anchors))
         self.strides = strides
-
-        self.loss_weights = loss_weights
         
         self.score_thresh = score_thresh
         self.nms_thresh = nms_thresh

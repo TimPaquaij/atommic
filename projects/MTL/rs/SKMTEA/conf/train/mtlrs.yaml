@@ -26,8 +26,8 @@ model:
     - true
     - false
   reconstruction_module_conv_dropout:
-    - 0.2
-    - 0.2
+    - 0
+    - 0
     - 0
   reconstruction_module_conv_activations:
     - RELU
@@ -61,10 +61,11 @@ model:
   reconstruction_module_no_dc: true
   reconstruction_module_keep_prediction: true
   reconstruction_module_accumulate_predictions: true
+  segmentation_module_accumulate_predictions: true
   segmentation_module: AttentionUNet
   segmentation_module_3d: false
   segmentation_module_input_channels: 1
-  segmentation_module_output_channels: 5
+  segmentation_module_output_channels: 6
   segmentation_module_channels: 64
   segmentation_module_pooling_layers: 2
   segmentation_module_dropout: 0.0
@@ -95,7 +96,7 @@ model:
   dice_metric_smooth_nr: 1e-5
   dice_metric_smooth_dr: 1e-5
   dice_metric_batch: true
-  cross_entropy_loss_classes_weight: [0,1, 1, 1, 1]
+  cross_entropy_loss_classes_weight: [1,1,1, 1, 1, 1]
   cross_entropy_loss_num_samples: 50
   cross_entropy_loss_ignore_index: -100
   cross_entropy_loss_reduction: none
@@ -104,15 +105,15 @@ model:
   cross_entropy_metric_ignore_index: -100
   cross_entropy_metric_reduction: none
   cross_entropy_metric_label_smoothing: 0.0
-  cross_entropy_metric_classes_weight: [0,1, 1, 1, 1]
+  cross_entropy_metric_classes_weight: [1,1,1, 1, 1, 1]
   segmentation_classes_thresholds: none
-  segmentation_activation: sofmax
+  segmentation_activation: softmax
   reconstruction_loss:
     l1: 1
     ssim: 1
   kspace_reconstruction_loss: false
-  total_reconstruction_loss_weight: 0.1
-  total_segmentation_loss_weight: 0.9
+  total_reconstruction_loss_weight: 0.9
+  total_segmentation_loss_weight: 0.1
   fft_centered: true
   fft_normalization: ortho
   spatial_dims:
@@ -126,10 +127,10 @@ model:
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
   complex_data: true
-  consecutive_slices: 5
+  consecutive_slices: 1
   dimensionality: 2
   coil_combination_method: SENSE
-  coil_dim: 2
+  coil_dim: 1
   estimate_coil_sensitivity_maps_with_nn: false
   ssdu: false
   n2r: false
@@ -153,7 +154,7 @@ model:
     use_dataset_cache: false
     dataset_cache_file: None
     num_cols: None
-    consecutive_slices: 5
+    consecutive_slices: 1
     data_saved_per_slice: false
     complex_target: true
     apply_prewhitening: false
@@ -183,12 +184,12 @@ model:
     spatial_dims:
       - -2
       - -1
-    coil_dim: 2
+    coil_dim: 1
     use_seed: false
     segmentations_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
-    construct_knee_label: false
+    construct_knee_label: true
     include_background_label: true
-    segmentation_classes: 5
+    segmentation_classes: 6
     complex_data: true
     batch_size: 1
     shuffle: true
@@ -211,7 +212,7 @@ model:
     use_dataset_cache: false
     dataset_cache_file: None
     num_cols: None
-    consecutive_slices: 5
+    consecutive_slices: 1
     data_saved_per_slice: false
     complex_target: true
     log_images_rate: 0.005
@@ -243,12 +244,12 @@ model:
     spatial_dims:
       - -2
       - -1
-    coil_dim: 2
+    coil_dim: 1
     use_seed: true
     segmentations_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
-    construct_knee_label: false
+    construct_knee_label: true
     include_background_label: true
-    segmentation_classes: 5
+    segmentation_classes: 6
     complex_data: true
     batch_size: 1
     shuffle: false

@@ -26,7 +26,7 @@ mode: test
 
 model:
   model_name: CIRIM
-  mc_run: 5
+  mc_run: 4
   recurrent_layer: IndRNN
   conv_filters:
     - 64
@@ -45,8 +45,8 @@ model:
     - true
     - false
   conv_dropout:
-    - 0.2
-    - 0.2
+    - 0.5
+    - 0.5
     - 0
   conv_activations:
     - relu
@@ -69,8 +69,8 @@ model:
     - true
     - false
   recurrent_dropout:
-    - 0.2
-    - 0.2
+    - 0
+    - 0
     - 0
   depth: 2
   time_steps: 8
@@ -100,6 +100,10 @@ model:
   coil_dim: 1
   estimate_coil_sensitivity_maps_with_nn: false
   consecutive_slices: 1
+  log_logliklihood_gradient_std: true
+  save_logliklihood_gradient: true
+  save_zero_filled: true
+  save_intermediate_predictions: true
 
   test_ds:
     data_path: /data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_MTR_005_test.json

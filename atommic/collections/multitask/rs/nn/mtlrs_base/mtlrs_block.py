@@ -11,7 +11,7 @@ from atommic.collections.reconstruction.nn.rim_base import rim_block
 from atommic.collections.reconstruction.nn.rim_base.conv_layers import ConvNonlinear
 from atommic.collections.reconstruction.nn.unet_base.unet_block import Unet
 from atommic.collections.segmentation.nn.attentionunet_base.attentionunet_block import AttentionUnet
-from atommic.collections.segmentation.nn.lambdaunet_base.lambdaunet_block import LambdaBlock
+from atommic.collections.segmentation.nn.lambdaunet_base.lambdaunet_block import LambdaUNet
 from atommic.collections.segmentation.nn.vnet_base.vnet_block import VNet
 from atommic.collections.segmentation.nn.unet3d_base.unet3d_block import UNet3D
 __all__ = ["MTLRSBlock"]
@@ -157,33 +157,34 @@ class MTLRSBlock(torch.nn.Module):
                 drop_prob=self.segmentation_module_params["dropout"],
             )
         elif segmentation_module.lower() == "lambdaunet":
-            segmentation_module = LambdaBlock(
+            segmentation_module = LambdaUNet(
                 in_chans=self.input_channels,
                 out_chans=self.segmentation_module_output_channels,
+                chans=self.segmentation_module_params["channels"],
+                num_pool_layers=self.segmentation_module_params["pooling_layers"],
                 drop_prob=self.segmentation_module_params["dropout"],
-                temporal_kernel=self.segmentation_module_params["temporal_kernel"],
-                num_slices=self.consecutive_slices,
+                num_slices=self.consecutive_slices
             )
-        elif segmentation_module.lower() == "vnet":
-            segmentation_module = VNet(
-                in_chans=self.input_channels,
-                out_chans=self.segmentation_module_output_channels,
-                act=self.segmentation_module_params["activation"],
-                drop_prob=self.segmentation_module_params["dropout"],
-                bias=self.segmentation_module_params["bias"],
-            )
-        elif segmentation_module.lower() == "convlayer":
-            segmentation_module = torch.nn.Sequential(
-                ConvNonlinear(
-                    self.input_channels,
-                    self.segmentation_module_output_channels,
-                    conv_dim=self.segmentation_module_params["conv_dim"],
-                    kernel_size=3,
-                    dilation=1,
-                    bias=False,
-                    nonlinear=None,  # No nonlinear activation
-                )
-            )
+        # elif segmentation_module.lower() == "vnet":
+        #     segmentation_module = VNet(
+        #         in_chans=self.input_channels,
+        #         out_chans=self.segmentation_module_output_channels,
+        #         act=self.segmentation_module_params["activation"],
+        #         drop_prob=self.segmentation_module_params["dropout"],
+        #         bias=self.segmentation_module_params["bias"],
+        #    )
+        # elif segmentation_module.lower() == "convlayer":
+        #     segmentation_module = torch.nn.Sequential(
+        #         ConvNonlinear(
+        #             self.input_channels,
+        #             self.segmentation_module_output_channels,
+        #             conv_dim=self.segmentation_module_params["conv_dim"],
+        #             kernel_size=3,
+        #             dilation=1,
+        #             bias=False,
+        #             nonlinear=None,  # No nonlinear activation
+        #         )
+        #     )
         elif segmentation_module.lower() == "unet3d":
             segmentation_module = torch.nn.Sequential(UNet3D(
                 in_chans=self.input_channels,
