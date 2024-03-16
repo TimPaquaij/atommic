@@ -28,10 +28,10 @@ model:
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
   complex_data: true
-  consecutive_slices: 1
+  consecutive_slices: 9
   dimensionality: 2
   coil_combination_method: SENSE
-  coil_dim: 1
+  coil_dim: 2
   estimate_coil_sensitivity_maps_with_nn: false
   ssdu: false
   n2r: false
@@ -51,7 +51,7 @@ model:
     use_dataset_cache: false
     dataset_cache_file: None
     num_cols: None
-    consecutive_slices: 1
+    consecutive_slices: 9
     data_saved_per_slice: false
     complex_target: true
     apply_prewhitening: false
@@ -81,7 +81,7 @@ model:
     spatial_dims:
       - -2
       - -1
-    coil_dim: 1
+    coil_dim: 2
     use_seed: false
     segmentations_path: /data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
     construct_knee_label: false
@@ -110,7 +110,7 @@ model:
     use_dataset_cache: false
     dataset_cache_file: None
     num_cols: None
-    consecutive_slices: 1
+    consecutive_slices: 9
     data_saved_per_slice: false
     complex_target: true
     log_images_rate: 0.01
@@ -142,7 +142,7 @@ model:
     spatial_dims:
       - -2
       - -1
-    coil_dim: 1
+    coil_dim: 2
     use_seed: true
     segmentations_path: /data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
     construct_knee_label: false
@@ -170,7 +170,7 @@ model:
       warmup_ratio: 0.1
 
 trainer:
-  strategy: ddp_find_unused_parameters_true
+  strategy: ddp_find_unused_parameters_false
   accelerator: gpu
   devices: 1
   num_nodes: 1

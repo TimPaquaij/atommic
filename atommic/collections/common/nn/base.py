@@ -225,14 +225,14 @@ class BaseMRIModel(modelPT.ModelPT, ABC):
         for b_i, box in enumerate(v_boxes):
             # get coordinates and labels
             box_data = {"position": {
-                "minX": int(box[0]),
-                "maxX": int(box[1]),
-                "minY": int(box[2]),
-                "maxY": int(box[3])},
+                "minX": int(box[1]),
+                "maxX": int(box[3]),
+                "minY": int(box[0]),
+                "maxY": int(box[2])},
                 "class_id": int(v_labels[b_i]),
                 # optionally caption each box with its class and score
+                "domain":"pixel",
                 "box_caption": "%s (%.3f)" % (class_id_to_categories[v_labels[b_i]], v_scores[b_i]),
-                "domain": "pixel",
                 "scores": {"score": v_scores[b_i]}}
             all_boxes.append(box_data)
         box_image = wandb.Image(

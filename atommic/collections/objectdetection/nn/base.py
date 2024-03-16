@@ -369,12 +369,12 @@ class BaseMRIObjectdetectionModel(BaseMRIModel, ABC):
 
         # Ensure all inputs are both viewed in the same way.
 
-
         if self.consecutive_slices > 1:
+            dict_target = [dict_target[2//self.consecutive_slices]]
+            dict_predictions = [dict_predictions[2 // self.consecutive_slices]]
             target_reconstruction = target_reconstruction[:, 2//self.consecutive_slices]
-            dict_target = dict_target[self.consecutive_slices // 2]
-        else:
-            batch_size = target_reconstruction.shape[0]
+
+        batch_size = target_reconstruction.shape[0]
 
 
 
@@ -601,7 +601,7 @@ class BaseMRIObjectdetectionModel(BaseMRIModel, ABC):
         }
 
         self.log(
-            "train_segmentation_loss",
+            "train_objectdetection_loss",
             train_loss,
             on_step=True,
             on_epoch=True,
@@ -674,7 +674,6 @@ class BaseMRIObjectdetectionModel(BaseMRIModel, ABC):
 
         # print memory usage for debugging
         val_loss = self.__compute_loss__(outputs["target_loss"], outputs["predictions_loss"], attrs)  # type: ignore
-
         # Compute metrics and log them and log outputs.
         self.__compute_and_log_metrics_and_outputs__(
             outputs["predictions_dict"],
@@ -808,7 +807,7 @@ class BaseMRIObjectdetectionModel(BaseMRIModel, ABC):
 
         # reduce across ddp via sum
 
-        metrics["Class"] = self.CLASS_BCE(metrics["Cross_Entropy"])
+        metrics["Class"] = self.CLASS_BCE(metrics["Class"])
         metrics["BBox"] = self.CLASS_BCE(metrics["BBox"])
         metrics["Object"] = self.CLASS_BCE(metrics["Object"])
         tot_examples = self.TotExamples(torch.tensor(local_examples))
@@ -825,58 +824,43 @@ class BaseMRIObjectdetectionModel(BaseMRIModel, ABC):
             Dictionary of metrics.
         """
         # Log metrics.
-        if self.cross_entropy_metric is not None:
-            cross_entropy_vals = defaultdict(dict)
-            for k, v in self.cross_entropy_vals.items():
-                cross_entropy_vals[k].update(v)
+        class_bce_vals = defaultdict(dict)
+        for k, v in self.class_bce_vals.items():
+            class_bce_vals[k].update(v)
 
-        dice_vals = defaultdict(dict)
-        for k, v in self.dice_vals.items():
-            dice_vals[k].update(v)
+        bbox_bce_vals = defaultdict(dict)
+        for k, v in self.bbox_bce_vals.items():
+            bbox_bce_vals[k].update(v)
 
-        metrics = {"Cross_Entropy": 0, "DICE": 0}
+        object_bce_vals = defaultdict(dict)
+        for k, v in self.object_bce_vals.items():
+            object_bce_vals[k].update(v)
+
+        metrics = {"Class": 0, "BBox": 0, "Object": 0}
 
         local_examples = 0
-        for fname in dice_vals:
+        for fname in class_bce_vals:
             local_examples += 1
-            if self.cross_entropy_metric is not None:
-                metrics["Cross_Entropy"] = metrics["Cross_Entropy"] + torch.mean(
-                    torch.cat([v.view(-1) for _, v in cross_entropy_vals[fname].items()])
-                )
-            metrics["DICE"] = metrics["DICE"] + torch.mean(
-                torch.cat([v.view(-1) for _, v in dice_vals[fname].items()])
+
+            metrics["Class"] = metrics["Class"] + torch.mean(
+                torch.cat([v.view(-1) for _, v in class_bce_vals[fname].items()])
+            )
+            metrics["BBox"] = metrics["BBox"] + torch.mean(
+                torch.cat([v.view(-1) for _, v in bbox_bce_vals[fname].items()])
+            )
+            metrics["Object"] = metrics["Object"] + torch.mean(
+                torch.cat([v.view(-1) for _, v in bbox_bce_vals[fname].items()])
             )
 
         # reduce across ddp via sum
-        if self.cross_entropy_metric is not None:
-            metrics["Cross_Entropy"] = self.CROSS_ENTROPY(metrics["Cross_Entropy"])
-        metrics["DICE"] = self.DICE(metrics["DICE"])
+        metrics["Class"] = self.CLASS_BCE(metrics["Class"])
+        metrics["BBox"] = self.CLASS_BCE(metrics["BBox"])
+        metrics["Object"] = self.CLASS_BCE(metrics["Object"])
         tot_examples = self.TotExamples(torch.tensor(local_examples))
 
         for metric, value in metrics.items():
             self.log(f"test_metrics/{metric}", value / tot_examples, prog_bar=True, sync_dist=True)
 
-        segmentations = defaultdict(list)
-        for fname, slice_num, segmentations_pred in self.test_step_outputs:
-            segmentations[fname].append((slice_num, segmentations_pred))
-
-        for fname in segmentations:
-            segmentations[fname] = np.stack([out for _, out in sorted(segmentations[fname])])
-
-        if self.consecutive_slices > 1:
-            # iterate over the slices and always keep the middle slice
-            for fname in segmentations:
-                segmentations[fname] = segmentations[fname][:, self.consecutive_slices // 2]
-
-        if "wandb" in self.logger.__module__.lower():
-            out_dir = Path(os.path.join(self.logger.save_dir, "segmentations"))
-        else:
-            out_dir = Path(os.path.join(self.logger.log_dir, "segmentations"))
-        out_dir.mkdir(exist_ok=True, parents=True)
-
-        for fname, segmentations_pred in segmentations.items():
-            with h5py.File(out_dir / fname, "w") as hf:
-                hf.create_dataset("segmentation", data=segmentations_pred)
 
     @staticmethod
     def _setup_dataloader_from_config(cfg: DictConfig) -> DataLoader:
