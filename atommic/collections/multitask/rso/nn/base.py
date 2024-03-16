@@ -7,7 +7,6 @@ from abc import ABC
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Tuple, Union
-import matplotlib.pyplot as plt
 import h5py
 import numpy as np
 import torch
@@ -42,7 +41,6 @@ from atommic.collections.reconstruction.metrics import mse, nmse, psnr, ssim, ha
 from atommic.collections.segmentation.losses.cross_entropy import CrossEntropyLoss, BinaryCrossEntropy_with_logits_Loss
 from atommic.collections.segmentation.losses.dice import Dice, one_hot
 from atommic.collections.objectdetection.losses.detectionloss import BBoxLoss,ClassLoss,ObjectLoss
-from atommic.collections.objectdetection.parts.transform import Transformer
 
 __all__ = ["BaseMRIReconstructionSegmentationObjectDetectionModel"]
 
@@ -856,18 +854,10 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
         fname = attrs["fname"]
         slice_idx = attrs["slice_idx"]
 
-        # Ensure loss inputs are both viewed in the same way.
-        target_reconstruction = self.__abs_output__(target_reconstruction)
-        target_reconstruction = torch.abs(target_reconstruction / torch.max(torch.abs(target_reconstruction)))
-        predictions_reconstruction = self.__abs_output__(predictions_reconstruction)
-        predictions_reconstruction = torch.abs(
-            predictions_reconstruction / torch.max(torch.abs(predictions_reconstruction)))
 
 
-        if torch.max(target_reconstruction) != 1:
-            target_reconstruction = torch.clip(target_reconstruction, 0, 1)
-        if torch.max(predictions_reconstruction) != 1:
-            predictions_reconstruction = torch.clip(predictions_reconstruction, 0, 1)
+
+
 
         # Iterate over the batch and log the target and predictions.
         for _batch_idx_ in range(target_segmentation.shape[0]):
@@ -875,6 +865,18 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
             output_target_reconstruction = target_reconstruction[_batch_idx_]
             output_predictions_segmentation = predictions_segmentation[_batch_idx_]
             output_target_segmentation = target_segmentation[_batch_idx_]
+
+            # Ensure loss inputs are both viewed in the same way.
+            output_target_reconstruction = self.__abs_output__(output_target_reconstruction)
+            output_predictions_reconstruction = self.__abs_output__(output_predictions_reconstruction)
+
+            output_target_reconstruction = torch.abs(output_target_reconstruction / torch.max(torch.abs(output_target_reconstruction)))
+            output_predictions_reconstruction = torch.abs(
+                output_predictions_reconstruction / torch.max(torch.abs(output_predictions_reconstruction)))
+            if torch.max(target_reconstruction) != 1:
+                output_target_reconstruction = torch.clip(output_target_reconstruction, 0, 1)
+            if torch.max(predictions_reconstruction) != 1:
+                output_predictions_reconstruction = torch.clip(output_predictions_reconstruction, 0, 1)
 
             if self.unnormalize_log_outputs:
                 # Unnormalize target and predictions with pre normalization values. This is only for logging purposes.
@@ -913,30 +915,6 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
                 output_target_segmentation = torch.where(torch.abs(output_target_segmentation.detach().cpu()) > 0.5,1,0).float()
                 output_predictions_segmentation = torch.where(torch.abs(output_predictions_segmentation.detach().cpu())  > 0.5,1,0).float()
 
-            # # Normalize target and predictions to [0, 1] for logging.
-            # if torch.is_complex(output_target_reconstruction) and output_target_reconstruction.shape[-1] != 2:
-            #     output_target_reconstruction = torch.view_as_real(output_target_reconstruction)
-            #
-            # if output_target_reconstruction.shape[-1] == 2:
-            #     output_target_reconstruction = torch.view_as_complex(output_target_reconstruction)
-            #     output_target_reconstruction = output_target_reconstruction / torch.max(torch.abs(output_target_reconstruction))
-            # output_target_reconstruction = torch.abs(output_target_reconstruction)
-            # #output_target_reconstruction = torch.clip(output_target_reconstruction,0,1)
-            # output_target_reconstruction = output_target_reconstruction.detach().cpu()
-            #
-            # if (
-            #     torch.is_complex(output_predictions_reconstruction)
-            #     and output_predictions_reconstruction.shape[-1] != 2
-            # ):
-            #     output_predictions_reconstruction = torch.view_as_real(output_predictions_reconstruction)
-            # if output_predictions_reconstruction.shape[-1] == 2:
-            #     output_predictions_reconstruction = torch.view_as_complex(output_predictions_reconstruction)
-            #     output_predictions_reconstruction = output_predictions_reconstruction / torch.max(
-            #         torch.abs(output_predictions_reconstruction))
-            # output_predictions_reconstruction = torch.abs(output_predictions_reconstruction)
-            # #output_predictions_reconstruction = torch.clip(output_predictions_reconstruction, 0, 1)
-            # output_predictions_reconstruction = output_predictions_reconstruction.detach().cpu()
-            # Log target and predictions, if log_image is True for this slice.
             if attrs["log_image"][_batch_idx_] and target_obj_detection["boxes"].reshape(-1,4).numel() != 0:
                 key = f"{fname[_batch_idx_]}_slice_{int(slice_idx[_batch_idx_])}"
 
@@ -1006,6 +984,8 @@ class BaseMRIReconstructionSegmentationObjectDetectionModel(atommic_common.nn.ba
                     vsi3d(output_target_reconstruction, output_predictions_reconstruction, maxval=max_value)
                 ).view(1)
 
+            output_target_segmentation = output_target_segmentation.unsqueeze(0)
+            output_predictions_segmentation = output_predictions_segmentation.unsqueeze(0)
             if self.cross_entropy_metric is not None:
                 self.cross_entropy_vals[fname[_batch_idx_]][
                     str(slice_idx[_batch_idx_].item())

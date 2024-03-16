@@ -2,12 +2,10 @@ import numpy as np
 import torch
 from torch import Tensor
 from atommic.core.classes.loss import Loss
-from typing import Any, Callable, List, Optional, Tuple, Union,Dict
+from typing import Any, List, Tuple, Union,Dict
 from atommic.collections.objectdetection.nn.yolo_base import box_ops
 from atommic.collections.segmentation.losses.cross_entropy import BinaryCrossEntropy_with_logits_Loss
-from torch import nn
-from atommic.collections.objectdetection.parts.transform import Transformer
-import torch.nn.functional as F
+
 
 class BBoxLoss(Loss):
     def __init__(

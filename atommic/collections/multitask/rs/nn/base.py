@@ -925,16 +925,17 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                 self.vsi_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
                     vsi3d(output_target_reconstruction, output_predictions_reconstruction, maxval=max_value)
                 ).view(1)
-
+            output_target_segmentation = output_target_segmentation.unsqueeze(0)
+            output_predictions_segmentation = output_predictions_segmentation.unsqueeze(0)
             if self.cross_entropy_metric is not None:
                 self.cross_entropy_vals[fname[_batch_idx_]][
                     str(slice_idx[_batch_idx_].item())
                 ] = 1-self.cross_entropy_metric(
-                    output_target_segmentation.unsqueeze(0).to(self.device),
-                    output_predictions_segmentation.unsqueeze(0).to(self.device),
+                    output_target_segmentation.to(self.device),
+                    output_predictions_segmentation.to(self.device),
                 )
 
-            dice_score, _ = self.dice_metric(output_target_segmentation.unsqueeze(0), output_predictions_segmentation.unsqueeze(0))
+            dice_score, _ = self.dice_metric(output_target_segmentation, output_predictions_segmentation)
             self.dice_vals[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = dice_score
 
     def __check_noise_to_recon_inputs__(

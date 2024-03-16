@@ -1,5 +1,5 @@
 # coding=utf-8
-__author__ = "Dimitris Karkalousos"
+__author__ = "Tim Paquaij"
 
 import os
 import warnings
@@ -16,25 +16,18 @@ from pytorch_lightning import Trainer
 from torch.utils.data import DataLoader
 
 from atommic.collections.common.data.subsample import create_masker
-from atommic.collections.common.losses import VALID_SEGMENTATION_LOSSES
+from atommic.collections.common.losses import VALID_OBJ_DETECTION_LOSSES
 from atommic.collections.common.losses.aggregator import AggregatorLoss
 from atommic.collections.common.nn.base import BaseMRIModel, DistributedMetricSum
 from atommic.collections.common.parts.utils import complex_abs, complex_abs_sq, is_none, unnormalize
-from atommic.collections.segmentation.data.mri_segmentation_loader import (
-    BraTS2023AdultGliomaSegmentationMRIDataset,
-    ISLES2022SubAcuteStrokeSegmentationMRIDataset,
-    SegmentationMRIDataset,
-    SKMTEASegmentationMRIDataset,
-    SKMTEASegmentationMRIDatasetLateral,
-)
-from atommic.collections.segmentation.losses.cross_entropy import CrossEntropyLoss
-from atommic.collections.segmentation.losses.dice import Dice
-from atommic.collections.segmentation.parts.transforms import SegmentationMRIDataTransforms
+from atommic.collections.objectdetection.data import mri_object_detection_loader
+from atommic.collections.objectdetection.losses import ClassLoss,ObjectLoss,BBoxLoss
+from atommic.collections.objectdetection.parts.transforms import ObjectdetectionMRIDataTransforms
 
-__all__ = ["BaseMRISegmentationModel"]
+__all__ = ["BaseMRIObjectdetectionModel"]
 
 
-class BaseMRISegmentationModel(BaseMRIModel, ABC):
+class BaseMRIObjectdetectionModel(BaseMRIModel, ABC):
     """Base class of all MRI Segmentation models."""
 
     def __init__(self, cfg: DictConfig, trainer: Trainer = None):
@@ -56,9 +49,9 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
         self.consecutive_slices = cfg_dict.get("consecutive_slices", 1)
 
         # Set input channels.
-        self.input_channels = cfg_dict.get("segmentation_module_input_channels", 2)
-        if self.input_channels == 0:
-            raise ValueError("Segmentation module input channels cannot be 0.")
+        # self.input_channels = cfg_dict.get("segmentation_module_input_channels", 2)
+        # if self.input_channels == 0:
+        #     raise ValueError("Segmentation module input channels cannot be 0.")
 
         # Set type of data, i.e., magnitude only or complex valued.
         self.magnitude_input = cfg_dict.get("magnitude_input", True)
@@ -70,127 +63,182 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
         self.unnormalize_loss_inputs = cfg_dict.get("unnormalize_loss_inputs", False)
         self.unnormalize_log_outputs = cfg_dict.get("unnormalize_log_outputs", False)
         self.normalization_type = cfg_dict.get("normalization_type", "max")
-        self.normalize_segmentation_output = cfg_dict.get("normalize_segmentation_output", True)
+        # self.normalize_segmentation_output = cfg_dict.get("normalize_segmentation_output", True)
 
         # Whether to log multiple modalities, e.g. T1, T2, and FLAIR will be stacked and logged.
         self.log_multiple_modalities = cfg_dict.get("log_multiple_modalities", False)
 
         # Set threshold for segmentation classes. If None, no thresholding is applied.
-        self.segmentation_classes_thresholds = cfg_dict.get("segmentation_classes_thresholds", None)
-        self.segmentation_activation = cfg_dict.get("segmentation_activation", None)
+        # self.segmentation_classes_thresholds = cfg_dict.get("segmentation_classes_thresholds", None)
+        # self.segmentation_activation = cfg_dict.get("segmentation_activation", None)
 
-        # Initialize loss related parameters.
-        self.segmentation_losses = {}
-        segmentation_loss = cfg_dict.get("segmentation_loss")
-        segmentation_losses_ = {}
-        if segmentation_loss is not None:
-            for k, v in segmentation_loss.items():
-                if k not in VALID_SEGMENTATION_LOSSES:
+        # # Initialize loss related parameters.
+        # self.segmentation_losses = {}
+        # segmentation_loss = cfg_dict.get("segmentation_loss")
+        # segmentation_losses_ = {}
+        # if segmentation_loss is not None:
+        #     for k, v in segmentation_loss.items():
+        #         if k not in VALID_SEGMENTATION_LOSSES:
+        #             raise ValueError(
+        #                 f"Segmentation loss {k} is not supported. Please choose one of the following: "
+        #                 f"{VALID_SEGMENTATION_LOSSES}."
+        #             )
+        #         if v is None or v == 0.0:
+        #             warnings.warn(f"The weight of segmentation loss {k} is set to 0.0. This loss will not be used.")
+        #         else:
+        #             segmentation_losses_[k] = v
+        # else:
+        #     # Default segmentation loss is Dice.
+        #     segmentation_losses_["dice"] = 1.0
+        # if sum(segmentation_losses_.values()) != 1.0:
+        #     warnings.warn("Sum of segmentation losses weights is not 1.0. Adjusting weights to sum up to 1.0.")
+        #     total_weight = sum(segmentation_losses_.values())
+        #     segmentation_losses_ = {k: v / total_weight for k, v in segmentation_losses_.items()}
+        # for name in VALID_SEGMENTATION_LOSSES:
+        #     if name in segmentation_losses_:
+        #         if name == "cross_entropy":
+        #             cross_entropy_loss_classes_weight = torch.tensor(
+        #                 cfg_dict.get("cross_entropy_loss_classes_weight", 0.5)
+        #             )
+        #             self.segmentation_losses[name] = CrossEntropyLoss(
+        #                 num_samples=cfg_dict.get("cross_entropy_loss_num_samples", 50),
+        #                 ignore_index=cfg_dict.get("cross_entropy_loss_ignore_index", -100),
+        #                 reduction=cfg_dict.get("cross_entropy_loss_reduction", "none"),
+        #                 label_smoothing=cfg_dict.get("cross_entropy_loss_label_smoothing", 0.0),
+        #                 weight=cross_entropy_loss_classes_weight,
+        #             )
+        #         elif name == "dice":
+        #             self.segmentation_losses[name] = Dice(
+        #                 include_background=cfg_dict.get("dice_loss_include_background", False),
+        #                 to_onehot_y=cfg_dict.get("dice_loss_to_onehot_y", False),
+        #                 sigmoid=cfg_dict.get("dice_loss_sigmoid", True),
+        #                 softmax=cfg_dict.get("dice_loss_softmax", False),
+        #                 other_act=cfg_dict.get("dice_loss_other_act", None),
+        #                 squared_pred=cfg_dict.get("dice_loss_squared_pred", False),
+        #                 jaccard=cfg_dict.get("dice_loss_jaccard", False),
+        #                 flatten=cfg_dict.get("dice_loss_flatten", False),
+        #                 reduction=cfg_dict.get("dice_loss_reduction", "mean"),
+        #                 smooth_nr=cfg_dict.get("dice_loss_smooth_nr", 1e-5),
+        #                 smooth_dr=cfg_dict.get("dice_loss_smooth_dr", 1e-5),
+        #                 batch=cfg_dict.get("dice_loss_batch", False),
+        #             )
+        # self.segmentation_losses = {f"loss_{i+1}": v for i, v in enumerate(self.segmentation_losses.values())}
+        # self.total_segmentation_losses = len(self.segmentation_losses)
+        # self.total_segmentation_loss_weight = cfg_dict.get("total_segmentation_loss_weight", 1.0)
+        #
+        # # Set the metrics
+        # cross_entropy_metric_num_samples = cfg_dict.get("cross_entropy_metric_num_samples", 50)
+        # cross_entropy_metric_ignore_index = cfg_dict.get("cross_entropy_metric_ignore_index", -100)
+        # cross_entropy_metric_reduction = cfg_dict.get("cross_entropy_metric_reduction", "none")
+        # cross_entropy_metric_label_smoothing = cfg_dict.get("cross_entropy_metric_label_smoothing", 0.0)
+        # cross_entropy_metric_classes_weight = cfg_dict.get("cross_entropy_metric_classes_weight", None)
+        # dice_metric_include_background = cfg_dict.get("dice_metric_include_background", False)
+        # dice_metric_to_onehot_y = cfg_dict.get("dice_metric_to_onehot_y", False)
+        # dice_metric_sigmoid = cfg_dict.get("dice_metric_sigmoid", True)
+        # dice_metric_softmax = cfg_dict.get("dice_metric_softmax", False)
+        # dice_metric_other_act = cfg_dict.get("dice_metric_other_act", None)
+        # dice_metric_squared_pred = cfg_dict.get("dice_metric_squared_pred", False)
+        # dice_metric_jaccard = cfg_dict.get("dice_metric_jaccard", False)
+        # dice_metric_flatten = cfg_dict.get("dice_metric_flatten", False)
+        # dice_metric_reduction = cfg_dict.get("dice_metric_reduction", "mean")
+        # dice_metric_smooth_nr = cfg_dict.get("dice_metric_smooth_nr", 1e-5)
+        # dice_metric_smooth_dr = cfg_dict.get("dice_metric_smooth_dr", 1e-5)
+        # dice_metric_batch = cfg_dict.get("dice_metric_batch", True)
+        #
+        # # Initialize the module
+        # super().__init__(cfg=cfg, trainer=trainer)
+        #
+        # if not is_none(cross_entropy_metric_classes_weight):
+        #     cross_entropy_metric_classes_weight = torch.tensor(cross_entropy_metric_classes_weight)
+        #     self.cross_entropy_metric = CrossEntropyLoss(
+        #         num_samples=cross_entropy_metric_num_samples,
+        #         ignore_index=cross_entropy_metric_ignore_index,
+        #         reduction=cross_entropy_metric_reduction,
+        #         label_smoothing=cross_entropy_metric_label_smoothing,
+        #         weight=cross_entropy_metric_classes_weight,
+        #     )
+        # else:
+        #     self.cross_entropy_metric = None  # type: ignore
+        # self.dice_metric = Dice(
+        #     include_background=dice_metric_include_background,
+        #     to_onehot_y=dice_metric_to_onehot_y,
+        #     sigmoid=dice_metric_sigmoid,
+        #     softmax=dice_metric_softmax,
+        #     other_act=dice_metric_other_act,
+        #     squared_pred=dice_metric_squared_pred,
+        #     jaccard=dice_metric_jaccard,
+        #     flatten=dice_metric_flatten,
+        #     reduction=dice_metric_reduction,
+        #     smooth_nr=dice_metric_smooth_nr,
+        #     smooth_dr=dice_metric_smooth_dr,
+        #     batch=dice_metric_batch,
+        # )
+        #
+        # # Set aggregation loss
+        # self.total_segmentation_loss = AggregatorLoss(
+        #     num_inputs=self.total_segmentation_losses, weights=list(segmentation_losses_.values())
+        # )
+        self.obj_detection_losses = {}
+        obj_detection_loss = cfg_dict.get("obj_detection_loss", None)
+        obj_detection_losses_ = {}
+        if obj_detection_loss is not None:
+            for k, v in obj_detection_loss.items():
+                if k not in VALID_OBJ_DETECTION_LOSSES:
                     raise ValueError(
-                        f"Segmentation loss {k} is not supported. Please choose one of the following: "
-                        f"{VALID_SEGMENTATION_LOSSES}."
+                        f"Object Detection loss {k} is not supported. Please choose one of the following: "
+                        f"{VALID_OBJ_DETECTION_LOSSES}."
                     )
                 if v is None or v == 0.0:
-                    warnings.warn(f"The weight of segmentation loss {k} is set to 0.0. This loss will not be used.")
+                    warnings.warn(f"The weight of object detection loss {k} is set to 0.0. This loss will not be used.")
                 else:
-                    segmentation_losses_[k] = v
+                    obj_detection_losses_[k] = v
         else:
-            # Default segmentation loss is Dice.
-            segmentation_losses_["dice"] = 1.0
-        if sum(segmentation_losses_.values()) != 1.0:
+            # Default object detection loss.
+            obj_detection_losses_["object"] = 0.8
+            obj_detection_losses_["bbox"] = 0.05
+            obj_detection_losses_["class"] = 0.15
+        if sum(obj_detection_losses_.values()) != 1.0:
             warnings.warn("Sum of segmentation losses weights is not 1.0. Adjusting weights to sum up to 1.0.")
-            total_weight = sum(segmentation_losses_.values())
-            segmentation_losses_ = {k: v / total_weight for k, v in segmentation_losses_.items()}
-        for name in VALID_SEGMENTATION_LOSSES:
-            if name in segmentation_losses_:
-                if name == "cross_entropy":
-                    cross_entropy_loss_classes_weight = torch.tensor(
-                        cfg_dict.get("cross_entropy_loss_classes_weight", 0.5)
-                    )
-                    self.segmentation_losses[name] = CrossEntropyLoss(
-                        num_samples=cfg_dict.get("cross_entropy_loss_num_samples", 50),
-                        ignore_index=cfg_dict.get("cross_entropy_loss_ignore_index", -100),
-                        reduction=cfg_dict.get("cross_entropy_loss_reduction", "none"),
-                        label_smoothing=cfg_dict.get("cross_entropy_loss_label_smoothing", 0.0),
-                        weight=cross_entropy_loss_classes_weight,
-                    )
-                elif name == "dice":
-                    self.segmentation_losses[name] = Dice(
-                        include_background=cfg_dict.get("dice_loss_include_background", False),
-                        to_onehot_y=cfg_dict.get("dice_loss_to_onehot_y", False),
-                        sigmoid=cfg_dict.get("dice_loss_sigmoid", True),
-                        softmax=cfg_dict.get("dice_loss_softmax", False),
-                        other_act=cfg_dict.get("dice_loss_other_act", None),
-                        squared_pred=cfg_dict.get("dice_loss_squared_pred", False),
-                        jaccard=cfg_dict.get("dice_loss_jaccard", False),
-                        flatten=cfg_dict.get("dice_loss_flatten", False),
-                        reduction=cfg_dict.get("dice_loss_reduction", "mean"),
-                        smooth_nr=cfg_dict.get("dice_loss_smooth_nr", 1e-5),
-                        smooth_dr=cfg_dict.get("dice_loss_smooth_dr", 1e-5),
-                        batch=cfg_dict.get("dice_loss_batch", False),
-                    )
-        self.segmentation_losses = {f"loss_{i+1}": v for i, v in enumerate(self.segmentation_losses.values())}
-        self.total_segmentation_losses = len(self.segmentation_losses)
+            total_weight = sum(obj_detection_losses_.values())
+            obj_detection_losses_ = {k: v / total_weight for k, v in obj_detection_losses_.items()}
+        for name in VALID_OBJ_DETECTION_LOSSES:
+            if name in obj_detection_losses_:
+                if name == "object":
+                    self.obj_detection_losses[name] = ObjectLoss(anchors=cfg_dict.get("anchors"),
+                                                                 strides=cfg_dict.get("strides"))
+                elif name == "class":
+                    self.obj_detection_losses[name] = ClassLoss(anchors=cfg_dict.get("anchors"),
+                                                                strides=cfg_dict.get("strides"))
+                elif name == "bbox":
+                    self.obj_detection_losses[name] = BBoxLoss(anchors=cfg_dict.get("anchors"),
+                                                               strides=cfg_dict.get("strides"))
+        self.obj_detection_losses = {f"loss_{i + 1}": v for i, v in enumerate(self.obj_detection_losses.values())}
+        self.total_obj_detection_losses = len(self.obj_detection_losses)
+
         self.total_segmentation_loss_weight = cfg_dict.get("total_segmentation_loss_weight", 1.0)
-
-        # Set the metrics
-        cross_entropy_metric_num_samples = cfg_dict.get("cross_entropy_metric_num_samples", 50)
-        cross_entropy_metric_ignore_index = cfg_dict.get("cross_entropy_metric_ignore_index", -100)
-        cross_entropy_metric_reduction = cfg_dict.get("cross_entropy_metric_reduction", "none")
-        cross_entropy_metric_label_smoothing = cfg_dict.get("cross_entropy_metric_label_smoothing", 0.0)
-        cross_entropy_metric_classes_weight = cfg_dict.get("cross_entropy_metric_classes_weight", None)
-        dice_metric_include_background = cfg_dict.get("dice_metric_include_background", False)
-        dice_metric_to_onehot_y = cfg_dict.get("dice_metric_to_onehot_y", False)
-        dice_metric_sigmoid = cfg_dict.get("dice_metric_sigmoid", True)
-        dice_metric_softmax = cfg_dict.get("dice_metric_softmax", False)
-        dice_metric_other_act = cfg_dict.get("dice_metric_other_act", None)
-        dice_metric_squared_pred = cfg_dict.get("dice_metric_squared_pred", False)
-        dice_metric_jaccard = cfg_dict.get("dice_metric_jaccard", False)
-        dice_metric_flatten = cfg_dict.get("dice_metric_flatten", False)
-        dice_metric_reduction = cfg_dict.get("dice_metric_reduction", "mean")
-        dice_metric_smooth_nr = cfg_dict.get("dice_metric_smooth_nr", 1e-5)
-        dice_metric_smooth_dr = cfg_dict.get("dice_metric_smooth_dr", 1e-5)
-        dice_metric_batch = cfg_dict.get("dice_metric_batch", True)
-
+        self.total_reconstruction_loss_weight = cfg_dict.get("total_reconstruction_loss_weight", 1.0)
+        self.total_obj_detection_loss_weight = cfg_dict.get("total_obj_detection_loss_weight", 1.0)
+        self.anchors = cfg_dict.get("anchors")
+        self.strides = cfg_dict.get("strides")
         # Initialize the module
         super().__init__(cfg=cfg, trainer=trainer)
-
-        if not is_none(cross_entropy_metric_classes_weight):
-            cross_entropy_metric_classes_weight = torch.tensor(cross_entropy_metric_classes_weight)
-            self.cross_entropy_metric = CrossEntropyLoss(
-                num_samples=cross_entropy_metric_num_samples,
-                ignore_index=cross_entropy_metric_ignore_index,
-                reduction=cross_entropy_metric_reduction,
-                label_smoothing=cross_entropy_metric_label_smoothing,
-                weight=cross_entropy_metric_classes_weight,
-            )
-        else:
-            self.cross_entropy_metric = None  # type: ignore
-        self.dice_metric = Dice(
-            include_background=dice_metric_include_background,
-            to_onehot_y=dice_metric_to_onehot_y,
-            sigmoid=dice_metric_sigmoid,
-            softmax=dice_metric_softmax,
-            other_act=dice_metric_other_act,
-            squared_pred=dice_metric_squared_pred,
-            jaccard=dice_metric_jaccard,
-            flatten=dice_metric_flatten,
-            reduction=dice_metric_reduction,
-            smooth_nr=dice_metric_smooth_nr,
-            smooth_dr=dice_metric_smooth_dr,
-            batch=dice_metric_batch,
+        self.total_obj_detection_loss = AggregatorLoss(
+            num_inputs=self.total_obj_detection_losses, weights=list(obj_detection_losses_.values())
         )
-
-        # Set aggregation loss
-        self.total_segmentation_loss = AggregatorLoss(
-            num_inputs=self.total_segmentation_losses, weights=list(segmentation_losses_.values())
-        )
+        self.class_metric = ClassLoss(anchors=self.anchors,
+                                                                 strides=self.strides) #TODO Change later into official metric
+        self.object_metric = ObjectLoss(anchors=self.anchors,
+                                                                 strides=self.strides)
+        self.bbox_metric =BBoxLoss(anchors=self.anchors,
+                                                                 strides=self.strides)
 
         # Set distributed metrics
-        self.CROSS_ENTROPY = DistributedMetricSum()
-        self.DICE = DistributedMetricSum()
-        self.cross_entropy_vals: Dict = defaultdict(dict)
-        self.dice_vals: Dict = defaultdict(dict)
+        self.CLASS_BCE = DistributedMetricSum()
+        self.OBJ_BCE = DistributedMetricSum()
+        self.BBOX_BCE = DistributedMetricSum()
+        self.class_bce_vals: Dict = defaultdict(dict)
+        self.object_bce_vals: Dict = defaultdict(dict)
+        self.bbox_bce_vals: Dict = defaultdict(dict)
         self.TotExamples = DistributedMetricSum()
 
     def __abs_output__(self, x: torch.Tensor) -> torch.Tensor:
@@ -257,7 +305,8 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
 
         return target, prediction
 
-    def process_segmentation_loss(self, target: torch.Tensor, prediction: torch.Tensor, attrs: Dict) -> Dict:
+    def process_obj_detection_loss(self, target: Dict, prediction: torch.Tensor, attrs: Dict,
+                                   loss_func: torch.nn.Module) -> Dict:
         """Processes the segmentation loss.
 
         Parameters
@@ -276,22 +325,26 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
             are used, the dictionary will contain the keys ``cross_entropy_loss``, ``dice_loss``, and
             (combined) ``segmentation_loss``.
         """
-        if self.unnormalize_loss_inputs:
-            target, prediction = self.__unnormalize_for_loss_or_log__(target, prediction, attrs)
-        losses = {}
-        for name, loss_func in self.segmentation_losses.items():
-            loss = loss_func(target, prediction)
-            if isinstance(loss, tuple):
-                # In case of the dice loss, the loss is a tuple of the form (dice, dice loss)
-                loss = loss[1]
-            losses[name] = loss
-        return self.total_segmentation_loss(**losses) * self.total_segmentation_loss_weight
+        # if self.obj_detection_module_accumulate_predictions:
+        #     rs_cascades_weights = torch.logspace(-1, 0, steps=len(prediction)).to(
+        #         target[0]['labels'].device)
+        #     rs_cascades_loss = []
+        #     for pred in prediction:
+        #         loss = loss_func(target, pred)
+        #         rs_cascades_loss.append(loss)
+        #     loss = sum(x * w for x, w in zip(rs_cascades_loss, rs_cascades_weights)) / sum(rs_cascades_weights)
+        # else:
+        prediction = prediction
+        loss = loss_func(target, prediction)
+        return loss
 
     def __compute_and_log_metrics_and_outputs__(
         self,
-        predictions: Union[list, torch.Tensor],
+        dict_predictions: Union[list, Dict],
+        loss_predictions: Union[list, torch.tensor],
+        dict_target: Union[list, Dict],
+        loss_target: Union[list, Dict],
         target_reconstruction: torch.Tensor,
-        target_segmentation: torch.Tensor,
         attrs: Dict,
         fname: str,
         slice_idx: int,
@@ -313,31 +366,33 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
         slice_idx : int
             Slice index.
         """
-        if isinstance(predictions, list):
-            while isinstance(predictions, list):
-                predictions = predictions[-1]
 
         # Ensure all inputs are both viewed in the same way.
-        target_reconstruction = self.__abs_output__(target_reconstruction)
+
 
         if self.consecutive_slices > 1:
-            # reshape the target and prediction to [batch_size * consecutive_slices, nr_classes, n_x, n_y]
-            batch_size = target_segmentation.shape[0] // self.consecutive_slices
-            slice_to_keep = self.consecutive_slices // 2
-            target_segmentation = target_segmentation.reshape(
-                batch_size, self.consecutive_slices, *target_segmentation.shape[1:]
-            )[:, slice_to_keep]
-            predictions = predictions.reshape(batch_size, self.consecutive_slices, *predictions.shape[1:])[
-                :, slice_to_keep
-            ]
-            target_reconstruction = target_reconstruction[:, slice_to_keep]
+            target_reconstruction = target_reconstruction[:, 2//self.consecutive_slices]
+            dict_target = dict_target[self.consecutive_slices // 2]
         else:
-            batch_size = target_segmentation.shape[0]
+            batch_size = target_reconstruction.shape[0]
+
+
 
         # Iterate over the batch and log the target and predictions.
         for _batch_idx_ in range(batch_size):
-            output_target_segmentation = target_segmentation[_batch_idx_]
-            output_predictions = predictions[_batch_idx_]
+            dict_target = dict_target[_batch_idx_]
+            dict_predictions = dict_predictions[_batch_idx_]
+            output_target_reconstruction = target_reconstruction[_batch_idx_]
+
+            # Ensure loss inputs are both viewed in the same way.
+            output_target_reconstruction = self.__abs_output__(output_target_reconstruction)
+            output_target_reconstruction = torch.abs(
+                output_target_reconstruction / torch.max(torch.abs(output_target_reconstruction)))
+            if torch.max(target_reconstruction) != 1:
+                output_target_reconstruction = torch.clip(output_target_reconstruction, 0, 1)
+
+
+
 
             if self.unnormalize_log_outputs:
                 # Unnormalize target and predictions with pre normalization values. This is only for logging purposes.
@@ -346,16 +401,10 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
                     output_target_segmentation, output_predictions, attrs, batch_idx=_batch_idx_
                 )
 
-            output_target_segmentation = output_target_segmentation.detach().cpu()
-            output_predictions = output_predictions.detach().cpu()
-
             # Log target and predictions, if log_image is True for this slice.
-            if attrs["log_image"][_batch_idx_]:
+            if attrs["log_image"][_batch_idx_] and dict_target["boxes"].reshape(-1,4).numel() != 0:
                 key = f"{fname[_batch_idx_]}_slice_{int(slice_idx[_batch_idx_])}"  # type: ignore
 
-                # Normalize (reconstruction) target to [0, 1] for logging.
-                output_target_reconstruction = torch.abs(target_reconstruction[_batch_idx_]).float()
-                output_target_reconstruction = output_target_reconstruction / torch.max(output_target_reconstruction)
 
                 if self.log_multiple_modalities:
                     # concatenate the reconstruction predictions for logging
@@ -364,31 +413,24 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
                     )
 
                 self.log_image(f"{key}/a/input", output_target_reconstruction)
+                self.log_boundary_box(f"{key}/b/object_detection/target", output_target_reconstruction,
+                                      dict_target, attrs['categories'])
+                self.log_boundary_box(f"{key}/c/object_detection/prediction", output_target_reconstruction,
+                                      dict_predictions, attrs['categories'])
 
-                # concatenate the segmentation classes for logging
-                target_segmentation_classes = torch.cat(
-                    [output_target_segmentation[i] for i in range(output_target_segmentation.shape[0])], dim=-1
-                )
-                output_predictions_segmentation_classes = torch.cat(
-                    [output_predictions[i] for i in range(output_predictions.shape[0])], dim=-1
-                )
-                self.log_image(f"{key}/b/segmentation_labels", target_segmentation_classes)
-                self.log_image(f"{key}/c/segmentation_predictions", output_predictions_segmentation_classes)
-                self.log_image(
-                    f"{key}/d/segmentation_error",
-                    torch.abs(target_segmentation_classes - output_predictions_segmentation_classes),
-                )
 
-            output_target_segmentation = output_target_segmentation.unsqueeze(0)
-            output_predictions = output_predictions.unsqueeze(0)
 
-            if self.cross_entropy_metric is not None:
-                self.cross_entropy_vals[fname][slice_idx] = self.cross_entropy_metric(
-                    output_target_segmentation.to(self.device), output_predictions.to(self.device)
+            self.class_bce_vals[fname][slice_idx] = 1-self.class_metric(
+                    loss_target, loss_predictions
                 )
+            self.bbox_bce_vals[fname][slice_idx] = 1-self.bbox_metric(
+                loss_target, loss_predictions
+            )
+            self.object_bce_vals[fname][slice_idx] = 1-self.object_metric(
+                loss_target, loss_predictions
+            )
 
-            dice_score, _ = self.dice_metric(output_target_segmentation, output_predictions)
-            self.dice_vals[fname][slice_idx] = dice_score
+
 
     def inference_step(
         self, image: torch.Tensor, target: torch.Tensor, fname: str, slice_idx: int, attrs: Dict
@@ -424,36 +466,71 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
                     Attributes dictionary.
         """
         # Model forward pass
-        prediction = self.forward(image)
+        target = [{key: value.squeeze(0) for key, value in tgt.items()} for tgt in target]
+        pred_obj_detection, dict_obj_detection, target_obj_detection = self.forward(image,target)
 
-        if self.consecutive_slices > 1:
-            # reshape the target and prediction to [batch_size * consecutive_slices, nr_classes, n_x, n_y]
-            batch_size, slices = prediction.shape[:2]
-            if target.dim() == 5:
-                target = target.reshape(batch_size * slices, *target.shape[2:])
-            if prediction.dim() == 5:
-                prediction = prediction.reshape(batch_size * slices, *prediction.shape[2:])
-
-        if not is_none(self.segmentation_classes_thresholds):
-            for class_idx, thres in enumerate(self.segmentation_classes_thresholds):
-                if self.segmentation_activation == "sigmoid":
-                    cond = torch.sigmoid(prediction[:, class_idx])
-                elif self.segmentation_activation == "softmax":
-                    cond = torch.softmax(prediction[:, class_idx], dim=1)
-                else:
-                    cond = prediction[:, class_idx]
-                prediction[:, class_idx] = torch.where(
-                    cond >= thres, prediction[:, class_idx], torch.zeros_like(prediction[:, class_idx])
-                )
 
         return {
             "fname": fname,
             "slice_idx": slice_idx,
-            "predictions": prediction,
-            "target": target,
+            "predictions_dict": dict_obj_detection,
+            "predictions_loss":pred_obj_detection,
+            "target_loss": target_obj_detection,
+            "target_dict":target,
             "attrs": attrs,
         }
+    def __compute_loss__(
+        self,
+        target_obj_detection: Dict,
+        predictions_obj_detection: Union[list, torch.Tensor],
+        attrs: Dict,
+    ) -> torch.Tensor:
+        #TODO change imput description
+        """Computes the reconstruction loss.
 
+        Parameters
+        ----------
+        predictions_reconstruction : Union[list, torch.Tensor]
+            Prediction(s) of shape [batch_size, n_x, n_y, 2].
+        predictions_reconstruction_n2r : Union[list, torch.Tensor]
+            Prediction(s) of shape [batch_size, n_x, n_y, 2], if Noise-to-Recon is used. Otherwise, None.
+        target_reconstruction : torch.Tensor
+            Target data of shape [batch_size, n_x, n_y, 2].
+        predictions_segmentation : Union[list, torch.Tensor]
+            Prediction(s) of shape [batch_size, nr_classes, n_x, n_y].
+        sensitivity_maps : torch.Tensor
+            Sensitivity maps of shape [batch_size, n_coils, n_x, n_y, 2]. It will be used if self.ssdu is True, to
+            expand the target and prediction to multiple coils.
+        ssdu_loss_mask : torch.Tensor
+            SSDU loss mask of shape [batch_size, 1, n_x, n_y, 1]. It will be used if self.ssdu is True, to enforce
+            data consistency on the prediction.
+        attrs : Dict
+            Attributes of the data with pre normalization values.
+        r : int
+            The selected acceleration factor.
+
+        Returns
+        -------
+        loss: torch.FloatTensor
+            If self.accumulate_loss is True, returns an accumulative result of all intermediate losses.
+            Otherwise, returns the loss of the last intermediate loss.
+        """
+
+        losses = {}
+        for name, loss_func in self.obj_detection_losses.items():
+
+            losses[name] = (
+                    self.process_obj_detection_loss(
+                        target_obj_detection,
+                        predictions_obj_detection,
+                        attrs,
+                        loss_func=loss_func,
+                    )
+            )
+        loss = self.total_obj_detection_loss(**losses)
+
+
+        return loss
     def training_step(self, batch: Dict[float, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
         """Performs a training step.
 
@@ -497,28 +574,26 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
             _,
             _,
             _,
-            initial_reconstruction_prediction,
             _,
-            target_segmentation,
+            target_reconstruction,
+            _,
+            target_obj_detection,
             fname,
             slice_idx,
             _,
             attrs,
         ) = batch
 
-        # In case of complex (fully-sampled) data the initial_reconstruction_prediction is a list of tensors of len 1.
-        if isinstance(initial_reconstruction_prediction, list):
-            initial_reconstruction_prediction = initial_reconstruction_prediction[-1]
 
         outputs = self.inference_step(
-            initial_reconstruction_prediction,
-            target_segmentation,
+            target_reconstruction,
+            target_obj_detection,
             fname,  # type: ignore
             slice_idx,  # type: ignore
             attrs,  # type: ignore
         )
 
-        train_loss = self.process_segmentation_loss(outputs["target"], outputs["predictions"], attrs)  # type: ignore
+        train_loss = self.__compute_loss__(outputs["target_loss"], outputs["predictions_loss"], attrs)  # type: ignore
 
         tensorboard_logs = {
             "train_loss": train_loss.item(),  # type: ignore
@@ -576,38 +651,37 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
             _,
             _,
             _,
-            initial_reconstruction_prediction,
+            _,
             target_reconstruction,
-            target_segmentation,
+            _,
+            target_obj_detection,
             fname,
             slice_idx,
             _,
             attrs,
         ) = batch
 
-        # In case of complex (fully-sampled) data the initial_reconstruction_prediction is a list of tensors of len 1.
-        if isinstance(initial_reconstruction_prediction, list):
-            initial_reconstruction_prediction = initial_reconstruction_prediction[-1]
 
         outputs = self.inference_step(
-            initial_reconstruction_prediction,
-            target_segmentation,
+            target_reconstruction,
+            target_obj_detection,
             fname,  # type: ignore
             slice_idx,  # type: ignore
             attrs,  # type: ignore
         )
 
-        target_segmentation = outputs["target"]
-        predictions = outputs["predictions"]
+
 
         # print memory usage for debugging
-        val_loss = self.process_segmentation_loss(target_segmentation, predictions, attrs)  # type: ignore
+        val_loss = self.__compute_loss__(outputs["target_loss"], outputs["predictions_loss"], attrs)  # type: ignore
 
         # Compute metrics and log them and log outputs.
         self.__compute_and_log_metrics_and_outputs__(
-            predictions,
+            outputs["predictions_dict"],
+            outputs["predictions_loss"],
+            outputs["target_dict"],
+            outputs["target_loss"],
             target_reconstruction,
-            target_segmentation,
             attrs,  # type: ignore
             fname,  # type: ignore
             slice_idx,  # type: ignore
@@ -653,35 +727,33 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
             _,
             _,
             _,
-            initial_reconstruction_prediction,
+            _,
             target_reconstruction,
-            target_segmentation,
+            _,
+            target_obj_detection,
             fname,
             slice_idx,
             _,
             attrs,
         ) = batch
 
-        # In case of complex (fully-sampled) data the initial_reconstruction_prediction is a list of tensors of len 1.
-        if isinstance(initial_reconstruction_prediction, list):
-            initial_reconstruction_prediction = initial_reconstruction_prediction[-1]
 
         outputs = self.inference_step(
-            initial_reconstruction_prediction,
-            target_segmentation,
+            target_reconstruction,
+            target_obj_detection,
             fname,  # type: ignore
             slice_idx,  # type: ignore
             attrs,  # type: ignore
         )
 
-        target_segmentation = outputs["target"]
-        predictions = outputs["predictions"]
 
         # Compute metrics and log them and log outputs.
         self.__compute_and_log_metrics_and_outputs__(
-            predictions,
+            outputs["predictions_dict"],
+            outputs["predictions_loss"],
             target_reconstruction,
-            target_segmentation,
+            outputs["target_dict"],
+            outputs["target_loss"],
             attrs,  # type: ignore
             fname,  # type: ignore
             slice_idx,  # type: ignore
@@ -705,32 +777,40 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
         self.log("val_loss", torch.stack([x["val_loss"] for x in self.validation_step_outputs]).mean(), sync_dist=True)
 
         # Log metrics.
-        if self.cross_entropy_metric is not None:
-            cross_entropy_vals = defaultdict(dict)
-            for k, v in self.cross_entropy_vals.items():
-                cross_entropy_vals[k].update(v)
 
-        dice_vals = defaultdict(dict)
-        for k, v in self.dice_vals.items():
-            dice_vals[k].update(v)
+        class_bce_vals = defaultdict(dict)
+        for k, v in self.class_bce_vals.items():
+            class_bce_vals[k].update(v)
 
-        metrics = {"Cross_Entropy": 0, "DICE": 0}
+        bbox_bce_vals = defaultdict(dict)
+        for k, v in self.bbox_bce_vals.items():
+            bbox_bce_vals[k].update(v)
+
+        object_bce_vals = defaultdict(dict)
+        for k, v in self.object_bce_vals.items():
+            object_bce_vals[k].update(v)
+
+        metrics = {"Class": 0, "BBox": 0, "Object": 0}
 
         local_examples = 0
-        for fname in dice_vals:
+        for fname in class_bce_vals:
             local_examples += 1
-            if self.cross_entropy_metric is not None:
-                metrics["Cross_Entropy"] = metrics["Cross_Entropy"] + torch.mean(
-                    torch.cat([v.view(-1) for _, v in cross_entropy_vals[fname].items()])
-                )
-            metrics["DICE"] = metrics["DICE"] + torch.mean(
-                torch.cat([v.view(-1) for _, v in dice_vals[fname].items()])
+
+            metrics["Class"] = metrics["Class"] + torch.mean(
+                torch.cat([v.view(-1) for _, v in class_bce_vals[fname].items()])
+            )
+            metrics["BBox"] = metrics["BBox"] + torch.mean(
+                torch.cat([v.view(-1) for _, v in bbox_bce_vals[fname].items()])
+            )
+            metrics["Object"] = metrics["Object"] + torch.mean(
+                torch.cat([v.view(-1) for _, v in bbox_bce_vals[fname].items()])
             )
 
         # reduce across ddp via sum
-        if self.cross_entropy_metric is not None:
-            metrics["Cross_Entropy"] = self.CROSS_ENTROPY(metrics["Cross_Entropy"])
-        metrics["DICE"] = self.DICE(metrics["DICE"])
+
+        metrics["Class"] = self.CLASS_BCE(metrics["Cross_Entropy"])
+        metrics["BBox"] = self.CLASS_BCE(metrics["BBox"])
+        metrics["Object"] = self.CLASS_BCE(metrics["Object"])
         tot_examples = self.TotExamples(torch.tensor(local_examples))
 
         for metric, value in metrics.items():
@@ -836,32 +916,17 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
         complex_data = cfg.get("complex_data", True)
 
         dataset_format = cfg.get("dataset_format", None)
-        if isinstance(dataset_format,ListConfig):
-            if any(s.lower() in (
+        if any(s.lower() in (
                 "skm-tea-echo1",
                 "skm-tea-echo2",
                 "skm-tea-echo1+echo2",
                 "skm-tea-echo1+echo2-mc") for s in dataset_format):
-
-                if any(a.lower() == "lateral" for a in dataset_format):
-                    dataloader = SKMTEASegmentationMRIDatasetLateral
-
-                else:
-                    dataloader = SKMTEASegmentationMRIDataset
-        elif dataset_format.lower() == "brats2023adultglioma":
-            dataloader = BraTS2023AdultGliomaSegmentationMRIDataset
-        elif dataset_format.lower() == "isles2022subacutestroke":
-            dataloader = ISLES2022SubAcuteStrokeSegmentationMRIDataset
-        elif dataset_format.lower() in (
-            "skm-tea-echo1",
-            "skm-tea-echo2",
-            "skm-tea-echo1+echo2",
-            "skm-tea-echo1+echo2-mc",
-            "skm-tea-echo1+echo2-rss",
-        ):
-            dataloader = SKMTEASegmentationMRIDataset
+            if any(a.lower() == "lateral" for a in dataset_format):
+                dataloader = mri_object_detection_loader.SKMTEAOBJMRIDatasetlateral
+            else:
+                dataloader = mri_object_detection_loader.SKMTEARSMRIDataset
         else:
-            dataloader = SegmentationMRIDataset
+            dataloader = mri_object_detection_loader.ObjectMRIDataset
 
         dataset = dataloader(
             root=cfg.get("data_path"),
@@ -880,7 +945,7 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
             n2r_supervised_rate=cfg.get("n2r_supervised_rate", 0.0),
             complex_target=cfg.get("complex_target", False),
             log_images_rate=cfg.get("log_images_rate", 1.0),
-            transform=SegmentationMRIDataTransforms(
+            transform=ObjectdetectionMRIDataTransforms(
                 complex_data=complex_data,
                 dataset_format=dataset_format,
                 apply_prewhitening=cfg.get("apply_prewhitening", False),
@@ -941,6 +1006,8 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
                 coil_dim=cfg.get("coil_dim", 1),
                 consecutive_slices=cfg.get("consecutive_slices", 1),
                 use_seed=cfg.get("use_seed", True),
+                construct_knee_label=cfg.get('construct_knee_label', False),
+                include_background_label=cfg.get('include_background_label', False),
             ),
             segmentations_root=cfg.get("segmentations_path"),
             segmentation_classes=cfg.get("segmentation_classes", 2),
@@ -949,6 +1016,7 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
             segmentation_classes_to_separate=cfg.get("segmentation_classes_to_separate", None),
             segmentation_classes_thresholds=cfg.get("segmentation_classes_thresholds", None),
             complex_data=complex_data,
+            annotations_root=cfg.get('annotations_path', None)
         )
         if cfg.shuffle:
             sampler = torch.utils.data.RandomSampler(dataset)

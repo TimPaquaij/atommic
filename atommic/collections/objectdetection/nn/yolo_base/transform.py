@@ -1,28 +1,13 @@
 import copy
 import math
-import random
 
 import torch
 import torch.nn.functional as F
 from torch import nn
-import numpy as np
+
 
 # coding=utf-8
-__author__ = "Dimitris Karkalousos"
-
-from atommic.collections.common.parts.transforms import MRIDataTransforms
-
-__all__ = ["ObjectDetectionMRIDataTransforms"]
-
-
-class ObjectDetectionMRIDataTransforms(MRIDataTransforms):
-    """Transforms for the accelerated-MRI reconstruction task.
-
-    .. note::
-        Extends :class:`atommic.collections.common.parts.transforms.MRIDataTransforms`.
-    """
-
-
+__author__ = "Tim Paquaij"
 
 
 class Transformer(nn.Module):

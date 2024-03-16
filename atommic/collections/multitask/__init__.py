@@ -1,6 +1,6 @@
 # coding=utf-8
 
-from atommic.collections.multitask import rs  # noqa: F401
+from atommic.collections.multitask import rs,rso  # noqa: F401
 from atommic.package_info import __version__
 
 # Set collection version equal to atommic version.

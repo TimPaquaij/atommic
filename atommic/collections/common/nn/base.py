@@ -208,6 +208,7 @@ class BaseMRIModel(modelPT.ModelPT, ABC):
         if "wandb" in self.logger.__module__.lower():
             if image.is_cuda:
                 image = image.detach().cpu()
+
             self.logger.experiment.log({name: self.bounding_boxes(image.numpy(),obj_detection['boxes'].reshape(-1,4).detach().cpu().numpy(),obj_detection['labels'].reshape(-1).detach().cpu().numpy(),[1 for _ in range(len(obj_detection['labels'].reshape(-1)))],categories)})
 
         if "tensorboard" in self.logger.__module__.lower():

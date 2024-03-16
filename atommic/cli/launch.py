@@ -40,6 +40,7 @@ from atommic.collections.segmentation.nn.unet import SegmentationUNet
 from atommic.collections.segmentation.nn.unet3d import Segmentation3DUNet
 from atommic.collections.segmentation.nn.unetr import SegmentationUNetR
 from atommic.collections.segmentation.nn.vnet import SegmentationVNet
+from atommic.collections.objectdetection.nn.yolov5 import ObjectdetectionYolov5
 from atommic.core.conf.hydra_runner import hydra_runner
 from atommic.utils import logging
 from atommic.utils.exp_manager import exp_manager
@@ -128,6 +129,8 @@ def main(cfg: DictConfig):  # noqa: MC0001
         model = RecSegUNet(cfg.model, trainer=trainer)
     elif model_name == "RVN":
         model = RecurrentVarNet(cfg.model, trainer=trainer)
+    elif model_name == "OBJDETECTIONYOLOV5":
+        model = ObjectdetectionYolov5(cfg.model, trainer=trainer)
     elif model_name == "SEGMENTATIONATTENTIONUNET":
         model = SegmentationAttentionUNet(cfg.model, trainer=trainer)
     elif model_name == "SEGMENTATIONDYNUNET":
