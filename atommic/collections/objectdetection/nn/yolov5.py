@@ -63,8 +63,8 @@ class ObjectdetectionYolov5(BaseMRIObjectdetectionModel):
         torch.nn.Module
             The segmentation module.
         """
-        return YOLOv5(num_classes=cfg.get("num_classes", None),anchors=cfg.get("anchors"),
-                                              strides=cfg.get("strides"),img_sizes=cfg.get("img_size"),backbone_ckpt=cfg.get("checkpoint", None))
+        return YOLOv5(num_classes=cfg.get("num_classes", 16),anchors=cfg.get("anchors"),
+                                              strides=cfg.get("strides"),img_sizes=cfg.get("img_size"),backbone_ckpt=cfg.get("checkpoint", None),trainable_param=cfg.get("trainable_param_backbone",False))
 
 
     def forward(self, image: torch.Tensor,target: Union[List, torch.Tensor], **kwargs) -> torch.Tensor:  # pylint: disable=arguments-differ

@@ -350,7 +350,8 @@ class MTLRSBlock(torch.nn.Module):
                 raise ValueError(f"The input channels must be either 1 or 2. Found: {self.input_channels}")
         else:
             _pred_reconstruction = _pred_reconstruction.unsqueeze(1)
-        pred_segmentation = self.segmentation_module(torch.abs(_pred_reconstruction))
+        print(_pred_reconstruction.shape)
+        pred_segmentation = self.segmentation_module(_pred_reconstruction)
 
         if self.normalize_segmentation_output:
             pred_segmentation = (pred_segmentation - pred_segmentation.min()) / (

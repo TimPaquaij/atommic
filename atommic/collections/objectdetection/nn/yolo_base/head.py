@@ -17,8 +17,7 @@ class Head(nn.Module):
         self.nms_thresh = nms_thresh
         self.detections = detections
         
-        self.merge = False
-        self.eval_with_loss = False
+        self.merge = True
         #self.min_size = 2
         
     def forward(self, features, image_shapes=None, scale_factors=None, max_size=None):

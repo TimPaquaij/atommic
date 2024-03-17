@@ -479,10 +479,10 @@ class SKMTEAOBJMRIDatasetlateral(ObjectMRIDataset):
                                 if dataslice in range(int(annotation['bbox'][0]),int(annotation['bbox'][0] + annotation['bbox'][3]), 1) and annotation["id"]!=29:
                                     if image['orientation'] == ["RL","SI","AP"]:
                                         bboxes.append([annotation['bbox'][1],annotation['bbox'][2],annotation['bbox'][4],annotation['bbox'][5]])
-                                    if image['orientation'] == ["LR","SI","AP"]:
+                                    elif image['orientation'] == ["LR","SI","AP"]:
                                         bboxes.append([annotation['bbox'][1],annotation['bbox'][2],annotation['bbox'][4],annotation['bbox'][5]])
                                     else:
-                                        print("BBOX Wrong Orientation",fname,dataslice)
+                                        print("BBOX Wrong Orientation",fname,dataslice,image['orientation'])
                                     categories.append(annotation['category_id'])
                                     tissues.append(annotation['tissue_id'])
                             bbox_classes.append(dict(slice_id=np.array([dataslice]), boxes=np.array(bboxes),labels=np.array(categories),tissues=np.array(tissues)))

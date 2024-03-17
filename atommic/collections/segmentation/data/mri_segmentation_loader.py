@@ -1,6 +1,6 @@
 # coding=utf-8
 __author__ = "Dimitris Karkalousos"
-
+import warnings
 import json
 import logging
 import os
@@ -1333,7 +1333,7 @@ class SKMTEASegmentationMRIDatasetLateral(RSMRIDataset):
             dataset_format = None
             masking = "default"
 
-        fname, dataslice, metadata = self.examples[i]
+        fname, dataslice, metadata, slice_in_data = self.examples[i]
         with h5py.File(fname, "r") as hf:
             kspace = self.get_consecutive_slices(hf, "kspace", dataslice).astype(np.complex64)
             if not is_none(dataset_format) and dataset_format == "skm-tea-echo1":
@@ -1370,17 +1370,17 @@ class SKMTEASegmentationMRIDatasetLateral(RSMRIDataset):
             segmentation_labels = self.get_consecutive_slices({"seg": segmentation_labels}, "seg", dataslice)
 
             if self.consecutive_slices > 1:
-                segmentation_labels = np.transpose(segmentation_labels, (0,3, 1, 2))
-                kspace = np.transpose(kspace, (0, 3, 1,2))
-                sensitivity_map = np.transpose(sensitivity_map.squeeze(), (0,3, 1, 2))
+                segmentation_labels = np.transpose(segmentation_labels, (0, 3, 1, 2))
+                kspace = np.transpose(kspace, (0, 3, 1, 2))
+                sensitivity_map = np.transpose(sensitivity_map.squeeze(), (0, 3, 1, 2))
             else:
                 segmentation_labels = np.transpose(segmentation_labels, (2, 0, 1))
                 kspace = np.transpose(kspace, (2, 0, 1))
                 sensitivity_map = np.transpose(sensitivity_map.squeeze(), (2, 0, 1))
 
-            #Add backgound as an seperate class
-            #back_ground = (segmentation_labels.sum(axis=0) == 0).astype(int)
-            #segmentation_labels = np.concatenate((back_ground[np.newaxis,:,:],segmentation_labels),axis=0)
+            # Add backgound as an seperate class
+            # back_ground = (segmentation_labels.sum(axis=0) == 0).astype(int)
+            # segmentation_labels = np.concatenate((back_ground[np.newaxis,:,:],segmentation_labels),axis=0)
             imspace = np.empty([])
 
             initial_prediction = np.empty([])
@@ -1394,9 +1394,7 @@ class SKMTEASegmentationMRIDatasetLateral(RSMRIDataset):
 
             attrs.update(metadata)
 
-
-
-        attrs["log_image"] = bool(dataslice in self.indices_to_log)
+        attrs["log_image"] = bool(slice_in_data in self.indices_to_log)
 
         return (
             (

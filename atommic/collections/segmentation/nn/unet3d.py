@@ -80,12 +80,11 @@ class Segmentation3DUNet(BaseSegmentationNet):
         if self.normalize:
             image, mean, std = self.norm(image)
         image, pad_sizes = self.pad(image)
-        segmentation = self.segmentation_module(image.permute(0, 2, 1, 3, 4)).permute(0, 2, 1, 3, 4)
+        segmentation = self.segmentation_module(image).permute(0,2,1,3,4)
         segmentation = self.unpad(segmentation, *pad_sizes)
         if self.normalize:
             segmentation = self.unnorm(segmentation, mean, std)
 
         if self.normalize_segmentation_output:
             segmentation = (segmentation - segmentation.min()) / (segmentation.max() - segmentation.min())
-
         return torch.abs(segmentation)

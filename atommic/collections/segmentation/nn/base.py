@@ -433,7 +433,6 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
                 target = target.reshape(batch_size * slices, *target.shape[2:])
             if prediction.dim() == 5:
                 prediction = prediction.reshape(batch_size * slices, *prediction.shape[2:])
-
         if not is_none(self.segmentation_classes_thresholds):
             for class_idx, thres in enumerate(self.segmentation_classes_thresholds):
                 if self.segmentation_activation == "sigmoid":
@@ -445,6 +444,8 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
                 prediction[:, class_idx] = torch.where(
                     cond >= thres, prediction[:, class_idx], torch.zeros_like(prediction[:, class_idx])
                 )
+        else:
+            prediction = torch.softmax(prediction,dim=1)
 
         return {
             "fname": fname,
@@ -497,8 +498,8 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
             _,
             _,
             _,
-            initial_reconstruction_prediction,
             _,
+            target_reconstruction,
             target_segmentation,
             fname,
             slice_idx,
@@ -507,11 +508,9 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
         ) = batch
 
         # In case of complex (fully-sampled) data the initial_reconstruction_prediction is a list of tensors of len 1.
-        if isinstance(initial_reconstruction_prediction, list):
-            initial_reconstruction_prediction = initial_reconstruction_prediction[-1]
 
         outputs = self.inference_step(
-            initial_reconstruction_prediction,
+            target_reconstruction,
             target_segmentation,
             fname,  # type: ignore
             slice_idx,  # type: ignore
@@ -576,7 +575,7 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
             _,
             _,
             _,
-            initial_reconstruction_prediction,
+            _,
             target_reconstruction,
             target_segmentation,
             fname,
@@ -586,11 +585,11 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
         ) = batch
 
         # In case of complex (fully-sampled) data the initial_reconstruction_prediction is a list of tensors of len 1.
-        if isinstance(initial_reconstruction_prediction, list):
-            initial_reconstruction_prediction = initial_reconstruction_prediction[-1]
+        # if isinstance(initial_reconstruction_prediction, list):
+        #     initial_reconstruction_prediction = initial_reconstruction_prediction[-1]
 
         outputs = self.inference_step(
-            initial_reconstruction_prediction,
+            target_reconstruction,
             target_segmentation,
             fname,  # type: ignore
             slice_idx,  # type: ignore
@@ -653,7 +652,7 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
             _,
             _,
             _,
-            initial_reconstruction_prediction,
+            _,
             target_reconstruction,
             target_segmentation,
             fname,
@@ -663,11 +662,11 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
         ) = batch
 
         # In case of complex (fully-sampled) data the initial_reconstruction_prediction is a list of tensors of len 1.
-        if isinstance(initial_reconstruction_prediction, list):
-            initial_reconstruction_prediction = initial_reconstruction_prediction[-1]
+        # if isinstance(initial_reconstruction_prediction, list):
+        #     initial_reconstruction_prediction = initial_reconstruction_prediction[-1]
 
         outputs = self.inference_step(
-            initial_reconstruction_prediction,
+            target_reconstruction,
             target_segmentation,
             fname,  # type: ignore
             slice_idx,  # type: ignore
@@ -941,6 +940,8 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
                 coil_dim=cfg.get("coil_dim", 1),
                 consecutive_slices=cfg.get("consecutive_slices", 1),
                 use_seed=cfg.get("use_seed", True),
+                construct_knee_label=cfg.get('construct_knee_label', False),
+                include_background_label=cfg.get('include_background_label', False),
             ),
             segmentations_root=cfg.get("segmentations_path"),
             segmentation_classes=cfg.get("segmentation_classes", 2),

@@ -157,6 +157,7 @@ class BaseSegmentationNet(base_segmentation_models.BaseMRISegmentationModel, ABC
         if self.normalize:
             image, mean, std = self.norm(image)
         image, pad_sizes = self.pad(image)
+        print(image.shape)
         segmentation = self.segmentation_module(image)
         segmentation = self.unpad(segmentation, *pad_sizes)
         if self.normalize:

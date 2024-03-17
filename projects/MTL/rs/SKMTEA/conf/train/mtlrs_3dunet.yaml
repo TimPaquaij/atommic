@@ -117,7 +117,7 @@ model:
   spatial_dims:
     - -2
     - -1
-  magnitude_input: false
+  magnitude_input: true
   log_multiple_modalities: false  # log all modalities in the same image, e.g. T1, T2, T1ce, FLAIR will be concatenated
   normalization_type: minmax
   normalize_segmentation_output: true
@@ -283,7 +283,7 @@ trainer:
 exp_manager:
   exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/MTLRS_UNet_3D_SENSE
   create_tensorboard_logger: false
-  create_wandb_logger: true
+  create_wandb_logger: false
   wandb_logger_kwargs:
     project: MTLRS_SKMTEA
   files_to_copy: [ ]

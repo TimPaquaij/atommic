@@ -6,11 +6,13 @@ import torch
 from atommic.collections.objectdetection.nn.yolo_base.head import Head
 from atommic.collections.objectdetection.nn.yolo_base.backbone import darknet_pan_backbone
 from atommic.collections.objectdetection.nn.yolo_base.transform import Transformer
-
-
 class YOLOv5(nn.Module):
-    def __init__(self, num_classes,anchors, strides,model_size=(0.33, 0.5), img_sizes=[None],
-                 score_thresh=0.3, nms_thresh=0.3, detections=4,backbone_ckpt =None):
+    def __init__(self, num_classes,anchors=[
+            [[6.1, 8.1], [20.6, 12.6], [11.2, 23.7]],
+            [[36.2, 26.8], [25.9, 57.2], [57.8, 47.9]],
+            [[122.1, 78.3], [73.7, 143.8], [236.1, 213.1]],
+        ], strides= (8,16,32),model_size=(0.33, 0.5), img_sizes=(320,416),
+                 score_thresh=0.1, nms_thresh=0.6, detections=10,backbone_ckpt =None,trainable_param=False):
         super().__init__()
         
         self.backbone = darknet_pan_backbone(
@@ -20,7 +22,7 @@ class YOLOv5(nn.Module):
             ckpt_1 = OrderedDict({".".join(name.split('.')[1:]):value for name, value in ckpt.items() if name.startswith('backbone')})
             self.backbone.load_state_dict(ckpt_1)
             for param in self.backbone.parameters():
-                param.requires_grad = False
+                param.requires_grad = trainable_param
         in_channels_list = self.backbone.body.out_channels_list
         num_anchors = [len(s) for s in anchors]
         predictor = Predictor(in_channels_list, num_anchors, num_classes, strides)
@@ -35,7 +37,7 @@ class YOLOv5(nn.Module):
             min_size=img_sizes[0], max_size=img_sizes[1], stride=max(strides))
     
     def forward(self, images,target):
-        images, target, scale_factors, image_shapes = self.transformer(images, target)
+        images, targets, scale_factors, image_shapes = self.transformer(images, target)
         features = self.backbone(images)
         
         # if self.training:

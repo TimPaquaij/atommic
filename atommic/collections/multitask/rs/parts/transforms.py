@@ -618,12 +618,12 @@ class RSMRIDataTransforms:
                     idx_background = torch.where(torch.sum(segmentation_labels[i], dim=0) ==0)
                     segmentation_labels_bg[i][idx_background] = 1
                     segmentation_labels_new[i] = torch.concat((segmentation_labels_bg[i].unsqueeze(0),segmentation_labels[i]), dim=0)
-                segmentation_labels =segmentation_labels_new
+                segmentation_labels=segmentation_labels_new
             else:
                 segmentation_labels_bg = torch.zeros((segmentation_labels.shape[-2], segmentation_labels.shape[-1]))
                 idx_background = torch.where(torch.sum(segmentation_labels, dim=0) == 0)
                 segmentation_labels_bg[idx_background] = 1
-                segmentation_labels = torch.concat((segmentation_labels_bg.unsqueeze(0),segmentation_labels), dim=0)
+                segmentation_labels= torch.concat((segmentation_labels_bg.unsqueeze(0),segmentation_labels), dim=0)
 
 
         attrs.update(
