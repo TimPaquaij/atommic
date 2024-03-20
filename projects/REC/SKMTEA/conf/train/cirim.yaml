@@ -81,6 +81,7 @@ model:
   save_logliklihood_gradient: false
   save_zero_filled: false
   save_intermediate_predictions: false
+  num_echoes: 2
 
   train_ds:
     data_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_train.json
@@ -90,7 +91,7 @@ model:
     initial_predictions_path: None
     dataset_format:
       - custom_masking
-      - skm-tea-echo1
+      - skm-tea-echo1-echo2
       - lateral
     sample_rate: 1
     volume_sample_rate: None
@@ -128,7 +129,7 @@ model:
     spatial_dims:
       - -2
       - -1
-    coil_dim: 1
+    coil_dim: 2
     use_seed: false
     batch_size: 1
     shuffle: true
@@ -144,10 +145,10 @@ model:
     initial_predictions_path: None
     dataset_format:
       - custom_masking
-      - skm-tea-echo1
+      - skm-tea-echo1-echo2
       - lateral
     sample_rate: 1
-    log_images_rate: 0.005
+    log_images_rate: 0.003
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
@@ -183,7 +184,7 @@ model:
     spatial_dims:
       - -2
       - -1
-    coil_dim: 1
+    coil_dim: 2
     use_seed: true
     batch_size: 1
     shuffle: false

@@ -69,7 +69,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         # Initialize the dimensionality of the data. It can be 2D or 2.5D -> meaning 2D with > 1 slices or 3D.
         self.dimensionality = cfg_dict.get("dimensionality", 2)
         self.consecutive_slices = cfg_dict.get("consecutive_slices", 1)
-
+        self.num_echoes = cfg_dict.get("num_echoes", 0)
         # Initialize the coil combination method. It can be either "SENSE" or "RSS" (root-sum-of-squares) or
         # "RSS-complex" (root-sum-of-squares of the complex-valued data).
         self.coil_combination_method = cfg_dict.get("coil_combination_method", "SENSE")
@@ -775,6 +775,13 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             predictions_segmentation = predictions_segmentation[:, self.consecutive_slices // 2]
             predictions_reconstruction = predictions_reconstruction[:, self.consecutive_slices // 2]
 
+        if self.num_echoes > 1:
+            # find the batch size
+            batch_size = target_reconstruction.shape[0] / self.num_echoes
+            # reshape to [batch_size, num_echoes, n_x, n_y]
+            target_reconstruction = target_reconstruction.reshape((int(batch_size), self.num_echoes, *target_reconstruction.shape[1:]))
+            predictions_reconstruction = predictions_reconstruction.reshape((int(batch_size), self.num_echoes, *predictions_reconstruction.shape[1:]))
+
 
         fname = attrs["fname"]
         slice_idx = attrs["slice_idx"]
@@ -870,17 +877,32 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                     )
 
                 if self.use_reconstruction_module:
-                    self.log_image(
-                        f"{key}/a/reconstruction_abs/target/predictions/error",
-                        torch.cat(
-                            [
-                                output_target_reconstruction,
-                                output_predictions_reconstruction,
-                                torch.abs(output_target_reconstruction - output_predictions_reconstruction),
-                            ],
-                            dim=-1,
-                        ),
-                    )
+                    if self.num_echoes>1:
+                        for i in range(output_target_reconstruction.shape[0]):
+                            self.log_image(
+                                f"{key}/a/reconstruction_abs/target echo: {i+1}/predictions echo: {i+1}/error echo: {i+1}",
+                                torch.cat(
+                                    [
+                                        output_target_reconstruction[i],
+                                        output_predictions_reconstruction[i],
+                                        torch.abs(output_target_reconstruction[i] - output_predictions_reconstruction[i]),
+                                    ],
+                                    dim=-1,
+                                ),
+                            )
+                    else:
+                        self.log_image(
+                            f"{key}/a/reconstruction_abs/target/predictions/error",
+                            torch.cat(
+                                [
+                                    output_target_reconstruction,
+                                    output_predictions_reconstruction,
+                                    torch.abs(output_target_reconstruction - output_predictions_reconstruction),
+                                ],
+                                dim=-1,
+                            ),
+                        )
+
                     if isinstance(cascades_var,np.ndarray) and self.log_logliklihood_gradient_std:
                         self.log_plot(f"{key}/a/reconstruction_abs/logliklihood_variance", cascades_var)
 
@@ -1225,8 +1247,17 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                     self.coil_combination_method,
                     self.coil_dim,
                 )
-
+        # Check if multiple echoes are used.
+        if self.num_echoes > 1:
+            # stack the echoes along the batch dimension
+            kspace = kspace.view(-1, *kspace.shape[2:])
+            y = y.view(-1, *y.shape[2:])
+            mask = mask.view(-1, *mask.shape[2:])
+            initial_prediction_reconstruction = initial_prediction_reconstruction.view(-1, *initial_prediction_reconstruction.shape[2:])
+            target_reconstruction = target_reconstruction.view(-1, *target_reconstruction.shape[2:])
+            sensitivity_maps = torch.repeat_interleave(sensitivity_maps, repeats=kspace.shape[0], dim=0).squeeze(1)
         # Model forward pass
+
         predictions_reconstruction, predictions_segmentation, log_like = self.forward(
             y,
             sensitivity_maps,
@@ -2054,7 +2085,8 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             "skm-tea-echo1",
             "skm-tea-echo2",
             "skm-tea-echo1+echo2",
-            "skm-tea-echo1+echo2-mc") for s in dataset_format):
+            "skm-tea-echo1+echo2-mc",
+            "skm-tea-echo1-echo2") for s in dataset_format):
             if any(a.lower() == "lateral" for a in dataset_format):
                 dataloader = mrirs_loader.SKMTEARSMRIDatasetlateral
             else:

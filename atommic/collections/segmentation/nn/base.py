@@ -27,9 +27,11 @@ from atommic.collections.segmentation.data.mri_segmentation_loader import (
     SKMTEASegmentationMRIDataset,
     SKMTEASegmentationMRIDatasetLateral,
 )
+from atommic.collections.multitask.rs.data.mrirs_loader import SKMTEARSMRIDatasetlateral
 from atommic.collections.segmentation.losses.cross_entropy import CrossEntropyLoss
 from atommic.collections.segmentation.losses.dice import Dice
 from atommic.collections.segmentation.parts.transforms import SegmentationMRIDataTransforms
+from atommic.collections.multitask.rs.parts.transforms import RSMRIDataTransforms
 
 __all__ = ["BaseMRISegmentationModel"]
 
@@ -843,24 +845,25 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
                 "skm-tea-echo1+echo2-mc") for s in dataset_format):
 
                 if any(a.lower() == "lateral" for a in dataset_format):
-                    dataloader = SKMTEASegmentationMRIDatasetLateral
+                    dataloader = SKMTEARSMRIDatasetlateral
+                    print('go')
 
                 else:
                     dataloader = SKMTEASegmentationMRIDataset
-        elif dataset_format.lower() == "brats2023adultglioma":
-            dataloader = BraTS2023AdultGliomaSegmentationMRIDataset
-        elif dataset_format.lower() == "isles2022subacutestroke":
-            dataloader = ISLES2022SubAcuteStrokeSegmentationMRIDataset
-        elif dataset_format.lower() in (
-            "skm-tea-echo1",
-            "skm-tea-echo2",
-            "skm-tea-echo1+echo2",
-            "skm-tea-echo1+echo2-mc",
-            "skm-tea-echo1+echo2-rss",
-        ):
-            dataloader = SKMTEASegmentationMRIDataset
-        else:
-            dataloader = SegmentationMRIDataset
+        # elif dataset_format.lower() == "brats2023adultglioma":
+        #     dataloader = BraTS2023AdultGliomaSegmentationMRIDataset
+        # elif dataset_format.lower() == "isles2022subacutestroke":
+        #     dataloader = ISLES2022SubAcuteStrokeSegmentationMRIDataset
+        # elif dataset_format.lower() in (
+        #     "skm-tea-echo1",
+        #     "skm-tea-echo2",
+        #     "skm-tea-echo1+echo2",
+        #     "skm-tea-echo1+echo2-mc",
+        #     "skm-tea-echo1+echo2-rss",
+        # ):
+        #     dataloader = SKMTEASegmentationMRIDataset
+        # else:
+        #     dataloader = SegmentationMRIDataset
 
         dataset = dataloader(
             root=cfg.get("data_path"),
@@ -879,7 +882,7 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
             n2r_supervised_rate=cfg.get("n2r_supervised_rate", 0.0),
             complex_target=cfg.get("complex_target", False),
             log_images_rate=cfg.get("log_images_rate", 1.0),
-            transform=SegmentationMRIDataTransforms(
+            transform=RSMRIDataTransforms(
                 complex_data=complex_data,
                 dataset_format=dataset_format,
                 apply_prewhitening=cfg.get("apply_prewhitening", False),
@@ -940,8 +943,8 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
                 coil_dim=cfg.get("coil_dim", 1),
                 consecutive_slices=cfg.get("consecutive_slices", 1),
                 use_seed=cfg.get("use_seed", True),
-                construct_knee_label=cfg.get('construct_knee_label', False),
-                include_background_label=cfg.get('include_background_label', False),
+                construct_knee_label = cfg.get('construct_knee_label', False),
+                include_background_label = cfg.get('include_background_label', False),
             ),
             segmentations_root=cfg.get("segmentations_path"),
             segmentation_classes=cfg.get("segmentation_classes", 2),

@@ -44,7 +44,7 @@ from atommic.collections.reconstruction.losses.haarpsi import HaarPSILoss
 from atommic.collections.reconstruction.losses.vsi import VSILoss
 from atommic.collections.reconstruction.metrics import mse, nmse, psnr, ssim, haarpsi3d, vsi3d
 from atommic.collections.reconstruction.parts.transforms import ReconstructionMRIDataTransforms
-
+import matplotlib.pyplot as plt
 __all__ = ["BaseMRIReconstructionModel"]
 
 
@@ -539,36 +539,25 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
                     log_like = log_like[-1]
                 else:
                     log_like = log_like[-1]
-        if isinstance(predictions, list):
-            while isinstance(predictions, list):
-                predictions= predictions[-1]
+
+        while isinstance(predictions, list):
+            predictions= predictions[-1]
+
 
         cascades_var = np.array(cascades_var)
-        # Ensure loss inputs are both viewed in the same way.
-        target = self.__abs_output__(target)
-        target = torch.abs(target/torch.max(torch.abs(target)))
-        predictions = self.__abs_output__(predictions)
-        predictions = torch.abs(predictions / torch.max(torch.abs(predictions)))
 
-        if torch.max(target) != 1:
-            target_reconstruction = torch.clip(target, 0, 1)
-        if torch.max(predictions) != 1:
-            predictions_reconstruction = torch.clip(predictions, 0, 1)
 
         # Check if multiple echoes are used.
+        if self.consecutive_slices > 1:
+            target = target[:, self.consecutive_slices // 2]
+            predictions = predictions[:, self.consecutive_slices // 2]
+
         if self.num_echoes > 1:
             # find the batch size
             batch_size = target.shape[0] / self.num_echoes
             # reshape to [batch_size, num_echoes, n_x, n_y]
             target = target.reshape((int(batch_size), self.num_echoes, *target.shape[1:]))
             predictions = predictions.reshape((int(batch_size), self.num_echoes, *predictions.shape[1:]))
-            # concatenate the echoes in the last dim
-            target = torch.cat([target[:, i, ...] for i in range(self.num_echoes)], dim=-1)
-            predictions = torch.cat([predictions[:, i, ...] for i in range(self.num_echoes)], dim=-1)
-
-        # Add dummy dimensions to target and predictions for logging.
-        # target = target.unsqueeze(1)
-        # predictions = predictions.unsqueeze(1)
 
         # Iterate over the batch and log the target and predictions.
         for _batch_idx_ in range(target.shape[0]):
@@ -582,36 +571,39 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
                     output_target, output_predictions, None, attrs, r, _batch_idx_
                 )
 
-            # # Normalize target and predictions to [0, 1] for logging.
-            # if torch.is_complex(output_target) and output_target.shape[-1] != 2:
-            #     output_target = torch.view_as_real(output_target)
-            # if output_target.shape[-1] == 2:
-            #     output_target = torch.view_as_complex(output_target)
-            # output_target = torch.abs(output_target / torch.max(torch.abs(output_target)))
-            # output_target = torch.clip(output_target,0,1).detach().cpu()
-            #
-            # if torch.is_complex(output_predictions) and output_predictions.shape[-1] != 2:
-            #     output_predictions = torch.view_as_real(output_predictions)
-            # if output_predictions.shape[-1] == 2:
-            #     output_predictions = torch.view_as_complex(output_predictions)
-            # output_predictions =  torch.abs(output_predictions / torch.max(torch.abs(output_predictions)))
-            # output_predictions = torch.clip(output_predictions, 0, 1).detach().cpu()
+            output_target = self.__abs_output__(output_target)
+            output_target = torch.abs(
+                output_target / torch.max(torch.abs(output_target)))
+            output_predictions = self.__abs_output__(output_predictions)
+            output_predictions = torch.abs(
+                output_predictions / torch.max(torch.abs(output_predictions)))
 
+            if torch.max(output_target) != 1:
+                output_target = torch.clip(output_target, 0, 1)
+            if torch.max(output_predictions) != 1:
+                output_predictions = torch.clip(output_predictions, 0, 1)
 
 
             # Log target and predictions, if log_image is True for this slice.
             if attrs["log_image"][_batch_idx_]:
                 # if consecutive slices, select the middle slice
-                if self.consecutive_slices > 1:
-                    output_target = output_target[self.consecutive_slices // 2]
-                    output_predictions = output_predictions[self.consecutive_slices // 2]
 
                 key = f"{fname[_batch_idx_]}_slice_{int(slice_idx[_batch_idx_])}-Acc={acceleration}x"  # type: ignore
-                self.log_image(f"{key}/target", output_target)
-                self.log_image(f"{key}/reconstruction", output_predictions)
+
+                if self.num_echoes>1:
+                    for i in range(self.num_echoes):
+                        self.log_image(f"{key}/target echo:{i+1}", output_target[i])
+                        self.log_image(f"{key}/reconstruction echo:{i+1}", output_predictions[i])
+                        self.log_image(f"{key}/error echo:{i+1}", torch.abs(output_target[i] - output_predictions[i]))
+                else:
+                    self.log_image(f"{key}/target", output_target)
+                    self.log_image(f"{key}/reconstruction", output_predictions)
+                    self.log_image(f"{key}/error", torch.abs(output_target - output_predictions))
+
+
                 if isinstance(cascades_var, np.ndarray) and self.log_logliklihood_gradient_std:
                     self.log_plot(f"{key}/a/reconstruction_abs/logliklihood_variance", cascades_var)
-                self.log_image(f"{key}/error", torch.abs(output_target - output_predictions))
+
 
             # Compute metrics and log them.
             output_target = output_target.numpy()
@@ -770,6 +762,7 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
         mask: Union[List, torch.Tensor],
         initial_prediction: Union[List, torch.Tensor],
         target: Union[List, torch.Tensor],
+        num_echoes: int,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, int]:
         """Processes lists of inputs to torch.Tensor. In the case where multiple accelerations are used, then the
         inputs are lists. This function converts the lists to torch.Tensor by randomly selecting one acceleration. If
@@ -892,7 +885,7 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
 
         # Process inputs to randomly select one acceleration factor, in case multiple accelerations are used.
         kspace, y, mask, initial_prediction, target, r = self.__process_inputs__(
-            kspace, y, mask, initial_prediction, target
+            kspace, y, mask, initial_prediction, target,self.num_echoes
         )
 
         # Process inputs if Noise-to-Recon and/or SSDU are used.
@@ -908,8 +901,7 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
             mask = mask.view(-1, *mask.shape[2:])
             initial_prediction = initial_prediction.view(-1, *initial_prediction.shape[2:])
             target = target.view(-1, *target.shape[2:])
-            sensitivity_maps = torch.repeat_interleave(sensitivity_maps, repeats=kspace.shape[0], dim=0)
-
+            sensitivity_maps = torch.repeat_interleave(sensitivity_maps, repeats=kspace.shape[0], dim=0).squeeze(1)
         # Check if a network is used for coil sensitivity maps estimation.
         if self.estimate_coil_sensitivity_maps_with_nn:
             # Estimate coil sensitivity maps with a network.
@@ -931,8 +923,8 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
                 )
 
         # Forward pass
-        predictions, log_like = self.forward(y, sensitivity_maps, mask, initial_prediction, attrs["noise"])
 
+        predictions, log_like = self.forward(y, sensitivity_maps, mask, initial_prediction, attrs["noise"])
         # Noise-to-Recon forward pass, if Noise-to-Recon is used.
         predictions_n2r = None
         if self.n2r and n2r_mask is not None:
@@ -1088,7 +1080,6 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
             Batch index.
         """
         kspace, y, sensitivity_maps, mask, initial_prediction, target, fname, slice_idx, acceleration, attrs = batch
-
         outputs = self.inference_step(
             kspace,
             y,
@@ -1536,7 +1527,8 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
                 "skm-tea-echo1",
                 "skm-tea-echo2",
                 "skm-tea-echo1+echo2",
-                "skm-tea-echo1+echo2-mc") for s in dataset_format):
+                "skm-tea-echo1+echo2-mc",
+                "skm-tea-echo1-echo2") for s in dataset_format):
 
                 if any(a.lower() == "lateral" for a in dataset_format):
                     dataloader = SKMTEAReconstructionMRIDatasetlateral

@@ -3,7 +3,7 @@ __author__ = "Dimitris Karkalousos"
 
 import math
 from typing import Dict, List, Union
-
+import pytorch_lightning as pl
 import torch
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import Trainer
@@ -40,6 +40,7 @@ class CIRIM(BaseMRIReconstructionModel):
             PyTorch Lightning trainer. Default is ``None``.
         """
         super().__init__(cfg=cfg, trainer=trainer)
+        pl.seed_everything(1234)
 
         cfg_dict = OmegaConf.to_container(cfg, resolve=True)
 
@@ -111,27 +112,88 @@ class CIRIM(BaseMRIReconstructionModel):
         List of torch.Tensor
             List of the intermediate predictions for each cascade. Shape [batch_size, n_x, n_y].
         """
-        prediction = y.clone()
-        initial_prediction = None if initial_prediction is None or initial_prediction.dim() < 4 else initial_prediction
-        hx = None
-        cascades_predictions = []
-        cascades_log_like = []
-        for i, cascade in enumerate(self.reconstruction_module):
-            # Forward pass through the cascades
-            prediction, hx, log_like_pred = cascade(
-                prediction,
-                y,
-                sensitivity_maps,
-                mask,
-                initial_prediction if i == 0 else prediction,
-                hx,
-                sigma,
-                keep_prediction=False if i == 0 else self.keep_prediction,
-            )
-            cascades_predictions.append([check_stacked_complex(p) for p in prediction])
-            cascades_log_like.append([check_stacked_complex(l) for l in log_like_pred])
-            prediction = prediction[-1]
-        return cascades_predictions,cascades_log_like
+        if  self.dimensionality == 2 and self.consecutive_slices >1:
+            # Do per slice reconstruction
+            pred_slices = []
+            pred_loglike_slices = []
+            for slice_idx in range(self.consecutive_slices):
+                y_slice = y[:, slice_idx, ...]
+                prediction_slice = y_slice.clone()
+                sensitivity_maps_slice = sensitivity_maps[:, slice_idx, ...]
+                hx_slice = None
+                if mask.dim() == 1:
+                    mask_slice = mask
+                else:
+                    mask_slice = mask[:, 0, ...]
+
+                init_reconstruction_pred_slice = initial_prediction[:, slice_idx, ...]
+
+                _pred_reconstruction_slice = (
+                    None
+                    if init_reconstruction_pred_slice is None or init_reconstruction_pred_slice.dim() < 4
+                    else init_reconstruction_pred_slice
+                )
+                cascades_predictions = []
+                cascades_log_like = []
+
+                for i, cascade in enumerate(self.reconstruction_module):
+                    # Forward pass through the cascades
+                    prediction_slice, hx_slice, log_like_slice = cascade(
+                        prediction_slice,
+                        y_slice,
+                        sensitivity_maps_slice,
+                        mask_slice,
+                        _pred_reconstruction_slice if i == 0 else prediction_slice,
+                        hx_slice,
+                        sigma,
+                        keep_prediction=False if i == 0 else self.keep_prediction,
+                    )
+                    time_steps_predictions = [torch.view_as_complex(pred) for pred in prediction_slice]
+                    log_like_predictions = [torch.view_as_complex(l) for l in log_like_slice]
+                    cascades_predictions.append(torch.stack(time_steps_predictions, dim=0))
+                    cascades_log_like.append(torch.stack(log_like_predictions, dim=0))
+                    prediction_slice = prediction_slice[-1]
+                pred_slices.append(torch.stack(cascades_predictions, dim=0))
+                pred_loglike_slices.append(torch.stack(cascades_log_like, dim=0))
+            preds = torch.stack(pred_slices, dim=3)
+            log_like = torch.stack(pred_loglike_slices, dim=3)
+            cascades_predictions = [
+                [
+                    preds[cascade_prediction, time_step_prediction, ...]
+                    for time_step_prediction in range(preds.shape[1])
+                ]
+                for cascade_prediction in range(preds.shape[0])
+            ]
+            cascades_log_like = [
+                [
+                    log_like[cascade_log_like, log_like_prediction, ...]
+                    for log_like_prediction in range(log_like.shape[1])
+                ]
+                for cascade_log_like in range(log_like.shape[0])
+            ]
+            return cascades_predictions,cascades_log_like
+        else:
+            prediction = y.clone()
+            initial_prediction = None if initial_prediction is None or initial_prediction.dim() < 4 else initial_prediction
+            hx = None
+            cascades_predictions = []
+            cascades_log_like = []
+            for i, cascade in enumerate(self.reconstruction_module):
+                # Forward pass through the cascades
+                prediction, hx, log_like_pred = cascade(
+                    prediction,
+                    y,
+                    sensitivity_maps,
+                    mask,
+                    initial_prediction if i == 0 else prediction,
+                    hx,
+                    sigma,
+                    keep_prediction=False if i == 0 else self.keep_prediction,
+                )
+                cascades_predictions.append([check_stacked_complex(p) for p in prediction])
+                cascades_log_like.append([check_stacked_complex(l) for l in log_like_pred])
+                prediction = prediction[-1]
+            return cascades_predictions,cascades_log_like
 
     def process_reconstruction_loss(  # noqa: MC0001
         self,

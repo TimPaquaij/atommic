@@ -5,7 +5,7 @@ mode: train
 model:
   model_name: MTLRS
   joint_reconstruction_segmentation_module_cascades: 5
-  task_adaption_type: multi_task_learning
+  task_adaption_type: multi_task_learning_dimitris
   cascade_nr_hidden_states: 1
   use_reconstruction_module: true
   reconstruction_module_recurrent_layer: IndRNN
@@ -14,9 +14,9 @@ model:
     - 64
     - 2
   reconstruction_module_conv_kernels:
-    - 9
-    - 7
-    - 7
+    - 5
+    - 3
+    - 3
   reconstruction_module_conv_dilations:
     - 1
     - 2
@@ -38,8 +38,8 @@ model:
     - 64
     - 0
   reconstruction_module_recurrent_kernels:
-    - 3
-    - 3
+    - 1
+    - 1
     - 0
   reconstruction_module_recurrent_dilations:
     - 1
@@ -119,7 +119,9 @@ model:
   spatial_dims:
     - -2
     - -1
-  magnitude_input: false
+  magnitude_input: true
+  combine_echoes: true
+  num_echoes: 2
   log_multiple_modalities: false  # log all modalities in the same image, e.g. T1, T2, T1ce, FLAIR will be concatenated
   normalization_type: minmax
   normalize_segmentation_output: false
@@ -140,14 +142,14 @@ model:
   save_intermediate_predictions: false
 
   train_ds:
-    data_path:  /data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_train.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_train.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_train.json
+    data_path:  /data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_train.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_train.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_train.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
     initial_predictions_path: None
     dataset_format:
     - custom_masking
-    - SKM-TEA-echo1+echo2
+    - SKM-TEA-echo1-echo2
     - lateral
     sample_rate: 1
     volume_sample_rate: None
@@ -162,7 +164,7 @@ model:
     coil_combination_method: SENSE
     dimensionality: 2
     mask_args:
-      type: poisson2d  # the mask will be loaded from the dataset, but we need to specify the type here
+      type: gaussian2d  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
         - 4  # 4, 6, 8, 10, 12, 16
       shift_mask: false
@@ -184,9 +186,9 @@ model:
     spatial_dims:
       - -2
       - -1
-    coil_dim: 1
+    coil_dim: 2
     use_seed: false
-    segmentations_path: /data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
+    segmentations_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
     construct_knee_label: false
     include_background_label: true
     segmentation_classes: 5
@@ -198,14 +200,14 @@ model:
     drop_last: false
 
   validation_ds:
-    data_path: /data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json
+    data_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
     initial_predictions_path: None
     dataset_format:
     - custom_masking
-    - SKM-TEA-echo1+echo2
+    - SKM-TEA-echo1-echo2
     - lateral
     sample_rate: 1
     volume_sample_rate: None
@@ -215,14 +217,14 @@ model:
     consecutive_slices: 1
     data_saved_per_slice: false
     complex_target: true
-    log_images_rate: 0.005
+    log_images_rate: 0.003
     apply_prewhitening: false
     apply_gcc: false
     estimate_coil_sensitivity_maps: false
     coil_combination_method: SENSE
     dimensionality: 2
     mask_args:
-      type: poisson2d  # the mask will be loaded from the dataset, but we need to specify the type here
+      type: gaussian2d  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
         - 4 # 4, 6, 8, 10, 12, 16
       shift_mask: false
@@ -244,9 +246,9 @@ model:
     spatial_dims:
       - -2
       - -1
-    coil_dim: 1
+    coil_dim: 2
     use_seed: true
-    segmentations_path: /data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
+    segmentations_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
     construct_knee_label: false
     include_background_label: true
     segmentation_classes: 5
@@ -284,7 +286,7 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA/MTLRS_SENSE
+  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/MTLRS_SENSE
   ema:
     enable: false
   create_tensorboard_logger: false

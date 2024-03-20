@@ -1,5 +1,5 @@
 pretrained: true
-checkpoint: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA/CIRIM_sense/default/2024-01-15_21-52-00/checkpoints/default--val_loss=0.0184-epoch=10-last.ckpt
+checkpoint: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/CIRIM_sense/default/2024-03-15_13-26-08/checkpoints/default--val_loss=0.0947-epoch=10-last.ckpt
 mode: test
 
 model:
@@ -21,6 +21,14 @@ model:
     - true
     - true
     - false
+  conv_dropout:
+    - 0
+    - 0
+    - 0
+  conv_activations:
+    - RELU
+    - RELU
+    - None
   recurrent_filters:
     - 64
     - 64
@@ -37,6 +45,10 @@ model:
     - true
     - true
     - false
+  recurrent_dropout:
+    - 0
+    - 0
+    - 0
   depth: 2
   time_steps: 8
   conv_dim: 2
@@ -65,9 +77,13 @@ model:
   coil_dim: 1
   estimate_coil_sensitivity_maps_with_nn: false
   consecutive_slices: 1
+  log_logliklihood_gradient_std: true
+  save_logliklihood_gradient: true
+  save_zero_filled: true
+  save_intermediate_predictions: true
 
   test_ds:
-    data_path: /data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_test.json
+    data_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_MTR_005_test.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
@@ -90,7 +106,7 @@ model:
     coil_combination_method: SENSE
     dimensionality: 2
     mask_args:
-      type: poisson2d  # the mask will be loaded from the dataset, but we need to specify the type here
+      type: gaussian2d  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
         - 4  # 4, 6, 8, 10, 12, 16
       shift_mask: false
@@ -147,7 +163,7 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA/CIRIM_sense/predictions_4x/2024-01-15_21-52-00
+  exp_dir: /data/projects/utwente/recon/SKM-TEA_small/v1-release/predictions/CIRIM_SENSE/predictions_4x/2024-03-15_13-26-08
   ema:
     enable: false
   create_tensorboard_logger: false

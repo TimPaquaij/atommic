@@ -117,6 +117,8 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                     consecutive_slices=self.consecutive_slices,
                     coil_combination_method=cfg_dict.get("coil_combination_method", "SENSE"),
                     normalize_segmentation_output=cfg_dict.get("normalize_segmentation_output", True),
+                    combine_echoes=cfg_dict.get("combine_echoes",True),
+                    num_echoes= cfg_dict.get("num_echoes",1)
                 )
                 for _ in range(self.rs_cascades)
             ]

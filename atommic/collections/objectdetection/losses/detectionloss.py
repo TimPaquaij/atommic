@@ -5,7 +5,7 @@ from atommic.core.classes.loss import Loss
 from typing import Any, List, Tuple, Union,Dict
 from atommic.collections.objectdetection.nn.yolo_base import box_ops
 from atommic.collections.segmentation.losses.cross_entropy import BinaryCrossEntropy_with_logits_Loss
-
+import torch.nn.functional as F
 
 class BBoxLoss(Loss):
     def __init__(
@@ -20,7 +20,7 @@ class BBoxLoss(Loss):
         self.strides = strides
         self.register_buffer("anchors", torch.Tensor(anchors))
         self.match_thresh = match_thresh
-        self.binary_cross_entropy = BinaryCrossEntropy_with_logits_Loss()
+        #self.binary_cross_entropy = BinaryCrossEntropy_with_logits_Loss()
 
     def forward(self, targets: Dict, preds: torch.Tensor) -> Tuple[Union[Tensor, Any], Tensor]:  # noqa: MC0001
         dtype = preds[0].dtype
@@ -63,7 +63,7 @@ class ClassLoss(Loss):
         self.register_buffer("anchors", torch.Tensor(anchors))
         self.match_thresh = match_thresh
         self.giou_ratio = giou_ratio
-        self.binary_cross_entropy = BinaryCrossEntropy_with_logits_Loss()
+        #self.binary_cross_entropy = BinaryCrossEntropy_with_logits_Loss()
     def forward(self, targets: Dict, preds: torch.Tensor) -> Tuple[Union[Tensor, Any], Tensor]:  # noqa: MC0001
         dtype = preds[0].dtype
         image_ids = torch.cat([torch.full_like(tgt["labels"], i)
@@ -87,7 +87,7 @@ class ClassLoss(Loss):
                 # neg = 1 - pos
                 gt_label = torch.zeros_like(pred_level[..., 5:])
                 gt_label[range(len(gt_id)), gt_labels[gt_id]] = 1
-                loss["loss_cls"] += self.binary_cross_entropy(pred_level[..., 5:], gt_label)
+                loss["loss_cls"] += F.binary_cross_entropy_with_logits(pred_level[..., 5:], gt_label)
         return loss["loss_cls"]
 
 class ObjectLoss(Loss):
@@ -105,7 +105,7 @@ class ObjectLoss(Loss):
         self.register_buffer("anchors", torch.Tensor(anchors))
         self.match_thresh = match_thresh
         self.giou_ratio = giou_ratio
-        self.binary_cross_entropy = BinaryCrossEntropy_with_logits_Loss()
+        #self.binary_cross_entropy = BinaryCrossEntropy_with_logits_Loss()
     def forward(self, targets: Dict, preds: torch.Tensor) -> Tuple[Union[Tensor, Any], Tensor]:  # noqa: MC0001
         dtype = preds[0].dtype
         image_ids = torch.cat([torch.full_like(tgt["labels"], i)
@@ -134,5 +134,5 @@ class ObjectLoss(Loss):
                     self.giou_ratio * giou.detach().clamp(0) + (1 - self.giou_ratio)
                 # pos = 1 - 0.5 * self.eps
                 # neg = 1 - pos
-            losses["loss_obj"] += self.binary_cross_entropy(pred[..., 4], gt_object)
+            losses["loss_obj"] += F.binary_cross_entropy_with_logits(pred[..., 4], gt_object)
         return losses["loss_obj"]

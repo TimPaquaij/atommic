@@ -10,8 +10,6 @@ model:
   segmentation_module_channels: 64
   segmentation_module_pooling_layers: 5
   segmentation_module_dropout: 0.0
-  segmentation_module_normalize: false
-  segmentation_module_norm_groups: 2
   segmentation_loss:
     dice: 1
     cross_entropy: 1
@@ -39,17 +37,27 @@ model:
   dice_metric_smooth_nr: 1e-5
   dice_metric_smooth_dr: 1e-5
   dice_metric_batch: true
-  segmentation_classes_thresholds: none
-  segmentation_activation: softmax
-  cross_entropy_loss_classes_weight: [ 1,1, 1, 1, 1 ]
+  cross_entropy_loss_classes_weight: [ 0,1, 1, 1, 1 ]
   cross_entropy_loss_num_samples: 50
   cross_entropy_loss_ignore_index: -100
   cross_entropy_loss_reduction: none
   cross_entropy_loss_label_smoothing: 0.0
+  cross_entropy_metric_num_samples: 50
+  cross_entropy_metric_ignore_index: -100
+  cross_entropy_metric_reduction: none
+  cross_entropy_metric_label_smoothing: 0.0
+  cross_entropy_metric_classes_weight: [0,1, 1, 1, 1 ]
+  segmentation_classes_thresholds: none
+  segmentation_activation: softmax
+  fft_centered: true
+  fft_normalization: ortho
+  spatial_dims:
+    - -2
+    - -1
   magnitude_input: true
   log_multiple_modalities: false  # log all modalities in the same image, e.g. T1, T2, T1ce, FLAIR will be concatenated
   normalization_type: minmax
-  normalize_segmentation_output: false
+  normalize_segmentation_output: true
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
   complex_data: true
@@ -57,6 +65,9 @@ model:
   dimensionality: 3
   coil_combination_method: SENSE
   coil_dim: 2
+  estimate_coil_sensitivity_maps_with_nn: false
+  ssdu: false
+  n2r: false
 
   train_ds:
     data_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_train.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_train.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_train.json
@@ -65,9 +76,9 @@ model:
     noise_path: None
     initial_predictions_path: None
     dataset_format:
-      - custom_masking
-      - SKM-TEA-echo1+echo2
-      - lateral
+    - custom_masking
+    - SKM-TEA-echo1
+    - lateral
     sample_rate: 1
     volume_sample_rate: None
     use_dataset_cache: false
@@ -81,11 +92,7 @@ model:
     coil_combination_method: SENSE
     dimensionality: 2
     mask_args:
-      type: poisson2d  # the mask will be loaded from the dataset, but we need to specify the type here
-      accelerations:
-        - 4  # 4, 6, 8, 10, 12, 16
-      shift_mask: false
-      use_seed: false
+      type: none  # the mask will be loaded from the dataset, but we need to specify the type her
     partial_fourier_percentage: 0.0
     remask: false
     ssdu: false
@@ -123,9 +130,9 @@ model:
     noise_path: None
     initial_predictions_path: None
     dataset_format:
-      - custom_masking
-      - SKM-TEA-echo1+echo2
-      - lateral
+    - custom_masking
+    - SKM-TEA-echo1
+    - lateral
     sample_rate: 1
     volume_sample_rate: None
     use_dataset_cache: false
@@ -141,11 +148,7 @@ model:
     coil_combination_method: SENSE
     dimensionality: 2
     mask_args:
-      type: poisson2d  # the mask will be loaded from the dataset, but we need to specify the type here
-      accelerations:
-        - 4 # 4, 6, 8, 10, 12, 16
-      shift_mask: false
-      use_seed: true
+      type: none  # the mask will be loaded from the dataset, but we need to specify the type here
     partial_fourier_percentage: 0.0
     remask: false
     ssdu: false
@@ -181,7 +184,7 @@ model:
     lr: 1e-4
     betas:
       - 0.9
-      - 0.98
+      - 0.99
     weight_decay: 0.0
     sched:
       name: InverseSquareRootAnnealing
@@ -194,8 +197,8 @@ trainer:
   accelerator: gpu
   devices: 1
   num_nodes: 1
-  max_epochs: 20
-  precision: 16-mixed  # '16-mixed', 'bf16-mixed', '32-true', '64-true', '64', '32', '16', 'bf16'
+  max_epochs: 10
+  precision: 16-mixed
   enable_checkpointing: false
   logger: false
   log_every_n_steps: 50
@@ -204,6 +207,8 @@ trainer:
 
 exp_manager:
   exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/Unet3D_SENSE
+  ema:
+    enable: false
   create_tensorboard_logger: false
   create_wandb_logger: true
   wandb_logger_kwargs:

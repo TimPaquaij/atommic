@@ -843,7 +843,7 @@ def rnn_weights_init(module: torch.nn.Module, std_init_range: float = 0.02, xavi
     """
     if isinstance(module, torch.nn.Linear):
         if xavier:
-            torch.nn.init.xavier_uniform_(module.weight)
+            torch.init.xavier_uniform_(module.weight)
         else:
             torch.nn.init.normal_(module.weight, mean=0.0, std=std_init_range)
         if module.bias is not None:

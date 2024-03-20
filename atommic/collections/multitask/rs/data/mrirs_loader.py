@@ -560,6 +560,7 @@ class SKMTEARSMRIDatasetlateral(RSMRIDataset):
                         "skm-tea-echo2",
                         "skm-tea-echo1+echo2",
                         "skm-tea-echo1+echo2-mc",
+                        "skm-tea-echo1-echo2"
                 ):
                     dataset_format = s.lower()
                 elif s.lower() in ("custom_masking"):
@@ -583,6 +584,8 @@ class SKMTEARSMRIDatasetlateral(RSMRIDataset):
                 kspace = kspace[..., 0, :] + kspace[..., 1, :]
             elif not is_none(dataset_format) and dataset_format == "skm-tea-echo1+echo2-mc":
                 kspace = np.concatenate([kspace[..., 0, :], kspace[..., 1, :]], axis=-1)
+            elif not is_none(dataset_format) and dataset_format == "skm-tea-echo1-echo2":
+                kspace = kspace
             else:
                 warnings.warn(
                     f"Dataset format {dataset_format} is either not supported or set to None. "
@@ -607,8 +610,16 @@ class SKMTEARSMRIDatasetlateral(RSMRIDataset):
 
             # get a slice
             segmentation_labels = self.get_consecutive_slices({"seg": segmentation_labels}, "seg", dataslice)
-
-            if self.consecutive_slices > 1:
+            if not is_none(dataset_format) and dataset_format == "skm-tea-echo1-echo2":
+                if self.consecutive_slices > 1:
+                    segmentation_labels = np.transpose(segmentation_labels, (0, 3, 1, 2))
+                    kspace = np.transpose(kspace, (3, 0,4, 1,2))
+                    sensitivity_map = np.transpose(sensitivity_map, (3,0,4, 1, 2))
+                else:
+                    segmentation_labels = np.transpose(segmentation_labels, (2, 0, 1))
+                    kspace = np.transpose(kspace, (2,3,0,1))
+                    sensitivity_map = np.transpose(sensitivity_map, (2,3,0,1))
+            elif self.consecutive_slices > 1 and not is_none(dataset_format) and dataset_format != "skm-tea-echo1-echo2":
                 segmentation_labels = np.transpose(segmentation_labels, (0,3, 1, 2))
                 kspace = np.transpose(kspace, (0, 3, 1,2))
                 sensitivity_map = np.transpose(sensitivity_map.squeeze(), (0,3, 1, 2))

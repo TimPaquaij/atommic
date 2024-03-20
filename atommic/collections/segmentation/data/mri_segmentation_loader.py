@@ -1276,7 +1276,6 @@ class SKMTEASegmentationMRIDataset(Dataset):
         attrs["max"] = max_val
         attrs["mean"] = mean_val
         attrs["std"] = std_val
-
         return (
             (
                 kspace,
@@ -1303,12 +1302,285 @@ class SKMTEASegmentationMRIDataset(Dataset):
             )
         )
 
-class SKMTEASegmentationMRIDatasetLateral(RSMRIDataset):
+class SKMTEASegmentationMRIDatasetLateral(Dataset):
     """Supports the SKM-TEA dataset for multitask accelerated MRI reconstruction and MRI segmentation.
 
     .. note::
         Extends :class:`atommic.collections.multitask.rs.data.mrirs_loader.RSMRIDataset`.
     """
+    def __init__(
+        self,
+        root: Union[str, Path, os.PathLike],
+        coil_sensitivity_maps_root: Union[str, Path, os.PathLike] = None,  # pylint: disable=unused-argument
+        mask_root: Union[str, Path, os.PathLike] = None,  # pylint: disable=unused-argument
+        noise_root: Union[str, Path, os.PathLike] = None,  # pylint: disable=unused-argument
+        initial_predictions_root: Union[str, Path, os.PathLike] = None,
+        dataset_format: str = None,
+        sample_rate: Optional[float] = None,
+        volume_sample_rate: Optional[float] = None,
+        use_dataset_cache: bool = False,
+        dataset_cache_file: Union[str, Path, os.PathLike] = None,
+        num_cols: Optional[Tuple[int]] = None,
+        consecutive_slices: int = 1,
+        data_saved_per_slice: bool = False,
+        n2r_supervised_rate: Optional[float] = 0.0,  # pylint: disable=unused-argument
+        complex_target: bool = False,
+        log_images_rate: Optional[float] = 1.0,
+        transform: Optional[Callable] = None,
+        segmentations_root: Union[str, Path, os.PathLike] = None,
+        segmentation_classes: int = 2,
+        segmentation_classes_to_remove: Optional[Tuple[int]] = None,
+        segmentation_classes_to_combine: Optional[Tuple[int]] = None,
+        segmentation_classes_to_separate: Optional[Tuple[int]] = None,
+        segmentation_classes_thresholds: Optional[Tuple[float]] = None,
+        complex_data: bool = True,
+        **kwargs,  # pylint: disable=unused-argument
+    ):
+        """Inits :class:`SKMTEASegmentationMRIDataset`.
+
+        Parameters
+        ----------
+        root : Union[str, Path, os.PathLike]
+            Path to the dataset.
+        sense_root : Union[str, Path, os.PathLike], optional
+            Path to the coil sensitivities maps dataset, if stored separately.
+        mask_root : Union[str, Path, os.PathLike], optional
+            Path to stored masks, if stored separately.
+        noise_root : Union[str, Path, os.PathLike], optional
+            Path to stored noise, if stored separately (in json format).
+        initial_predictions_root : Union[str, Path, os.PathLike], optional
+            Path to the dataset containing the initial predictions. If provided, the initial predictions will be used
+            as the input of the reconstruction network. Default is ``None``.
+        dataset_format : str, optional
+            The format of the dataset. For example, ``'custom_dataset'`` or ``'public_dataset_name'``.
+            Default is ``None``.
+        sample_rate : Optional[float], optional
+            A float between 0 and 1. This controls what fraction of the slices should be loaded. When creating
+            subsampled datasets either set sample_rates (sample by slices) or volume_sample_rates (sample by volumes)
+            but not both.
+        volume_sample_rate : Optional[float], optional
+            A float between 0 and 1. This controls what fraction of the volumes should be loaded. When creating
+            subsampled datasets either set sample_rates (sample by slices) or volume_sample_rates (sample by volumes)
+            but not both.
+        use_dataset_cache : bool, optional
+            Whether to cache dataset metadata. This is very useful for large datasets.
+        dataset_cache_file : Union[str, Path, os.PathLike], optional
+            A file in which to cache dataset information for faster load times.
+        num_cols : Optional[Tuple[int]], optional
+            If provided, only slices with the desired number of columns will be considered.
+        consecutive_slices : int, optional
+            An int (>0) that determine the amount of consecutive slices of the file to be loaded at the same time.
+            Default is ``1``, loading single slices.
+        data_saved_per_slice : bool, optional
+            Whether the data is saved per slice or per volume.
+        n2r_supervised_rate : Optional[float], optional
+            A float between 0 and 1. This controls what fraction of the subjects should be loaded for Noise to
+            Reconstruction (N2R) supervised loss, if N2R is enabled. Default is ``0.0``.
+        complex_target : bool, optional
+            Whether the target is complex. Default is ``False``.
+        log_images_rate : Optional[float], optional
+            A float between 0 and 1. This controls what fraction of the subjects should be logged as images. Default is
+            ``1.0``.
+        transform : Optional[Callable], optional
+            A sequence of callable objects that preprocesses the raw data into appropriate form. The transform function
+            should take ``kspace``, ``coil sensitivity maps``, ``mask``, ``initial prediction``, ``segmentation``,
+            ``target``, ``attributes``, ``filename``, and ``slice number`` as inputs. ``target`` may be null for test
+            data. Default is ``None``.
+        segmentations_root : Union[str, Path, os.PathLike], optional
+            Path to the dataset containing the segmentations.
+        segmentation_classes : int, optional
+            The number of segmentation classes. Default is ``2``.
+        segmentation_classes_to_remove : Optional[Tuple[int]], optional
+            A tuple of segmentation classes to remove. For example, if the dataset contains segmentation classes
+            0, 1, 2,
+            3, and 4, and you want to remove classes 1 and 3, set this to ``(1, 3)``. Default is ``None``.
+        segmentation_classes_to_combine : Optional[Tuple[int]], optional
+            A tuple of segmentation classes to combine. For example, if the dataset contains segmentation classes
+            0, 1, 2, 3, and 4, and you want to combine classes 1 and 3, set this to ``(1, 3)``. Default is ``None``.
+        segmentation_classes_to_separate : Optional[Tuple[int]], optional
+            A tuple of segmentation classes to separate. For example, if the dataset contains segmentation classes
+            0, 1, 2, 3, and 4, and you want to separate class 1 into 2 classes, set this to ``(1, 2)``.
+            Default is ``None``.
+        segmentation_classes_thresholds : Optional[Tuple[float]], optional
+            A tuple of thresholds for the segmentation classes. For example, if the dataset contains segmentation
+            classes 0, 1, 2, 3, and 4, and you want to set the threshold for class 1 to 0.5, set this to
+            ``(0.5, 0.5, 0.5, 0.5, 0.5)``. Default is ``None``.
+        complex_data : bool, optional
+            Whether the data is complex. If ``False``, the data is assumed to be magnitude only. Default is ``True``.
+        **kwargs : dict
+            Additional keyword arguments.
+        """
+        super().__init__()
+        self.initial_predictions_root = initial_predictions_root
+        self.dataset_format = dataset_format
+
+        # set default sampling mode if none given
+        if not is_none(sample_rate) and not is_none(volume_sample_rate):
+            raise ValueError(
+                f"Both sample_rate {sample_rate} and volume_sample_rate {volume_sample_rate} are set. "
+                "Please set only one of them."
+            )
+
+        if sample_rate is None or sample_rate == "None":
+            sample_rate = 1.0
+
+        if volume_sample_rate is None or volume_sample_rate == "None":
+            volume_sample_rate = 1.0
+
+        self.dataset_cache_file = None if is_none(dataset_cache_file) else Path(dataset_cache_file)  # type: ignore
+
+        if self.dataset_cache_file is not None and self.dataset_cache_file.exists() and use_dataset_cache:
+            with open(self.dataset_cache_file, "rb") as f:
+                dataset_cache = yaml.safe_load(f)
+        else:
+            dataset_cache = {}
+
+        if consecutive_slices < 1:
+            raise ValueError(f"Consecutive slices {consecutive_slices} is out of range, must be > 0.")
+        self.consecutive_slices = consecutive_slices
+        self.complex_target = complex_target
+        self.transform = transform
+        self.data_saved_per_slice = data_saved_per_slice
+
+        self.examples = []
+
+        # Check if our dataset is in the cache. If yes, use that metadata, if not, then regenerate the metadata.
+        print(use_dataset_cache)
+        if dataset_cache.get(root) is None or not use_dataset_cache:
+            if str(root).endswith(".json"):
+                with open(root, "r") as f:  # type: ignore  # pylint: disable=unspecified-encoding
+                    examples = json.load(f)
+                files = [Path(example) for example in examples]
+            else:
+                files = list(Path(root).iterdir())
+
+            for fname in sorted(files):
+                metadata, num_slices = self._retrieve_metadata(fname)
+
+                # Specific to SKM-TEA segmentation dataset, we need to remove the first and last 30 slices
+                self.examples += [
+                    (fname, slice_ind, metadata) for slice_ind in range(num_slices) if 30 < slice_ind < num_slices - 30
+                ]
+
+            if dataset_cache.get(root) is None and use_dataset_cache:
+                dataset_cache[root] = self.examples
+                logging.info("Saving dataset cache to %s.", self.dataset_cache_file)
+                with open(self.dataset_cache_file, "wb") as f:  # type: ignore
+                    yaml.dump(dataset_cache, f)
+        else:
+            logging.info("Using dataset cache from %s.", self.dataset_cache_file)
+            self.examples = dataset_cache[root]
+
+        # subsample if desired
+        if sample_rate < 1.0:  # sample by slice
+            random.shuffle(self.examples)
+            num_examples = round(len(self.examples) * sample_rate)
+            self.examples = self.examples[:num_examples]
+        elif volume_sample_rate < 1.0:  # sample by volume
+            vol_names = sorted(list({f[0].stem for f in self.examples}))
+            random.shuffle(vol_names)
+            num_volumes = round(len(vol_names) * volume_sample_rate)
+            sampled_vols = vol_names[:num_volumes]
+            self.examples = [example for example in self.examples if example[0].stem in sampled_vols]
+
+        if num_cols and not is_none(num_cols):
+            self.examples = [ex for ex in self.examples if ex[2]["encoding_size"][1] in num_cols]
+
+        self.indices_to_log = np.random.choice(
+            len(self.examples), int(log_images_rate * len(self.examples)), replace=False  # type: ignore
+        )
+
+        self.segmentations_root = segmentations_root
+        self.consecutive_slices = consecutive_slices
+        self.segmentation_classes = segmentation_classes
+        self.segmentation_classes_to_remove = segmentation_classes_to_remove
+        self.segmentation_classes_to_combine = segmentation_classes_to_combine
+        self.segmentation_classes_to_separate = segmentation_classes_to_separate
+        self.segmentation_classes_thresholds = segmentation_classes_thresholds
+        self.complex_data = complex_data
+
+    def _retrieve_metadata(self, fname: Union[str, Path]) -> Tuple[Dict, int]:
+        """Override the ``_retrieve_metadata`` method to handle the SKM-TEA dataset.
+
+        .. note::
+            Overrides :meth:`atommic.collections.common.data.mri_loader.MRIDataset._retrieve_metadata`.
+        """
+        with h5py.File(fname, "r") as hf:
+            shape = hf["seg"].shape
+        num_slices = shape[2]
+        metadata = {
+            "padding_left": 0,
+            "padding_right": 0,
+            "encoding_size": 0,
+            "recon_size": 0,
+            "num_slices": num_slices,
+        }
+        return metadata, num_slices
+
+    def get_consecutive_slices(self, data: Dict, key: str, dataslice: int) -> np.ndarray:
+        """Override the ``get_consecutive_slices`` method to handle the SKM-TEA dataset.
+
+        .. note::
+            Overrides :meth:`atommic.collections.common.data.mri_loader.MRIDataset.get_consecutive_slices`.
+        """
+        x = data[key]
+
+        if self.consecutive_slices == 1:
+            if x.shape[2] == 1:
+                return x[:, :, 0]
+            if x.ndim != 2:
+                return x[:, :, dataslice]
+            return x
+
+        # get consecutive slices
+        num_slices = x.shape[2]
+
+        # If the number of consecutive slices is greater than or equal to the total slices, return the entire stack
+        if self.consecutive_slices >= num_slices:
+            # pad left and right with zero slices to match the desired number of slices
+            slices_to_add_start = (self.consecutive_slices - num_slices) // 2
+            slices_to_add_end = self.consecutive_slices - num_slices - slices_to_add_start
+            if slices_to_add_start > 0:
+                zero_slices = np.zeros((x.shape[0], x.shape[1], slices_to_add_start))
+                x = np.concatenate((zero_slices, x), axis=2)
+            if slices_to_add_end > 0:
+                zero_slices = np.zeros((x.shape[0], x.shape[1], slices_to_add_end))
+                x = np.concatenate((x, zero_slices), axis=2)
+            return x
+
+        # Calculate half of the consecutive slices to determine the middle position
+        half_slices = self.consecutive_slices // 2
+
+        # Determine the start and end slices based on the middle position
+        start_slice = dataslice - half_slices
+        end_slice = dataslice + half_slices + 1
+
+        # Handle edge cases
+        slices_to_add_start = 0
+        slices_to_add_end = 0
+        if start_slice < 0:
+            slices_to_add_start = abs(start_slice)
+            start_slice = 0
+
+        if end_slice > (num_slices - 1):
+            slices_to_add_end = end_slice - num_slices
+            extracted_slices = x[:, :, start_slice:]
+        else:
+            extracted_slices = x[:, :, start_slice:end_slice]
+
+        # Add slices to the start and end if needed
+        if slices_to_add_start > 0:
+            zero_slices = np.zeros((x.shape[0], x.shape[1], slices_to_add_start))
+            extracted_slices = np.concatenate((zero_slices, extracted_slices), axis=2)
+        if slices_to_add_end > 0:
+            zero_slices = np.zeros((x.shape[0], x.shape[1], slices_to_add_end))
+            extracted_slices = np.concatenate((extracted_slices, zero_slices), axis=2)
+
+        return extracted_slices
+
+    def __len__(self):
+        """Length of :class:`MRIDataset`."""
+        return len(self.examples)
 
     def __getitem__(self, i: int):  # noqa: MC0001
         """Get item from :class:`SKMTEARSMRIDataset`."""

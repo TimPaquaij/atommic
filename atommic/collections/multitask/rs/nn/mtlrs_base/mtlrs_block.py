@@ -42,6 +42,9 @@ class MTLRSBlock(torch.nn.Module):
         consecutive_slices: int = 1,
         coil_combination_method: str = "SENSE",
         normalize_segmentation_output: bool = True,
+        num_echoes: int=1,
+        combine_echoes: bool = True,
+
     ):
         """Inits :class:`MTLRSBlock`.
 
@@ -119,7 +122,7 @@ class MTLRSBlock(torch.nn.Module):
                     fft_centered=self.fft_centered,
                     fft_normalization=self.fft_normalization,
                     spatial_dims=self.spatial_dims,
-                    coil_dim=self.coil_dim-1,
+                    coil_dim=self.coil_dim,
                     dimensionality=self.reconstruction_module_dimensionality,
                     consecutive_slices=reconstruction_module_consecutive_slices,
                     coil_combination_method=self.coil_combination_method,
@@ -198,6 +201,8 @@ class MTLRSBlock(torch.nn.Module):
         self.segmentation_module = segmentation_module
         self.segmentation_3d = self.segmentation_module_params["segmentation_3d"]
         self.normalize_segmentation_output = normalize_segmentation_output
+        self.num_echoes = num_echoes
+        self.combine_echoes = combine_echoes
 
     def forward(  # noqa: MC0001
         self,
@@ -293,6 +298,13 @@ class MTLRSBlock(torch.nn.Module):
                 ]
                 for cascade_prediction in range(preds.shape[0])
             ]
+            cascades_log_like = [
+                [
+                    log_like[cascade_log_like, log_like_prediction, ...]
+                    for log_like_prediction in range(log_like.shape[1])
+                ]
+                for cascade_log_like in range(log_like.shape[0])
+            ]
         else:
             prediction = y.clone()
             _pred_reconstruction = (
@@ -319,8 +331,8 @@ class MTLRSBlock(torch.nn.Module):
                 log_like_predictions = [torch.view_as_complex(l) for l in log_like]
                 cascades_predictions.append(time_steps_predictions)
                 cascades_log_like.append(log_like_predictions)
-                log_like = cascades_log_like
         pred_reconstruction = cascades_predictions
+
 
         _pred_reconstruction = pred_reconstruction
         if isinstance(_pred_reconstruction, list):
@@ -350,7 +362,8 @@ class MTLRSBlock(torch.nn.Module):
                 raise ValueError(f"The input channels must be either 1 or 2. Found: {self.input_channels}")
         else:
             _pred_reconstruction = _pred_reconstruction.unsqueeze(1)
-        print(_pred_reconstruction.shape)
+        if self.num_echoes>1 and self.combine_echoes:
+            _pred_reconstruction = torch.sum(_pred_reconstruction,dim=0,keepdim=True)
         pred_segmentation = self.segmentation_module(_pred_reconstruction)
 
         if self.normalize_segmentation_output:
@@ -371,4 +384,4 @@ class MTLRSBlock(torch.nn.Module):
             pred_segmentation = pred_segmentation.permute(0,2,1,3,4)
             pred_segmentation = pred_segmentation.view([y.shape[0], y.shape[1], *pred_segmentation.shape[2:]])
 
-        return pred_reconstruction, pred_segmentation, hx, log_like  # type: ignore
+        return pred_reconstruction, pred_segmentation, hx, cascades_log_like  # type: ignore
