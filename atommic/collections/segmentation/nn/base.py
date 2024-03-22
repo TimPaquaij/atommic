@@ -29,10 +29,10 @@ from atommic.collections.segmentation.data.mri_segmentation_loader import (
 )
 from atommic.collections.multitask.rs.data.mrirs_loader import SKMTEARSMRIDatasetlateral
 from atommic.collections.segmentation.losses.cross_entropy import CrossEntropyLoss
-from atommic.collections.segmentation.losses.dice import Dice
+from atommic.collections.segmentation.losses.dice import Dice,one_hot
 from atommic.collections.segmentation.parts.transforms import SegmentationMRIDataTransforms
 from atommic.collections.multitask.rs.parts.transforms import RSMRIDataTransforms
-
+from atommic.collections.segmentation.losses.focal_loss import FocalLoss
 __all__ = ["BaseMRISegmentationModel"]
 
 
@@ -131,6 +131,8 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
                         smooth_dr=cfg_dict.get("dice_loss_smooth_dr", 1e-5),
                         batch=cfg_dict.get("dice_loss_batch", False),
                     )
+                elif name == "focal_loss":
+                    self.segmentation_losses[name] = FocalLoss()
         self.segmentation_losses = {f"loss_{i+1}": v for i, v in enumerate(self.segmentation_losses.values())}
         self.total_segmentation_losses = len(self.segmentation_losses)
         self.total_segmentation_loss_weight = cfg_dict.get("total_segmentation_loss_weight", 1.0)
@@ -348,8 +350,14 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
                     output_target_segmentation, output_predictions, attrs, batch_idx=_batch_idx_
                 )
 
-            output_target_segmentation = output_target_segmentation.detach().cpu()
-            output_predictions = output_predictions.detach().cpu()
+            if is_none(self.segmentation_classes_thresholds):
+                output_predictions = torch.softmax(output_predictions, dim=0)
+                output_target_segmentation = one_hot(
+                    torch.argmax(torch.abs(output_target_segmentation.detach().cpu()), dim=0).unsqueeze(0).unsqueeze(0),
+                    num_classes=output_target_segmentation.shape[0])[0].float()
+                output_predictions = one_hot(
+                    torch.argmax(torch.abs(output_predictions.detach().cpu()), dim=0).unsqueeze(
+                        0).unsqueeze(0), num_classes=output_predictions.shape[0])[0].float()
 
             # Log target and predictions, if log_image is True for this slice.
             if attrs["log_image"][_batch_idx_]:
@@ -435,19 +443,19 @@ class BaseMRISegmentationModel(BaseMRIModel, ABC):
                 target = target.reshape(batch_size * slices, *target.shape[2:])
             if prediction.dim() == 5:
                 prediction = prediction.reshape(batch_size * slices, *prediction.shape[2:])
-        if not is_none(self.segmentation_classes_thresholds):
-            for class_idx, thres in enumerate(self.segmentation_classes_thresholds):
-                if self.segmentation_activation == "sigmoid":
-                    cond = torch.sigmoid(prediction[:, class_idx])
-                elif self.segmentation_activation == "softmax":
-                    cond = torch.softmax(prediction[:, class_idx], dim=1)
-                else:
-                    cond = prediction[:, class_idx]
-                prediction[:, class_idx] = torch.where(
-                    cond >= thres, prediction[:, class_idx], torch.zeros_like(prediction[:, class_idx])
-                )
-        else:
-            prediction = torch.softmax(prediction,dim=1)
+        # if not is_none(self.segmentation_classes_thresholds):
+        #     for class_idx, thres in enumerate(self.segmentation_classes_thresholds):
+        #         if self.segmentation_activation == "sigmoid":
+        #             cond = torch.sigmoid(prediction[:, class_idx])
+        #         elif self.segmentation_activation == "softmax":
+        #             cond = torch.softmax(prediction[:, class_idx], dim=1)
+        #         else:
+        #             cond = prediction[:, class_idx]
+        #         prediction[:, class_idx] = torch.where(
+        #             cond >= thres, prediction[:, class_idx], torch.zeros_like(prediction[:, class_idx])
+        #         )
+        # else:
+        #     prediction = torch.softmax(prediction,dim=1)
 
         return {
             "fname": fname,

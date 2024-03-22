@@ -44,6 +44,7 @@ class MTLRSBlock(torch.nn.Module):
         normalize_segmentation_output: bool = True,
         num_echoes: int=1,
         combine_echoes: bool = True,
+        temperature_scaling: bool=True,
 
     ):
         """Inits :class:`MTLRSBlock`.
@@ -89,7 +90,7 @@ class MTLRSBlock(torch.nn.Module):
             raise NotImplementedError(f"Currently only 2D is supported for segmentation, got {self.dimensionality}D.")
         self.consecutive_slices = consecutive_slices
         self.coil_combination_method = coil_combination_method
-
+        self.temperature_scaling=temperature_scaling
         # Reconstruction module parameters
         self.reconstruction_module_params = reconstruction_module_params
         self.reconstruction_module_recurrent_filters = self.reconstruction_module_params["recurrent_filters"]
@@ -213,6 +214,7 @@ class MTLRSBlock(torch.nn.Module):
         target_reconstruction: torch.Tensor,  # pylint: disable=unused-argument
         hx: torch.Tensor = None,
         sigma: float = 1.0,
+        temperature: float =1.0,
     ) -> Tuple[Union[List, torch.Tensor], torch.Tensor]:
         """Forward pass of :class:`MTLRSBlock`.
 
@@ -383,5 +385,6 @@ class MTLRSBlock(torch.nn.Module):
             # not be saved before
             pred_segmentation = pred_segmentation.permute(0,2,1,3,4)
             pred_segmentation = pred_segmentation.view([y.shape[0], y.shape[1], *pred_segmentation.shape[2:]])
-
+        if self.temperature_scaling:
+            pred_segmentation = pred_segmentation/temperature
         return pred_reconstruction, pred_segmentation, hx, cascades_log_like  # type: ignore

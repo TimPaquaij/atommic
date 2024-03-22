@@ -14,8 +14,7 @@ model:
   segmentation_module_normalize: false
   segmentation_module_norm_groups: 2
   segmentation_loss:
-    dice: 1.0
-    cross_entropy: 1
+    focal_loss: 1
   dice_loss_include_background: false  # always set to true if the background is removed
   dice_loss_to_onehot_y: false
   dice_loss_sigmoid: false
@@ -45,7 +44,7 @@ model:
   cross_entropy_loss_ignore_index: -100
   cross_entropy_loss_reduction: none
   cross_entropy_loss_label_smoothing: 0.0
-  cross_entropy_metric_classes_weight: [ 1,1, 1, 1, 1 ]
+  cross_entropy_metric_classes_weight: none
   cross_entropy_metric_num_samples: 50
   cross_entropy_metric_ignore_index: -100
   cross_entropy_metric_reduction: none
@@ -72,7 +71,7 @@ model:
     initial_predictions_path: None
     dataset_format:
       - custom_masking
-      - SKM-TEA-echo1+echo2
+      - SKM-TEA-echo1
       - lateral
     sample_rate: 1
     volume_sample_rate: None
@@ -87,11 +86,7 @@ model:
     coil_combination_method: SENSE
     dimensionality: 2
     mask_args:
-      type: poisson2d  # the mask will be loaded from the dataset, but we need to specify the type here
-      accelerations:
-        - 4  # 4, 6, 8, 10, 12, 16
-      shift_mask: false
-      use_seed: false
+      type: none  # the mask will be loaded from the dataset, but we need to specify the type here
     partial_fourier_percentage: 0.0
     remask: false
     ssdu: false
@@ -147,11 +142,7 @@ model:
     coil_combination_method: SENSE
     dimensionality: 2
     mask_args:
-      type: poisson2d  # the mask will be loaded from the dataset, but we need to specify the type here
-      accelerations:
-        - 4 # 4, 6, 8, 10, 12, 16
-      shift_mask: false
-      use_seed: true
+      type: none  # the mask will be loaded from the dataset, but we need to specify the type here
     partial_fourier_percentage: 0.0
     remask: false
     ssdu: false
@@ -213,4 +204,7 @@ exp_manager:
   ema:
     enable: false
   create_tensorboard_logger: true
-  create_wandb_logger: false
+  create_wandb_logger: true
+  wandb_logger_kwargs:
+    project: Attention_SKMTEA
+  files_to_copy: [ ]

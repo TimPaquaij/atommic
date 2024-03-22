@@ -5,5 +5,5 @@ from atommic.collections.common.losses.aggregator import AggregatorLoss  # noqa:
 from atommic.collections.common.losses.wasserstein import SinkhornDistance  # noqa: F401
 
 VALID_RECONSTRUCTION_LOSSES = ["l1", "mse", "ssim","haarpsi","vsi" ,"noise_aware", "wasserstein"]
-VALID_SEGMENTATION_LOSSES = ["cross_entropy", "dice"]
+VALID_SEGMENTATION_LOSSES = ["cross_entropy", "dice","focal_loss"]
 VALID_OBJ_DETECTION_LOSSES = ["class","object","bbox"]

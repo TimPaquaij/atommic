@@ -118,7 +118,8 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                     coil_combination_method=cfg_dict.get("coil_combination_method", "SENSE"),
                     normalize_segmentation_output=cfg_dict.get("normalize_segmentation_output", True),
                     combine_echoes=cfg_dict.get("combine_echoes",True),
-                    num_echoes= cfg_dict.get("num_echoes",1)
+                    num_echoes= cfg_dict.get("num_echoes",1),
+                    temperature_scaling=cfg_dict.get("temperature_scaling",True)
                 )
                 for _ in range(self.rs_cascades)
             ]
@@ -137,6 +138,7 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
         target_reconstruction: torch.Tensor,
         hx: torch.Tensor = None,
         sigma: float = 1.0,
+        temperature: float =1.0
     ) -> Tuple[Union[List, torch.Tensor], torch.Tensor]:
         """Forward pass of :class:`MTLRS`.
 
@@ -174,12 +176,13 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                 target_reconstruction=target_reconstruction,
                 hx=hx,
                 sigma=sigma,
+                temperature = temperature,
             )
             pred_reconstructions.append(pred_reconstruction)
             pred_log_likelihoods.append(log_like)
             init_reconstruction_pred = pred_reconstruction[-1][-1]
 
-
+            pred_segmentation_logit = pred_segmentation
             if self.task_adaption_type == "multi_task_learning_dimitirs" and i >= self.combine_rs:
                 hidden_states = [
                     torch.cat(
@@ -268,7 +271,7 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                 if pred_segmentation.dim() == 5:
                     pred_segmentation = pred_segmentation.reshape(batch_size * slices,
                                                                   *pred_segmentation.shape[2:])
-            pred_segmentations.append(pred_segmentation)
+            pred_segmentations.append(pred_segmentation_logit)
 
 
         return pred_reconstructions, pred_segmentations, pred_log_likelihoods

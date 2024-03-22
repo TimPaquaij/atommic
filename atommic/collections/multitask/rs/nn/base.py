@@ -15,7 +15,6 @@ from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import Trainer
 from torch.nn import L1Loss, MSELoss
 from torch.utils.data import DataLoader
-
 # do not import BaseMRIModel, BaseSensitivityModel, and DistributedMetricSum directly to avoid circular imports
 import atommic.collections.common as atommic_common
 from atommic.collections.common.data.subsample import create_masker
@@ -41,7 +40,8 @@ from atommic.collections.reconstruction.losses.vsi import VSILoss
 from atommic.collections.reconstruction.metrics import mse, nmse, psnr, ssim, haarpsi3d, vsi3d
 from atommic.collections.segmentation.losses.cross_entropy import CrossEntropyLoss, BinaryCrossEntropy_with_logits_Loss
 from atommic.collections.segmentation.losses.dice import Dice, one_hot
-
+from atommic.collections.segmentation.losses.focal_loss import FocalLoss
+import matplotlib.pyplot as plt
 __all__ = ["BaseMRIReconstructionSegmentationModel"]
 
 
@@ -168,6 +168,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         # Set threshold for segmentation classes. If None, no thresholding is applied.
         self.segmentation_classes_thresholds = cfg_dict.get("segmentation_classes_thresholds", None)
         self.segmentation_activation = cfg_dict.get("segmentation_activation", None)
+
         # Initialize loss related parameters.
         self.segmentation_losses = {}
         segmentation_loss = cfg_dict.get("segmentation_loss")
@@ -195,7 +196,6 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                 if name == "cross_entropy":
 
                     if not is_none(self.segmentation_classes_thresholds):
-                        #self.segmentation_losses[name] = BinaryCrossEntropy_with_logits_Loss()
                         self.segmentation_losses[name] = CrossEntropyLoss(
                             num_samples=cfg_dict.get("cross_entropy_loss_num_samples", 50),
                             ignore_index=cfg_dict.get("cross_entropy_loss_ignore_index", -100),
@@ -211,11 +211,13 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                             label_smoothing=cfg_dict.get("cross_entropy_loss_label_smoothing", 0.0),
                             weight = torch.tensor(cfg_dict.get("cross_entropy_loss_classes_weight", [1,1,1,1])),
                         )
+                elif name=="focal_loss":
+                    self.segmentation_losses[name] = FocalLoss()
                 elif name == "dice":
                     self.segmentation_losses[name] = Dice(
                         include_background=cfg_dict.get("dice_loss_include_background", False),
                         to_onehot_y=cfg_dict.get("dice_loss_to_onehot_y", False),
-                        sigmoid=cfg_dict.get("dice_loss_sigmoid", True),
+                        sigmoid=cfg_dict.get("dice_loss_sigmoid", False),
                         softmax=cfg_dict.get("dice_loss_softmax", False),
                         other_act=cfg_dict.get("dice_loss_other_act", None),
                         squared_pred=cfg_dict.get("dice_loss_squared_pred", False),
@@ -230,15 +232,16 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         self.total_segmentation_losses = len(self.segmentation_losses)
         self.total_segmentation_loss_weight = cfg_dict.get("total_segmentation_loss_weight", 1.0)
         self.total_reconstruction_loss_weight = cfg_dict.get("total_reconstruction_loss_weight", 1.0)
+        self.temperature_scaling = cfg_dict.get("temperature_scaling",True)
         # Set the metrics
         cross_entropy_metric_num_samples = cfg_dict.get("cross_entropy_metric_num_samples", 50)
         cross_entropy_metric_ignore_index = cfg_dict.get("cross_entropy_metric_ignore_index", -100)
         cross_entropy_metric_reduction = cfg_dict.get("cross_entropy_metric_reduction", "none")
         cross_entropy_metric_label_smoothing = cfg_dict.get("cross_entropy_metric_label_smoothing", 0.0)
-        cross_entropy_metric_classes_weight = torch.tensor(cfg_dict.get("cross_entropy_metric_classes_weight", [1,1,1,1]))
+        cross_entropy_metric_classes_weight = cfg_dict.get("cross_entropy_metric_classes_weight", None)
         dice_metric_include_background = cfg_dict.get("dice_metric_include_background", False)
         dice_metric_to_onehot_y = cfg_dict.get("dice_metric_to_onehot_y", False)
-        dice_metric_sigmoid = cfg_dict.get("dice_metric_sigmoid", True)
+        dice_metric_sigmoid = cfg_dict.get("dice_metric_sigmoid", False)
         dice_metric_softmax = cfg_dict.get("dice_metric_softmax", False)
         dice_metric_other_act = cfg_dict.get("dice_metric_other_act", None)
         dice_metric_squared_pred = cfg_dict.get("dice_metric_squared_pred", False)
@@ -251,7 +254,9 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
 
         # Initialize the module
         super().__init__(cfg=cfg, trainer=trainer)
-
+        if self.temperature_scaling == True:
+            self.temperature = torch.nn.Parameter(torch.ones(1))
+            self.temperature.requires_grad = False
         if self.estimate_coil_sensitivity_maps_with_nn:
             self.coil_sensitivity_maps_nn = atommic_common.nn.base.BaseSensitivityModel(  # type: ignore
                 cfg_dict.get("coil_sensitivity_maps_nn_chans", 8),
@@ -286,23 +291,26 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             self.haarpsi_vals_reconstruction: Dict = defaultdict(dict)
             self.vsi_vals_reconstruction: Dict = defaultdict(dict)
 
-        if not is_none(cross_entropy_metric_classes_weight) or cross_entropy_metric_classes_weight != 0.0:
-            #self.cross_entropy_metric = BinaryCrossEntropy_with_logits_Loss()
-            self.cross_entropy_metric = CrossEntropyLoss(
-                num_samples=cross_entropy_metric_num_samples,
-                ignore_index=cross_entropy_metric_ignore_index,
-                reduction=cross_entropy_metric_reduction,
-                label_smoothing=cross_entropy_metric_label_smoothing,
-                weight=cross_entropy_metric_classes_weight,
-            )
-        else:
-            self.cross_entropy_metric = CrossEntropyLoss(
-                num_samples=cross_entropy_metric_num_samples,
-                ignore_index=cross_entropy_metric_ignore_index,
-                reduction=cross_entropy_metric_reduction,
-                label_smoothing=cross_entropy_metric_label_smoothing,
-                weight=cross_entropy_metric_classes_weight,
-            )
+        # if not is_none(cross_entropy_metric_classes_weight) or cross_entropy_metric_classes_weight != 0.0:
+        #     #self.cross_entropy_metric = BinaryCrossEntropy_with_logits_Loss()
+        #     self.cross_entropy_metric = CrossEntropyLoss(
+        #         num_samples=cross_entropy_metric_num_samples,
+        #         ignore_index=cross_entropy_metric_ignore_index,
+        #         reduction=cross_entropy_metric_reduction,
+        #         label_smoothing=cross_entropy_metric_label_smoothing,
+        #         weight=cross_entropy_metric_classes_weight,
+        #     )
+        # elif "corss_entropy" in segmentation_losses_:
+        #     self.cross_entropy_metric = CrossEntropyLoss(
+        #         num_samples=cross_entropy_metric_num_samples,
+        #         ignore_index=cross_entropy_metric_ignore_index,
+        #         reduction=cross_entropy_metric_reduction,
+        #         label_smoothing=cross_entropy_metric_label_smoothing,
+        #         weight=cross_entropy_metric_classes_weight,
+        #     )
+        # else:
+        self.cross_entropy_metric =None
+        self.temp_focalloss = FocalLoss()
 
         self.dice_metric = Dice(
             include_background=dice_metric_include_background,
@@ -837,6 +845,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             output_predictions_reconstruction = output_predictions_reconstruction.detach().cpu()
             output_target_reconstruction = output_target_reconstruction.detach().cpu()
             if is_none(self.segmentation_classes_thresholds):
+                output_predictions_segmentation = torch.softmax(output_predictions_segmentation,dim=0)
                 output_target_segmentation = one_hot(torch.argmax(torch.abs(output_target_segmentation.detach().cpu()),dim=0).unsqueeze(0).unsqueeze(0),num_classes=output_target_segmentation.shape[0])[0].float()
                 output_predictions_segmentation = one_hot(torch.argmax(torch.abs(output_predictions_segmentation.detach().cpu()),dim=0).unsqueeze(0).unsqueeze(0),num_classes=output_predictions_segmentation.shape[0])[0].float()
             else:
@@ -959,7 +968,8 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
 
             dice_score, _ = self.dice_metric(output_target_segmentation, output_predictions_segmentation)
             self.dice_vals[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = dice_score
-
+            segmentation_logit = (target_segmentation,predictions_segmentation)
+            self.validation_step_segmentation_logits.append([str(fname[0]), slice_idx, segmentation_logit])
     def __check_noise_to_recon_inputs__(
         self, y: torch.Tensor, mask: torch.Tensor, initial_prediction: torch.Tensor, attrs: Dict
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -1082,6 +1092,56 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
 
         return n2r_y, n2r_mask, n2r_initial_prediction, mask, loss_mask
 
+    def temperature_scale(self, logits):
+        """
+        Perform temperature scaling on logits
+        """
+        # Expand temperature to match the size of logits
+        temperature = self.temperature.unsqueeze(1).unsqueeze(2).unsqueeze(3).expand(logits.size(0), logits.size(1), logits.size(2), logits.size(3))
+        return logits / temperature
+    def set_temperature(self,validation):
+        """
+        Tune the tempearature of the model (using the validation set).
+        We're going to set it to optimize NLL.
+        valid_loader (DataLoader): validation set loader
+        """
+        logits_list = []
+        labels_list = []
+        for fname, slice_num, output in validation:
+            segmentations_target, segmentations_logit = output
+            logits_list.append(segmentations_logit)
+            labels_list.append(segmentations_target)
+        logits = torch.cat(logits_list,dim=0)
+        labels = torch.cat(labels_list,dim=0)
+        #ece_criterion = _ECELoss().cuda()
+
+
+        # Calculate NLL and ECE before temperature scaling
+        before_temperature_nll = self.temp_focalloss(labels,logits).item()
+        #before_temperature_ece = ece_criterion(logits, labels).item()
+        print('Before temperature - NLL: %.3f' % (before_temperature_nll))
+
+        # Next: optimize the temperature w.r.t. NLL
+        self.temperature.requires_grad = True
+        optimizer = torch.optim.LBFGS([self.temperature], lr=0.01, max_iter=50)
+
+        def eval():
+            optimizer.zero_grad()
+            scaled_logits = self.temperature_scale(logits)
+            loss = self.temp_focalloss(labels,scaled_logits)
+            loss.requires_grad_()
+            loss.backward()
+            return loss
+        optimizer.step(eval)
+
+        # Calculate NLL and ECE after temperature scaling
+        after_temperature_nll = self.temp_focalloss(self.temperature_scale(logits), labels).item()
+        #after_temperature_ece = ece_criterion(self.temperature_scale(logits), labels).item()
+        print('Optimal temperature: %.3f' % self.temperature.item())
+        print('After temperature - NLL: %.3f' % (after_temperature_nll))
+        self.temperature.requires_grad = False
+
+        return self
     @staticmethod
     def __process_inputs__(
         kspace: Union[List, torch.Tensor],
@@ -1149,6 +1209,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         slice_idx: int,
         acceleration: float,
         attrs: Dict,
+        temperature: float =1,
     ):
         """Performs an inference step, i.e., computes the predictions of the model.
 
@@ -1257,7 +1318,8 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             target_reconstruction = target_reconstruction.view(-1, *target_reconstruction.shape[2:])
             sensitivity_maps = torch.repeat_interleave(sensitivity_maps, repeats=kspace.shape[0], dim=0).squeeze(1)
         # Model forward pass
-
+        if self.temperature_scaling:
+            temperature = self.temperature
         predictions_reconstruction, predictions_segmentation, log_like = self.forward(
             y,
             sensitivity_maps,
@@ -1265,6 +1327,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             initial_prediction_reconstruction,
             target_reconstruction,
             attrs["noise"],
+            temperature,
         )
 
 
@@ -1708,6 +1771,15 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             target_reconstruction = target_reconstruction[:, self.consecutive_slices // 2]
             predictions_segmentation = predictions_segmentation[:, self.consecutive_slices // 2]
             predictions_reconstruction = predictions_reconstruction[:, self.consecutive_slices // 2]
+
+        if self.num_echoes > 1:
+            # find the batch size
+            batch_size = target_reconstruction.shape[0] / self.num_echoes
+            # reshape to [batch_size, num_echoes, n_x, n_y]
+            target_reconstruction = target_reconstruction.reshape((int(batch_size), self.num_echoes, *target_reconstruction.shape[1:]))
+            predictions_reconstruction = predictions_reconstruction.reshape((int(batch_size), self.num_echoes, *predictions_reconstruction.shape[1:]))
+
+
         if torch.is_complex(target_reconstruction) and target_reconstruction.shape[-1] != 2:
             target_reconstruction = torch.view_as_real(target_reconstruction)
         if torch.is_complex(predictions_reconstruction) and predictions_reconstruction.shape[-1] != 2:
@@ -1731,15 +1803,9 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
            .numpy()
 
        )
-        if not is_none(self.segmentation_classes_thresholds):
-            target_segmentation = torch.where(torch.abs(target_segmentation.detach().cpu()) > 0.5, 1,
-                                                     0).float()
-            predictions_segmentation = torch.where(torch.abs(predictions_segmentation.detach().cpu()) > 0.5,
-                                                          1, 0).float()
-        else:
-
-            target_segmentation = torch.abs(target_segmentation.detach().cpu()).float()
-            predictions_segmentation = torch.abs(predictions_segmentation.detach().cpu()).float()
+        #Save images as logits for post temperture scaling
+        target_segmentation = target_segmentation.detach().cpu().float()
+        predictions_segmentation = predictions_segmentation.detach().cpu().float()
 
         predictions = (
             (predictions_segmentation, predictions_reconstruction)
@@ -1859,6 +1925,8 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         if self.use_reconstruction_module:
             for metric, value in metrics_reconstruction.items():
                 self.log(f"val_metrics/{metric}", value / tot_examples, prog_bar=True, sync_dist=True)
+        if self.temperature_scaling:
+            self.set_temperature(self.validation_step_segmentation_logits)
 
     def on_test_epoch_end(self):  # noqa: MC0001
         """Called at the end of test epoch to aggregate outputs, log metrics and save predictions.

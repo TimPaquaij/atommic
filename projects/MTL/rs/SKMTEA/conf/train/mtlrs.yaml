@@ -70,12 +70,12 @@ model:
   segmentation_module_pooling_layers: 2
   segmentation_module_dropout: 0.0
   segmentation_loss:
-    cross_entropy: 1
+    focal_loss: 1
     dice: 1
   dice_loss_include_background: false  # always set to true if the background is removed
   dice_loss_to_onehot_y: false
   dice_loss_sigmoid: false
-  dice_loss_softmax: false
+  dice_loss_softmax: true
   dice_loss_other_act: none
   dice_loss_squared_pred: false
   dice_loss_jaccard: false
@@ -96,18 +96,19 @@ model:
   dice_metric_smooth_nr: 1e-5
   dice_metric_smooth_dr: 1e-5
   dice_metric_batch: true
-  cross_entropy_loss_classes_weight: [1,1, 1, 1, 1]
-  cross_entropy_loss_num_samples: 50
-  cross_entropy_loss_ignore_index: -100
-  cross_entropy_loss_reduction: none
-  cross_entropy_loss_label_smoothing: 0.0
-  cross_entropy_metric_num_samples: 50
-  cross_entropy_metric_ignore_index: -100
-  cross_entropy_metric_reduction: none
-  cross_entropy_metric_label_smoothing: 0.0
-  cross_entropy_metric_classes_weight: [1,1, 1, 1, 1]
+#  cross_entropy_loss_classes_weight: none
+#  cross_entropy_loss_num_samples: 50
+#  cross_entropy_loss_ignore_index: -100
+#  cross_entropy_loss_reduction: none
+#  cross_entropy_loss_label_smoothing: 0.0
+#  cross_entropy_metric_num_samples: 50
+#  cross_entropy_metric_ignore_index: -100
+#  cross_entropy_metric_reduction: none
+#  cross_entropy_metric_label_smoothing: 0.0
+#  cross_entropy_metric_classes_weight: none
   segmentation_classes_thresholds: none
   segmentation_activation: softmax
+  temperature_scaling: true
   reconstruction_loss:
     l1: 1
     ssim: 1
@@ -140,6 +141,7 @@ model:
   save_logliklihood_gradient: false
   save_zero_filled: false
   save_intermediate_predictions: false
+
 
   train_ds:
     data_path:  /data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_train.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_train.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_train.json

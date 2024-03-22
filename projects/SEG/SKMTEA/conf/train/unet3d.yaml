@@ -11,12 +11,11 @@ model:
   segmentation_module_pooling_layers: 5
   segmentation_module_dropout: 0.0
   segmentation_loss:
-    dice: 1
-    cross_entropy: 1
+    focal_loss: 1
   dice_loss_include_background: false  # always set to true if the background is removed
   dice_loss_to_onehot_y: false
   dice_loss_sigmoid: false
-  dice_loss_softmax: false
+  dice_loss_softmax: true
   dice_loss_other_act: none
   dice_loss_squared_pred: false
   dice_loss_jaccard: false
@@ -46,7 +45,7 @@ model:
   cross_entropy_metric_ignore_index: -100
   cross_entropy_metric_reduction: none
   cross_entropy_metric_label_smoothing: 0.0
-  cross_entropy_metric_classes_weight: [0,1, 1, 1, 1 ]
+  cross_entropy_metric_classes_weight: none
   segmentation_classes_thresholds: none
   segmentation_activation: softmax
   fft_centered: true
@@ -79,7 +78,7 @@ model:
     - custom_masking
     - SKM-TEA-echo1
     - lateral
-    sample_rate: 1
+    sample_rate: 0.1
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
@@ -133,7 +132,7 @@ model:
     - custom_masking
     - SKM-TEA-echo1
     - lateral
-    sample_rate: 1
+    sample_rate: 0.1
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
@@ -141,7 +140,7 @@ model:
     consecutive_slices: 5
     data_saved_per_slice: false
     complex_target: true
-    log_images_rate: 0.005
+    log_images_rate: 0.05
     apply_prewhitening: false
     apply_gcc: false
     estimate_coil_sensitivity_maps: false
@@ -210,7 +209,7 @@ exp_manager:
   ema:
     enable: false
   create_tensorboard_logger: false
-  create_wandb_logger: true
+  create_wandb_logger: false
   wandb_logger_kwargs:
     project: Unet3D_SKMTEA
   files_to_copy: [ ]

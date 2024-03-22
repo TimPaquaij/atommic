@@ -180,6 +180,10 @@ class ModelPT(LightningModule, Model):
         if self._validation_dl and isinstance(self._validation_dl, list) and len(self._validation_dl) > 1:
             for _ in range(len(self._validation_dl)):
                 self.validation_step_outputs.append([])
+        self.validation_step_segmentation_logits: List = []
+        if self._validation_dl and isinstance(self._validation_dl, list) and len(self._validation_dl) > 1:
+            for _ in range(len(self._validation_dl)):
+                self.validation_step_segmentation_logits.append([])
 
         # Initialize an empty list as sometimes self._test_dl can be None at this stage
         self.test_step_outputs: List = []
