@@ -50,6 +50,7 @@ class RSMRIDataset(MRIDataset):
         n2r_supervised_rate: Optional[float] = 0.0,
         complex_target: bool = False,
         log_images_rate: Optional[float] = 1.0,
+        log_temp_rate: Optional[float] = 1.0,
         transform: Optional[Callable] = None,
         segmentations_root: Union[str, Path, os.PathLike] = None,
         segmentation_classes: int = 2,
@@ -150,6 +151,7 @@ class RSMRIDataset(MRIDataset):
             n2r_supervised_rate,
             complex_target,
             log_images_rate,
+            log_temp_rate,
             transform,
             **kwargs,
         )
@@ -647,6 +649,7 @@ class SKMTEARSMRIDatasetlateral(RSMRIDataset):
 
 
         attrs["log_image"] = bool(slice_in_data in self.indices_to_log)
+        attrs["use_for_temp"] = bool(slice_in_data in self.temperature_to_log)
 
         return (
             (

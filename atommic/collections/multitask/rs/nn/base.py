@@ -968,8 +968,9 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
 
             dice_score, _ = self.dice_metric(output_target_segmentation, output_predictions_segmentation)
             self.dice_vals[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = dice_score
-            segmentation_logit = (target_segmentation,predictions_segmentation)
-            self.validation_step_segmentation_logits.append([str(fname[0]), slice_idx, segmentation_logit])
+            if self.temperature_scaling and attrs["use_for_temp"]:
+                segmentation_logit = (target_segmentation,predictions_segmentation)
+                self.validation_step_segmentation_logits.append([str(fname[0]), slice_idx, segmentation_logit])
     def __check_noise_to_recon_inputs__(
         self, y: torch.Tensor, mask: torch.Tensor, initial_prediction: torch.Tensor, attrs: Dict
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -2179,6 +2180,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             n2r_supervised_rate=cfg.get("n2r_supervised_rate", 0.0),
             complex_target=cfg.get("complex_target", False),
             log_images_rate=cfg.get("log_images_rate", 1.0),
+            log_temp_rate=cfg.get("log_images_rate",0),
             transform=RSMRIDataTransforms(
                 complex_data=complex_data,
                 dataset_format=dataset_format,

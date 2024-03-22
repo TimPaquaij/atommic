@@ -70,6 +70,7 @@ class MRIDataset(Dataset):
         n2r_supervised_rate: Optional[float] = 0.0,
         complex_target: bool = False,
         log_images_rate: Optional[float] = 1.0,
+        log_temp_rate: Optional[float] = 1.0,
         transform: Optional[Callable] = None,
         **kwargs,  # pylint: disable=unused-argument
     ):
@@ -226,9 +227,9 @@ class MRIDataset(Dataset):
             self.examples = [ex for ex in self.examples if ex[2]["encoding_size"][1] in num_cols]
 
         self.indices_to_log = np.random.choice(
-            len(self.examples), int(log_images_rate * len(self.examples)), replace=False  # type: ignore
-        )
-        print(self.indices_to_log)
+            len(self.examples), int(log_images_rate * len(self.examples)), replace=False)  # type: ignore
+        self.temperature_to_log = np.random.choice(
+            len(self.examples), int(log_temp_rate * len(self.examples)), replace=False)  # type: ignore
 
     def _retrieve_metadata(self, fname: Union[str, Path]) -> Tuple[Dict, int]:
         """Retrieve metadata from a given file.

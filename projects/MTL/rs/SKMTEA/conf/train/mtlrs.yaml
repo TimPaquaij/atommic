@@ -220,6 +220,7 @@ model:
     data_saved_per_slice: false
     complex_target: true
     log_images_rate: 0.003
+    log_temp_rate: 0.1
     apply_prewhitening: false
     apply_gcc: false
     estimate_coil_sensitivity_maps: false
