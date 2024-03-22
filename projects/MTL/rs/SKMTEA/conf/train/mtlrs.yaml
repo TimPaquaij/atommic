@@ -293,7 +293,7 @@ exp_manager:
   ema:
     enable: false
   create_tensorboard_logger: false
-  create_wandb_logger: false
+  create_wandb_logger: true
   wandb_logger_kwargs:
     project: MTLRS_SKMTEA
   files_to_copy: [ ]

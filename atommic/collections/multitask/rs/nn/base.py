@@ -1109,6 +1109,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         Tune the tempearature of the model (using the validation set).
         We're going to set it to optimize NLL.
         valid_loader (DataLoader): validation set loader
+        Taken from: https://github.com/gpleiss/temperature_scaling/blob/master/temperature_scaling.py
         """
         logits_list = []
         labels_list = []
