@@ -213,6 +213,7 @@ class MRIDataset(Dataset):
 
         # subsample if desired
         if sample_rate < 1.0:  # sample by slice
+            # TODO Resample intergers amount slices based on smaple rate
             random.shuffle(self.examples)
             num_examples = round(len(self.examples) * sample_rate)
             self.examples = self.examples[:num_examples]

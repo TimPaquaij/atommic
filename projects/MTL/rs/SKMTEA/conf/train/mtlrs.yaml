@@ -5,7 +5,7 @@ mode: train
 model:
   model_name: MTLRS
   joint_reconstruction_segmentation_module_cascades: 5
-  task_adaption_type: multi_task_learning_dimitris
+  task_adaption_type: multi_task_learning
   cascade_nr_hidden_states: 1
   use_reconstruction_module: true
   reconstruction_module_recurrent_layer: IndRNN
@@ -211,7 +211,7 @@ model:
     - custom_masking
     - SKM-TEA-echo1-echo2
     - lateral
-    sample_rate: 0.01
+    sample_rate: 1
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
@@ -220,7 +220,7 @@ model:
     data_saved_per_slice: false
     complex_target: true
     log_images_rate: 0.003
-    log_temp_rate: 1
+    log_temp_rate: 0.1
     apply_prewhitening: false
     apply_gcc: false
     estimate_coil_sensitivity_maps: false
