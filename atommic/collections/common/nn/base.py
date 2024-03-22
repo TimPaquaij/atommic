@@ -8,6 +8,7 @@ import wandb
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
 from omegaconf import DictConfig
 from pytorch_lightning import Trainer
 from torch import nn
@@ -19,6 +20,7 @@ from atommic.collections.common.parts.fft import ifft2
 from atommic.collections.reconstruction.nn.unet_base.unet_block import NormUnet
 from atommic.core.classes import modelPT
 from atommic.utils import model_utils
+import sklearn.calibration as sc
 
 wandb.require("service")
 
@@ -160,6 +162,32 @@ class BaseMRIModel(modelPT.ModelPT, ABC):
             plt.plot(range(1,len(data)+1),data)
             self.logger.experiment.log({name: wandb.Image(plt)})
             plt.close()
+    def log_temperature_plot(self,validation,temperature):
+        logits_list = []
+        labels_list = []
+        fig, ax = plt.subplots()
+        for fname, slice_num, output in validation:
+            segmentations_target, segmentations_logit = output
+            logits_list.append(segmentations_logit.detach().cpu())
+            labels_list.append(segmentations_target.detach().cpu())
+        logits = torch.softmax(torch.cat(logits_list, dim=0)/temperature.detach().cpu(),dim=1)
+        labels = torch.cat(labels_list, dim=0)
+        list_of_classes = ["Background","Patellar","Femoral","Tibial","Meniscus"]
+        for cls in range(labels.shape[1]):
+            prob_true, prob_pred = sc.calibration_curve(labels[:, cls].reshape(-1),
+                                                              logits[:, cls].reshape(-1), n_bins=10)
+            plt.plot(prob_pred, prob_true, marker='o', linewidth=1, label=list_of_classes[cls])
+        # reference line, legends, and axis labels
+        line = mlines.Line2D([0, 1], [0, 1], color='black')
+        transform = ax.transAxes
+        line.set_transform(transform)
+        ax.add_line(line)
+        fig.suptitle('Calibration plot for segmentation data')
+        ax.set_xlabel('Predicted probability')
+        ax.set_ylabel('True probability in each bin')
+        plt.legend()
+        self.logger.experiment.log({"Calibration plot after temperature scaling": wandb.Image(plt)})
+        plt.close()
 
     def log_image(self, name, image):
         """Logs an image.

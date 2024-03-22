@@ -138,6 +138,7 @@ model:
   ssdu: false
   n2r: false
   log_logliklihood_gradient_std: true
+  log_calibration_diagram: true
   save_logliklihood_gradient: false
   save_zero_filled: false
   save_intermediate_predictions: false

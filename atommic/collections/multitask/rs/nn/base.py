@@ -86,6 +86,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         # Initialize the sensitivity network if cfg_dict.get("estimate_coil_sensitivity_maps_with_nn") is True.
         self.estimate_coil_sensitivity_maps_with_nn = cfg_dict.get("estimate_coil_sensitivity_maps_with_nn", False)
         self.log_logliklihood_gradient_std = cfg_dict.get('log_logliklihood_gradient_std', False)
+        self.log_calibration_diagram = cfg_dict.get('log_calibration_diagram', False)
         self.save_logliklihood_gradient = cfg_dict.get('save_logliklihood_gradient', False)
         self.save_zero_filled = cfg_dict.get('save_zero_filled',False)
         self.save_intermediate_predictions = cfg_dict.get('save_intermediate_predictions',False)
@@ -1922,10 +1923,12 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             if metric =="ECE":
                 self.log(f"val_metrics/{metric}", value, prog_bar=True, sync_dist=True)
             else:
-                self.log(f"val_metrics/{metric}", value, prog_bar=True, sync_dist=True)
+                self.log(f"val_metrics/{metric}", value/ tot_examples, prog_bar=True, sync_dist=True)
         if self.use_reconstruction_module:
             for metric, value in metrics_reconstruction.items():
                 self.log(f"val_metrics/{metric}", value / tot_examples, prog_bar=True, sync_dist=True)
+        if self.log_calibration_diagram:
+            self.log_temperature_plot(self.validation_step_segmentation_logits,self.temperature)
 
 
     def on_test_epoch_end(self):  # noqa: MC0001
