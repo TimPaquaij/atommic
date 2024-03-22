@@ -41,6 +41,7 @@ from atommic.collections.reconstruction.metrics import mse, nmse, psnr, ssim, ha
 from atommic.collections.segmentation.losses.cross_entropy import CrossEntropyLoss, BinaryCrossEntropy_with_logits_Loss
 from atommic.collections.segmentation.losses.dice import Dice, one_hot
 from atommic.collections.segmentation.losses.focal_loss import FocalLoss
+from atommic.collections.segmentation.losses.ece_loss import ECELoss
 import matplotlib.pyplot as plt
 __all__ = ["BaseMRIReconstructionSegmentationModel"]
 
@@ -310,7 +311,10 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         #     )
         # else:
         self.cross_entropy_metric =None
-        self.temp_focalloss = FocalLoss()
+        if self.temperature_scaling:
+            self.temperature_focalloss = FocalLoss()
+            self.ece_loss = ECELoss()
+            self.ECE= atommic_common.nn.base.DistributedMetricSum()  # type: ignore
 
         self.dice_metric = Dice(
             include_background=dice_metric_include_background,
@@ -1114,13 +1118,8 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             labels_list.append(segmentations_target)
         logits = torch.cat(logits_list,dim=0)
         labels = torch.cat(labels_list,dim=0)
-        #ece_criterion = _ECELoss().cuda()
 
-
-        # Calculate NLL and ECE before temperature scaling
-        before_temperature_nll = self.temp_focalloss(labels,logits).item()
-        #before_temperature_ece = ece_criterion(logits, labels).item()
-        print('Before temperature - NLL: %.3f' % (before_temperature_nll))
+        before_temperature_ece = self.ece_loss(labels,logits).item()
 
         # Next: optimize the temperature w.r.t. NLL
         self.temperature.requires_grad = True
@@ -1129,20 +1128,14 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         def eval():
             optimizer.zero_grad()
             scaled_logits = self.temperature_scale(logits)
-            loss = self.temp_focalloss(labels,scaled_logits)
+            loss = self.temperature_focalloss(labels,scaled_logits)
             loss.requires_grad_()
             loss.backward()
             return loss
         optimizer.step(eval)
-
-        # Calculate NLL and ECE after temperature scaling
-        after_temperature_nll = self.temp_focalloss(self.temperature_scale(logits), labels).item()
-        #after_temperature_ece = ece_criterion(self.temperature_scale(logits), labels).item()
         print('Optimal temperature: %.3f' % self.temperature.item())
-        print('After temperature - NLL: %.3f' % (after_temperature_nll))
         self.temperature.requires_grad = False
-
-        return self
+        return before_temperature_ece
     @staticmethod
     def __process_inputs__(
         kspace: Union[List, torch.Tensor],
@@ -1850,7 +1843,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         for k, v in self.dice_vals.items():
             dice_vals[k].update(v)
 
-        metrics_segmentation = {"Cross_Entropy": 0, "DICE": 0}
+        metrics_segmentation = {"Cross_Entropy": 0, "DICE": 0, "ECE":0}
 
         if self.use_reconstruction_module:
             mse_vals_reconstruction = defaultdict(dict)
@@ -1918,16 +1911,21 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             metrics_reconstruction["PSNR"] = self.PSNR(metrics_reconstruction["PSNR"])
             metrics_reconstruction["HaarPSI"] = self.HaarPSI(metrics_reconstruction["HaarPSI"])
             metrics_reconstruction["VSI"] = self.VSI(metrics_reconstruction["VSI"])
-
+        if self.temperature_scaling:
+            ECE_score = self.set_temperature(self.validation_step_segmentation_logits)
+            metrics_segmentation["ECE"] = metrics_segmentation["ECE"] +ECE_score
+            metrics_segmentation["ECE"] = self.ECE(metrics_segmentation["ECE"])
         tot_examples = self.TotExamples(torch.tensor(local_examples))
 
         for metric, value in metrics_segmentation.items():
-            self.log(f"val_metrics/{metric}", value / tot_examples, prog_bar=True, sync_dist=True)
+            if metric =="ECE":
+                self.log(f"val_metrics/{metric}", value, prog_bar=True, sync_dist=True)
+            else:
+                self.log(f"val_metrics/{metric}", value, prog_bar=True, sync_dist=True)
         if self.use_reconstruction_module:
             for metric, value in metrics_reconstruction.items():
                 self.log(f"val_metrics/{metric}", value / tot_examples, prog_bar=True, sync_dist=True)
-        if self.temperature_scaling:
-            self.set_temperature(self.validation_step_segmentation_logits)
+
 
     def on_test_epoch_end(self):  # noqa: MC0001
         """Called at the end of test epoch to aggregate outputs, log metrics and save predictions.

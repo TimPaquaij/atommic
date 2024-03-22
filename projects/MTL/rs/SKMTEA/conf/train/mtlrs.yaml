@@ -211,7 +211,7 @@ model:
     - custom_masking
     - SKM-TEA-echo1-echo2
     - lateral
-    sample_rate: 1
+    sample_rate: 0.01
     volume_sample_rate: None
     use_dataset_cache: false
     dataset_cache_file: None
@@ -220,7 +220,7 @@ model:
     data_saved_per_slice: false
     complex_target: true
     log_images_rate: 0.003
-    log_temp_rate: 0.1
+    log_temp_rate: 1
     apply_prewhitening: false
     apply_gcc: false
     estimate_coil_sensitivity_maps: false
@@ -293,7 +293,7 @@ exp_manager:
   ema:
     enable: false
   create_tensorboard_logger: false
-  create_wandb_logger: true
+  create_wandb_logger: false
   wandb_logger_kwargs:
     project: MTLRS_SKMTEA
   files_to_copy: [ ]

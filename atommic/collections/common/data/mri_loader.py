@@ -216,12 +216,14 @@ class MRIDataset(Dataset):
             random.shuffle(self.examples)
             num_examples = round(len(self.examples) * sample_rate)
             self.examples = self.examples[:num_examples]
+            #self.examples = [[(example[0],example[1],example[2],i)] for i,example in enumerate(self.examples)]
         elif volume_sample_rate < 1.0:  # sample by volume
             vol_names = sorted(list({f[0].stem for f in self.examples}))
             random.shuffle(vol_names)
             num_volumes = round(len(vol_names) * volume_sample_rate)
             sampled_vols = vol_names[:num_volumes]
             self.examples = [example for example in self.examples if example[0].stem in sampled_vols]
+            #self.examples = [[(example[0], example[1], example[2], i)] for i, example in enumerate(self.examples)]
 
         if num_cols and not utils.is_none(num_cols):
             self.examples = [ex for ex in self.examples if ex[2]["encoding_size"][1] in num_cols]

@@ -649,7 +649,7 @@ class SKMTEARSMRIDatasetlateral(RSMRIDataset):
 
 
         attrs["log_image"] = bool(slice_in_data in self.indices_to_log)
-        attrs["use_for_temp"] = bool(slice_in_data in self.temperature_to_log)
+        attrs["use_for_temp"] = True
 
         return (
             (
