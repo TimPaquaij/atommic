@@ -5,7 +5,10 @@ mode: train
 model:
   model_name: MTLRS
   joint_reconstruction_segmentation_module_cascades: 5
-  task_adaption_type: multi_task_learning
+  task_adaption_type: multi_task_learning_softmax
+  cascade_nr_hidden_states: 1
+  deep_cascade: true  #Combine each MTL parameter to the next layers
+  softparameter_tuning: -2
   use_reconstruction_module: true
   reconstruction_module_recurrent_layer: IndRNN
   reconstruction_module_conv_filters:
@@ -60,6 +63,7 @@ model:
   reconstruction_module_no_dc: true
   reconstruction_module_keep_prediction: true
   reconstruction_module_accumulate_predictions: true
+  segmentation_module_accumulate_predictions: true
   segmentation_module: LambdaUNet
   segmentation_module_3d: false
   segmentation_module_input_channels: 1
@@ -68,12 +72,11 @@ model:
   segmentation_module_pooling_layers: 5
   segmentation_module_dropout: 0.0
   segmentation_loss:
-    dice: 1.0
-    cross_entropy: 1.0
+    focal_loss: 1
   dice_loss_include_background: false  # always set to true if the background is removed
   dice_loss_to_onehot_y: false
   dice_loss_sigmoid: false
-  dice_loss_softmax: false
+  dice_loss_softmax: true
   dice_loss_other_act: none
   dice_loss_squared_pred: false
   dice_loss_jaccard: false
@@ -94,21 +97,19 @@ model:
   dice_metric_smooth_nr: 1e-5
   dice_metric_smooth_dr: 1e-5
   dice_metric_batch: true
-  cross_entropy_loss_classes_weight: [ 1,1, 1, 1, 1 ]
-  cross_entropy_loss_num_samples: 50
-  cross_entropy_loss_ignore_index: -100
-  cross_entropy_loss_reduction: none
-  cross_entropy_loss_label_smoothing: 0.0
-  cross_entropy_metric_num_samples: 50
-  cross_entropy_metric_ignore_index: -100
-  cross_entropy_metric_reduction: none
-  cross_entropy_metric_label_smoothing: 0.0
-  cross_entropy_metric_classes_weight: [ 1,1, 1, 1, 1 ]
-  segmentation_classes_thresholds: None
+  focal_loss_num_samples: 50
+  focal_loss_ignore_index: -100
+  focal_loss_reduction: none
+  focal_loss_label_smoothing: 0.0
+  focal_loss_gamma: 2
+  focal_loss_alpha: 0.25
+  focal_loss_classes_weight: none
+  segmentation_classes_thresholds: none
   segmentation_activation: softmax
+  temperature_scaling: true
   reconstruction_loss:
-    l1: 1
-    ssim: 1
+    l1: 0.8
+    ssim: 0.2
   kspace_reconstruction_loss: false
   total_reconstruction_loss_weight: 0.9
   total_segmentation_loss_weight: 0.1
@@ -117,10 +118,12 @@ model:
   spatial_dims:
     - -2
     - -1
-  magnitude_input: false
+  magnitude_input: true
+  combine_echoes: true
+  num_echoes: 2
   log_multiple_modalities: false  # log all modalities in the same image, e.g. T1, T2, T1ce, FLAIR will be concatenated
   normalization_type: minmax
-  normalize_segmentation_output: true
+  normalize_segmentation_output: false
   complex_valued_type: stacked
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
@@ -133,19 +136,21 @@ model:
   ssdu: false
   n2r: false
   log_logliklihood_gradient_std: true
+  log_calibration_diagram: true
   save_logliklihood_gradient: false
   save_zero_filled: false
   save_intermediate_predictions: false
 
+
   train_ds:
-    data_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_train.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_train.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_train.json
+    data_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_train.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_train.json #/data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_train.json   #/data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_train.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_train.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_train.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
     initial_predictions_path: None
     dataset_format:
+    - SKM-TEA-echo1-echo2
     - custom_masking
-    - skm-tea-echo1
     - lateral
     sample_rate: 1
     volume_sample_rate: None
@@ -182,28 +187,28 @@ model:
     spatial_dims:
       - -2
       - -1
-    coil_dim: 2
+    coil_dim: 3
     use_seed: false
-    segmentations_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
+    segmentations_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/ #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track/ #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track/ # #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
     construct_knee_label: false
     include_background_label: true
     segmentation_classes: 5
     complex_data: true
     batch_size: 1
     shuffle: true
-    num_workers: 4
+    num_workers: 8
     pin_memory: false
     drop_last: false
 
   validation_ds:
-    data_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json
+    data_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_val.json  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_val.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
     initial_predictions_path: None
     dataset_format:
+    - SKM-TEA-echo1-echo2
     - custom_masking
-    - SKM-TEA-echo1
     - lateral
     sample_rate: 1
     volume_sample_rate: None
@@ -213,9 +218,11 @@ model:
     consecutive_slices: 3
     data_saved_per_slice: false
     complex_target: true
-    log_images_rate: 0.005
+    log_images_rate: 0.003
+    log_temp_rate: 0.3
     apply_prewhitening: false
     apply_gcc: false
+    estimate_coil_sensitivity_maps: false
     coil_combination_method: SENSE
     dimensionality: 2
     mask_args:
@@ -241,9 +248,9 @@ model:
     spatial_dims:
       - -2
       - -1
-    coil_dim: 2
+    coil_dim: 3
     use_seed: true
-    segmentations_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
+    segmentations_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/ #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
     construct_knee_label: false
     include_background_label: true
     segmentation_classes: 5
@@ -259,7 +266,7 @@ model:
     lr: 1e-4
     betas:
       - 0.9
-      - 0.98
+      - 0.99
     weight_decay: 0.0
     sched:
       name: InverseSquareRootAnnealing
@@ -281,9 +288,11 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/MTLRS_SENSE_Lambda
+  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/MTLRS_2.5D_SENSE
+  ema:
+    enable: false
   create_tensorboard_logger: false
   create_wandb_logger: true
   wandb_logger_kwargs:
-    project: MTLRS_SKMTEA
+    project: MTLRS_2.5D_SKMTEA
   files_to_copy: [ ]

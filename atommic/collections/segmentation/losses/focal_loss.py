@@ -8,6 +8,7 @@ import torch
 from torch import Tensor
 from torch import nn
 from torch.nn import functional as F
+from atommic.collections.common.parts.utils import is_none
 
 
 # class FocalLoss(Loss):
@@ -109,7 +110,7 @@ class FocalLoss(Loss):
         ignore_index: int = -100,
         reduction: str = "none",
         label_smoothing: float = 0.0,
-        weight: torch.Tensor = torch.tensor([0.5,1,1,1,1]),
+        weight: torch.Tensor = None,
         gamma: float = 2,
         alpha: float = 0.25,
     ):
@@ -162,8 +163,12 @@ class FocalLoss(Loss):
         if target.dim() == 3:
             target = target.unsqueeze(0)
         #target = torch.argmax(target,dim=1)
+        if not is_none(self.weight):
+            self.weight = torch.tensor(self.weight).to(_input)
+        else:
+            self.weight =None
         cross_entropy = torch.nn.CrossEntropyLoss(
-            weight=self.weight.to(_input),
+            weight=self.weight,
             ignore_index=self.ignore_index,
             reduction=self.reduction,
             label_smoothing=self.label_smoothing,

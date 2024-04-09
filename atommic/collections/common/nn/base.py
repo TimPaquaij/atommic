@@ -170,7 +170,7 @@ class BaseMRIModel(modelPT.ModelPT, ABC):
             segmentations_target, segmentations_logit = output
             logits_list.append(segmentations_logit.detach().cpu())
             labels_list.append(segmentations_target.detach().cpu())
-        logits = torch.softmax(torch.cat(logits_list, dim=0)/temperature.detach().cpu(),dim=1)
+        logits = torch.softmax(torch.cat(logits_list, dim=0)/temperature.detach().cpu().float(),dim=1)
         labels = torch.cat(labels_list, dim=0)
         list_of_classes = ["Background","Patellar","Femoral","Tibial","Meniscus"]
         for cls in range(labels.shape[1]):
@@ -182,11 +182,10 @@ class BaseMRIModel(modelPT.ModelPT, ABC):
         transform = ax.transAxes
         line.set_transform(transform)
         ax.add_line(line)
-        fig.suptitle('Calibration plot for segmentation data')
         ax.set_xlabel('Predicted probability')
         ax.set_ylabel('True probability in each bin')
         plt.legend()
-        self.logger.experiment.log({"Calibration plot after temperature scaling": wandb.Image(plt)})
+        self.logger.experiment.log({f"Calibration plot with temperature: {temperature.detach().cpu().float()}": wandb.Image(plt)})
         plt.close()
 
     def log_image(self, name, image):

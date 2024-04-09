@@ -12,7 +12,7 @@ import numpy as np
 
 from atommic.collections.common.data.mri_loader import MRIDataset
 from atommic.collections.common.parts.utils import is_none
-
+from scipy.interpolate import RegularGridInterpolator
 
 class RSMRIDataset(MRIDataset):
     """A dataset class for accelerated-MRI reconstruction and MRI segmentation.
@@ -167,6 +167,40 @@ class RSMRIDataset(MRIDataset):
         self.segmentation_classes_thresholds = segmentation_classes_thresholds
         self.complex_data = complex_data
 
+    def interpolate_slice(self, data, array_shape_old, array_shape_new,method = "nearest") -> np.ndarray:
+
+        pixelsize_x_old=1
+        pixelsize_y_old=1
+
+        pixelsize_x_new = pixelsize_x_old * (1 / (array_shape_new[0] / array_shape_old[0]))
+        pixelsize_y_new = pixelsize_y_old * (1 / (array_shape_new[1] /array_shape_old[1]))
+
+
+        x_old = np.linspace(0, (array_shape_old[0] - 1) * pixelsize_x_old, array_shape_old[0])
+        y_old = np.linspace(0, (array_shape_old[1] - 1) * pixelsize_y_old, array_shape_old[1])
+
+        x_new = array_shape_new[0]
+        y_new = array_shape_new[1]
+
+
+        # pts is the new grid
+        pts = np.indices((x_new, y_new)).transpose((1,2,0))
+        pts = pts.reshape(1,x_new * y_new,2).reshape(x_new * y_new, 2)
+        pts = np.array(pts, dtype=float)
+        pts[:, 0] = pts[:, 0] * pixelsize_x_new
+        pts[:, 1] = pts[:, 1] * pixelsize_y_new
+        ##### Interpolate Segmentation  #####
+        target_shape = np.array([x_new, y_new, data.shape[-1]], int)
+        new_data = np.zeros(shape=target_shape, dtype=data.dtype)
+        for l in range(data.shape[-1]):
+            arr = data[...,l]
+            my_interpolating_object = RegularGridInterpolator((x_old, y_old), arr, method=method,
+                                                              bounds_error=False)
+            interpolated_data = my_interpolating_object(pts)
+            interpolated_data = interpolated_data.reshape(x_new, y_new)
+            new_data[...,l] = interpolated_data
+
+        return new_data
     def process_segmentation_labels(self, segmentation_labels: np.ndarray) -> np.ndarray:  # noqa: MC0001
         """Processes segmentation labels to remove, combine, and separate classes.
 
@@ -405,6 +439,7 @@ class SKMTEARSMRIDataset(RSMRIDataset):
                     "skm-tea-echo2",
                     "skm-tea-echo1+echo2",
                     "skm-tea-echo1+echo2-mc",
+                    "skm-tea-echo1-echo2",
             ):
                     dataset_format = s.lower()
                 elif s.lower() in ("custom_masking"):
@@ -417,31 +452,40 @@ class SKMTEARSMRIDataset(RSMRIDataset):
             dataset_format = None
             masking = "default"
 
-        fname, dataslice, metadata = self.examples[i]
+        fname, dataslice, metadata,slice_in_data = self.examples[i]
         with h5py.File(fname, "r") as hf:
             kspace = self.get_consecutive_slices(hf, "kspace", dataslice).astype(np.complex64)
-
             if not is_none(dataset_format) and dataset_format == "skm-tea-echo1":
-                kspace = kspace[:, :, 0, :]
+                kspace = kspace[..., 0, :]
             elif not is_none(dataset_format) and dataset_format == "skm-tea-echo2":
-                kspace = kspace[:, :, 1, :]
+                kspace = kspace[..., 1, :]
             elif not is_none(dataset_format) and dataset_format == "skm-tea-echo1+echo2":
-                kspace = kspace[:, :, 0, :] + kspace[:, :, 1, :]
+                kspace = kspace[..., 0, :] + kspace[..., 1, :]
             elif not is_none(dataset_format) and dataset_format == "skm-tea-echo1+echo2-mc":
-                kspace = np.concatenate([kspace[:, :, 0, :], kspace[:, :, 1, :]], axis=-1)
+                kspace = np.concatenate([kspace[..., 0, :], kspace[..., 1, :]], axis=-1)
+            elif not is_none(dataset_format) and dataset_format == "skm-tea-echo1-echo2":
+                kspace = kspace
             else:
                 warnings.warn(
                     f"Dataset format {dataset_format} is either not supported or set to None. "
                     "Using by default only the first echo."
                 )
-                kspace = kspace[:, :, 0, :]
-
-            kspace = kspace[48:-48, 40:-40]
+                kspace = kspace[..., 0, :]
+            kspace_old= kspace
+            if self.consecutive_slices>1:
+                kspace = kspace[:,48:-48, 40:-40]
+            else:
+                kspace = kspace[48:-48, 40:-40]
 
             sensitivity_map = self.get_consecutive_slices(hf, "maps", dataslice).astype(np.complex64)
-            sensitivity_map = sensitivity_map[..., 0]
-
-            sensitivity_map = sensitivity_map[48:-48, 40:-40]
+            if self.consecutive_slices >1:
+                sensitivity_map_new  = []
+                for i in range(sensitivity_map.shape[0]):
+                    sensitivity_map_new.append(np.expand_dims(self.interpolate_slice(data=sensitivity_map[i, :, :,:, 0], array_shape_old=kspace_old.shape[1:],
+                                           array_shape_new=kspace.shape[1:], method='nearest'),axis=-1))
+                sensitivity_map=np.array(sensitivity_map_new)
+            else:
+                sensitivity_map = np.expand_dims(self.interpolate_slice(data=sensitivity_map[:,:,:,0],array_shape_old=kspace_old.shape,array_shape_new=kspace.shape,method = 'nearest'),-1)
 
             if masking == "custom":
                 mask = np.array([])
@@ -483,22 +527,25 @@ class SKMTEARSMRIDataset(RSMRIDataset):
             # combine Lateral Meniscus and Medial Meniscus
             medial_meniscus = lateral_meniscus + medial_meniscus
 
-            if self.consecutive_slices > 1:
-                segmentation_labels_dim = 1
-            else:
-                segmentation_labels_dim = 0
-
             # stack the labels in the last dimension
             segmentation_labels = np.stack(
                 [patellar_cartilage, femoral_cartilage, tibial_cartilage, medial_meniscus],
-                axis=segmentation_labels_dim,
+                axis=-1,
             )
 
             # TODO: This is hardcoded on the SKM-TEA side, how to generalize this?
-            # We need to crop the segmentation labels in the frequency domain to reduce the FOV.
-            segmentation_labels = np.fft.fftshift(np.fft.fft2(segmentation_labels))
-            segmentation_labels = segmentation_labels[:, 48:-48, 40:-40]
-            segmentation_labels = np.fft.ifft2(np.fft.ifftshift(segmentation_labels)).real
+            if self.consecutive_slices >1:
+                segmentation_labels_new = []
+                for i in range(segmentation_labels.shape[0]):
+                    segmentation_labels_new.append(self.interpolate_slice(data=segmentation_labels[i,:, :, :], array_shape_old=kspace_old.shape[1:],
+                                           array_shape_new=kspace.shape[1:], method='nearest'))
+                segmentation_labels=np.array(segmentation_labels_new)
+            else:
+                segmentation_labels = self.interpolate_slice(data=segmentation_labels,array_shape_new =kspace.shape,array_shape_old=kspace_old.shape,method="nearest")
+            # # We need to crop the segmentation labels in the frequency domain to reduce the FOV.
+            # segmentation_labels = np.fft.fftshift(np.fft.fft2(segmentation_labels))
+            # segmentation_labels = segmentation_labels[:, 48:-48, 40:-40]
+            # segmentation_labels = np.fft.ifft2(np.fft.ifftshift(segmentation_labels)).real
 
             imspace = np.empty([])
 
@@ -513,11 +560,25 @@ class SKMTEARSMRIDataset(RSMRIDataset):
 
             attrs.update(metadata)
 
-        kspace = np.transpose(kspace, (2, 0, 1))
-        sensitivity_map = np.transpose(sensitivity_map.squeeze(), (2, 0, 1))
-
-        attrs["log_image"] = bool(dataslice in self.indices_to_log)
-
+        if not is_none(dataset_format) and dataset_format == "skm-tea-echo1-echo2":
+            if self.consecutive_slices > 1:
+                segmentation_labels = np.transpose(segmentation_labels, (0, 3, 1, 2))
+                kspace = np.transpose(kspace, (3, 0, 4, 1, 2))
+                sensitivity_map = np.transpose(sensitivity_map, (4, 0, 3, 1, 2))
+            else:
+                segmentation_labels = np.transpose(segmentation_labels, (2, 0, 1))
+                kspace = np.transpose(kspace, (2, 3, 0, 1))
+                sensitivity_map = np.transpose(sensitivity_map, (3, 2, 0, 1))
+        elif self.consecutive_slices > 1 and not is_none(dataset_format) and dataset_format != "skm-tea-echo1-echo2":
+            segmentation_labels = np.transpose(segmentation_labels, (0, 3, 1, 2))
+            kspace = np.transpose(kspace, (0, 3, 1, 2))
+            sensitivity_map = np.transpose(sensitivity_map.squeeze(), (0, 3, 1, 2))
+        else:
+            segmentation_labels = np.transpose(segmentation_labels, (2, 0, 1))
+            kspace = np.transpose(kspace, (2, 0, 1))
+            sensitivity_map = np.transpose(sensitivity_map.squeeze(), (2, 0, 1))
+        attrs["log_image"] = bool(slice_in_data in self.indices_to_log)
+        attrs["use_for_temp"] =bool(slice_in_data in self.temperature_to_log)
         return (
             (
                 kspace,
@@ -604,6 +665,7 @@ class SKMTEARSMRIDatasetlateral(RSMRIDataset):
                 mask = {}
                 for key, val in masks.items():
                     mask[key.split("_")[-1].split(".")[0]] = np.asarray(val)
+
 
             # get the file format of the segmentation files
             segmentation_labels = nib.load(

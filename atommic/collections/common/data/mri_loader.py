@@ -211,9 +211,13 @@ class MRIDataset(Dataset):
             logging.info("Using dataset cache from %s.", self.dataset_cache_file)
             self.examples = dataset_cache[root]
 
+        self.indices_to_log = np.random.choice(
+            len(self.examples), int(log_images_rate * len(self.examples)), replace=False)  # type: ignore
+        self.temperature_to_log = np.random.choice(
+            len(self.examples), int(log_temp_rate * len(self.examples)), replace=False)  # type: ignore
         # subsample if desired
         if sample_rate < 1.0:  # sample by slice
-            # TODO Resample intergers amount slices based on smaple rate
+            # TODO Resample intergers amount slices based on sample rate
             random.shuffle(self.examples)
             num_examples = round(len(self.examples) * sample_rate)
             self.examples = self.examples[:num_examples]
@@ -229,10 +233,6 @@ class MRIDataset(Dataset):
         if num_cols and not utils.is_none(num_cols):
             self.examples = [ex for ex in self.examples if ex[2]["encoding_size"][1] in num_cols]
 
-        self.indices_to_log = np.random.choice(
-            len(self.examples), int(log_images_rate * len(self.examples)), replace=False)  # type: ignore
-        self.temperature_to_log = np.random.choice(
-            len(self.examples), int(log_temp_rate * len(self.examples)), replace=False)  # type: ignore
 
     def _retrieve_metadata(self, fname: Union[str, Path]) -> Tuple[Dict, int]:
         """Retrieve metadata from a given file.

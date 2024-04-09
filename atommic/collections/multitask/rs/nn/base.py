@@ -40,6 +40,7 @@ from atommic.collections.reconstruction.losses.vsi import VSILoss
 from atommic.collections.reconstruction.metrics import mse, nmse, psnr, ssim, haarpsi3d, vsi3d
 from atommic.collections.segmentation.losses.cross_entropy import CrossEntropyLoss, BinaryCrossEntropy_with_logits_Loss
 from atommic.collections.segmentation.losses.dice import Dice, one_hot
+from atommic.collections.segmentation.losses.gendice import GeneralizedDiceLoss
 from atommic.collections.segmentation.losses.focal_loss import FocalLoss
 from atommic.collections.segmentation.losses.ece_loss import ECELoss
 import matplotlib.pyplot as plt
@@ -163,7 +164,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         self.unnormalize_log_outputs = cfg_dict.get("unnormalize_log_outputs", False)
         self.normalization_type = cfg_dict.get("normalization_type", "max")
         self.normalize_segmentation_output = cfg_dict.get("normalize_segmentation_output", True)
-
+        self.soft_parameter = cfg_dict.get("softparameter_tuning",None)
         # Whether to log multiple modalities, e.g. T1, T2, and FLAIR will be stacked and logged.
         self.log_multiple_modalities = cfg_dict.get("log_multiple_modalities", False)
 
@@ -214,9 +215,16 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                             weight = torch.tensor(cfg_dict.get("cross_entropy_loss_classes_weight", [1,1,1,1])),
                         )
                 elif name=="focal_loss":
-                    self.segmentation_losses[name] = FocalLoss()
+                    self.segmentation_losses[name] = FocalLoss(num_samples=cfg_dict.get("focal_loss_num_samples", 50),
+                            ignore_index=cfg_dict.get("focal_loss_ignore_index", -100),
+                            reduction=cfg_dict.get("focal_loss_reduction", "none"),
+                            label_smoothing=cfg_dict.get("focal_loss_label_smoothing", 0.0),
+                            weight = cfg_dict.get("focal_loss_classes_weight", [0,1,1,1]),
+                            gamma =  cfg_dict.get("focal_loss_gamma", 2),
+                            alpha = cfg_dict.get("focal_loss_alpha", [1,1,1,1]),
+                                                               )
                 elif name == "dice":
-                    self.segmentation_losses[name] = Dice(
+                    self.segmentation_losses[name] = GeneralizedDiceLoss(
                         include_background=cfg_dict.get("dice_loss_include_background", False),
                         to_onehot_y=cfg_dict.get("dice_loss_to_onehot_y", False),
                         sigmoid=cfg_dict.get("dice_loss_sigmoid", False),
@@ -225,6 +233,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                         squared_pred=cfg_dict.get("dice_loss_squared_pred", False),
                         jaccard=cfg_dict.get("dice_loss_jaccard", False),
                         flatten=cfg_dict.get("dice_loss_flatten", False),
+                        w_type= cfg_dict.get("dice_loss_weight", "none"),
                         reduction=cfg_dict.get("dice_loss_reduction", "mean"),
                         smooth_nr=cfg_dict.get("dice_loss_smooth_nr", 1e-5),
                         smooth_dr=cfg_dict.get("dice_loss_smooth_dr", 1e-5),
@@ -312,8 +321,17 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         #     )
         # else:
         self.cross_entropy_metric =None
+        if self.soft_parameter:
+            self.epoch =-2
         if self.temperature_scaling:
-            self.temperature_focalloss = FocalLoss()
+            self.temperature_focalloss = FocalLoss(num_samples=cfg_dict.get("focal_loss_num_samples", 50),
+                            ignore_index=cfg_dict.get("focal_loss_ignore_index", -100),
+                            reduction=cfg_dict.get("focal_loss_reduction", "none"),
+                            label_smoothing=cfg_dict.get("focal_loss_label_smoothing", 0.0),
+                            weight = cfg_dict.get("focal_loss_classes_weight", [0,1,1,1]),
+                            gamma =  cfg_dict.get("focal_loss_gamma", 2),
+                            alpha = cfg_dict.get("focal_loss_alpha", 0.25),
+                                                               )
             self.ece_loss = ECELoss()
             self.ECE= atommic_common.nn.base.DistributedMetricSum()  # type: ignore
 
@@ -849,13 +867,13 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
 
             output_predictions_reconstruction = output_predictions_reconstruction.detach().cpu()
             output_target_reconstruction = output_target_reconstruction.detach().cpu()
-            if is_none(self.segmentation_classes_thresholds):
-                output_predictions_segmentation = torch.softmax(output_predictions_segmentation,dim=0)
-                output_target_segmentation = one_hot(torch.argmax(torch.abs(output_target_segmentation.detach().cpu()),dim=0).unsqueeze(0).unsqueeze(0),num_classes=output_target_segmentation.shape[0])[0].float()
-                output_predictions_segmentation = one_hot(torch.argmax(torch.abs(output_predictions_segmentation.detach().cpu()),dim=0).unsqueeze(0).unsqueeze(0),num_classes=output_predictions_segmentation.shape[0])[0].float()
-            else:
-                output_target_segmentation = torch.where(torch.abs(output_target_segmentation.detach().cpu()) > 0.5,1,0).float()
-                output_predictions_segmentation = torch.where(torch.abs(output_predictions_segmentation.detach().cpu())  > 0.5,1,0).float()
+
+            output_predictions_segmentation = torch.softmax(output_predictions_segmentation,dim=0)
+            output_target_segmentation = one_hot(torch.argmax(torch.abs(output_target_segmentation.detach().cpu()),dim=0).unsqueeze(0).unsqueeze(0),num_classes=output_target_segmentation.shape[0])[0].float()
+            output_predictions_segmentation = one_hot(torch.argmax(torch.abs(output_predictions_segmentation.detach().cpu()),dim=0).unsqueeze(0).unsqueeze(0),num_classes=output_predictions_segmentation.shape[0])[0].float()
+            # else:
+            #     output_target_segmentation = torch.where(torch.abs(output_target_segmentation.detach().cpu()) > 0.5,1,0).float()
+            #     output_predictions_segmentation = torch.where(torch.abs(output_predictions_segmentation.detach().cpu())  > 0.5,1,0).float()
 
             # # Normalize target and predictions to [0, 1] for logging.
             # if torch.is_complex(output_target_reconstruction) and output_target_reconstruction.shape[-1] != 2:
@@ -974,7 +992,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             dice_score, _ = self.dice_metric(output_target_segmentation, output_predictions_segmentation)
             self.dice_vals[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = dice_score
             if self.temperature_scaling and attrs["use_for_temp"]:
-                segmentation_logit = (target_segmentation,predictions_segmentation)
+                segmentation_logit = (target_segmentation,predictions_segmentation*self.temperature)
                 self.validation_step_segmentation_logits.append([str(fname[0]), slice_idx, segmentation_logit])
     def __check_noise_to_recon_inputs__(
         self, y: torch.Tensor, mask: torch.Tensor, initial_prediction: torch.Tensor, attrs: Dict
@@ -1121,11 +1139,9 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         logits = torch.cat(logits_list,dim=0)
         labels = torch.cat(labels_list,dim=0)
 
-        before_temperature_ece = self.ece_loss(labels,logits).item()
-
         # Next: optimize the temperature w.r.t. NLL
         self.temperature.requires_grad = True
-        optimizer = torch.optim.LBFGS([self.temperature], lr=0.01, max_iter=50)
+        optimizer = torch.optim.LBFGS([self.temperature], lr=0.1, max_iter=30)
 
         def eval():
             optimizer.zero_grad()
@@ -1134,10 +1150,13 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             loss.requires_grad_()
             loss.backward()
             return loss
-        optimizer.step(eval)
-        print('Optimal temperature: %.3f' % self.temperature.item())
+        if self.epoch >= 0:
+            optimizer.step(eval)
+            print('Optimal temperature: %.3f' % self.temperature.item())
+        scaled_logits = self.temperature_scale(logits)
+        after_temperature_ece = self.ece_loss(labels, scaled_logits).item()
         self.temperature.requires_grad = False
-        return before_temperature_ece
+        return after_temperature_ece
     @staticmethod
     def __process_inputs__(
         kspace: Union[List, torch.Tensor],
@@ -1206,6 +1225,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         acceleration: float,
         attrs: Dict,
         temperature: float =1,
+        epoch:float =1,
     ):
         """Performs an inference step, i.e., computes the predictions of the model.
 
@@ -1323,7 +1343,8 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             initial_prediction_reconstruction,
             target_reconstruction,
             attrs["noise"],
-            temperature,
+            temperature=temperature,
+            epoch =epoch,
         )
 
 
@@ -1332,43 +1353,45 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             batch_size, slices = target_segmentation.shape[:2]
             if target_segmentation.dim() == 5:
                 target_segmentation = target_segmentation.reshape(batch_size * slices, *target_segmentation.shape[2:])
+            if isinstance(predictions_segmentation,list):
+                for i, prediction_segmentation in enumerate(predictions_segmentation):
+                    predictions_segmentation[i] =prediction_segmentation.reshape(batch_size * slices, *prediction_segmentation.shape[2:])
 
-        # if not is_none(self.segmentation_classes_thresholds):
-        #     for class_idx, thres in enumerate(self.segmentation_classes_thresholds):
-        #         if self.segmentation_activation == "sigmoid":
-        #             if isinstance(predictions_segmentation, list):
-        #                 cond = [torch.sigmoid(pred[:, class_idx]) for pred in predictions_segmentation]
-        #             else:
-        #                 cond = torch.sigmoid(predictions_segmentation[:, class_idx])
-        #         elif self.segmentation_activation == "softmax":
-        #             if isinstance(predictions_segmentation, list):
-        #                 cond = [torch.softmax(pred[:, class_idx], dim=1) for pred in predictions_segmentation]
-        #             else:
-        #                 cond = torch.softmax(predictions_segmentation[:, class_idx], dim=1)
-        #         else:
-        #             if isinstance(predictions_segmentation, list):
-        #                 cond = [pred[:, class_idx] for pred in predictions_segmentation]
-        #             else:
-        #                 cond = predictions_segmentation[:, class_idx]
-        #
-        #         if isinstance(predictions_segmentation, list):
-        #             for idx, pred in enumerate(predictions_segmentation):
-        #                 predictions_segmentation[idx][:, class_idx] = torch.where(
-        #                     cond[idx] >= thres,
-        #                     predictions_segmentation[idx][:, class_idx],
-        #                     torch.zeros_like(predictions_segmentation[idx][:, class_idx]),
-        #                 )
-        #         else:
-        #             predictions_segmentation[:, class_idx] = torch.where(
-        #                 cond >= thres,
-        #                 predictions_segmentation[:, class_idx],
-        #                 torch.zeros_like(predictions_segmentation[:, class_idx]),
-        #             )
-        # else:
-        #     if self.segmentation_activation == "sigmoid":
-        #         predictions_segmentation = torch.sigmoid(predictions_segmentation)
-        #     if self.segmentation_activation == "softmax":
-        #         predictions_segmentation = torch.softmax(predictions_segmentation,dim=1)
+
+
+
+
+        if not is_none(self.segmentation_classes_thresholds):
+            for class_idx, thres in enumerate(self.segmentation_classes_thresholds):
+                if self.segmentation_activation == "sigmoid":
+                    if isinstance(predictions_segmentation, list):
+                        cond = [torch.sigmoid(pred[:, class_idx]) for pred in predictions_segmentation]
+                    else:
+                        cond = torch.sigmoid(predictions_segmentation[:, class_idx])
+                elif self.segmentation_activation == "softmax":
+                    if isinstance(predictions_segmentation, list):
+                        cond = [torch.softmax(pred[:, class_idx], dim=1) for pred in predictions_segmentation]
+                    else:
+                        cond = torch.softmax(predictions_segmentation[:, class_idx], dim=1)
+                else:
+                    if isinstance(predictions_segmentation, list):
+                        cond = [pred[:, class_idx] for pred in predictions_segmentation]
+                    else:
+                        cond = predictions_segmentation[:, class_idx]
+
+                if isinstance(predictions_segmentation, list):
+                    for idx, pred in enumerate(predictions_segmentation):
+                        predictions_segmentation[idx][:, class_idx] = torch.where(
+                            cond[idx] >= thres,
+                            predictions_segmentation[idx][:, class_idx],
+                            torch.zeros_like(predictions_segmentation[idx][:, class_idx]),
+                        )
+                else:
+                    predictions_segmentation[:, class_idx] = torch.where(
+                        cond >= thres,
+                        predictions_segmentation[:, class_idx],
+                        torch.zeros_like(predictions_segmentation[:, class_idx]),
+                    )
 
         # Noise-to-Recon forward pass, if Noise-to-Recon is used.
         predictions_reconstruction_n2r = None
@@ -1478,6 +1501,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             slice_idx,  # type: ignore
             acceleration,
             attrs,  # type: ignore
+            epoch=self.epoch,
         )
 
         # Compute loss
@@ -1574,8 +1598,8 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             slice_idx,  # type: ignore
             acceleration,
             attrs,  # type: ignore
+            epoch=self.epoch,
         )
-
         predictions_reconstruction = outputs["predictions_reconstruction"]
         predictions_reconstruction_n2r = outputs["predictions_reconstruction_n2r"]
         target_reconstruction = outputs["target_reconstruction"]
@@ -1927,8 +1951,10 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         if self.use_reconstruction_module:
             for metric, value in metrics_reconstruction.items():
                 self.log(f"val_metrics/{metric}", value / tot_examples, prog_bar=True, sync_dist=True)
-        if self.log_calibration_diagram:
+        if self.log_calibration_diagram and self.temperature_scaling and self.epoch >=0:
             self.log_temperature_plot(self.validation_step_segmentation_logits,self.temperature)
+        self.epoch = self.epoch +1
+        print("validation epoch:",self.epoch)
 
 
     def on_test_epoch_end(self):  # noqa: MC0001

@@ -59,7 +59,7 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
         self.segmentation_module_accumulate_predictions = cfg_dict.get(
             "segmentation_module_accumulate_predictions"
         )
-
+        self.deep_cascade = cfg_dict.get("deep_cascade", False)
         self.segmentation_3d = cfg_dict.get("segmentation_module_3d", False)
         conv_dim = cfg_dict.get("reconstruction_module_conv_dim")
         reconstruction_module_params = {
@@ -102,6 +102,7 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
         self.consecutive_slices = cfg_dict.get("consecutive_slices", 1)
         self.rs_cascades = cfg_dict.get("joint_reconstruction_segmentation_module_cascades", 1)
         self.combine_rs = cfg_dict.get("cascade_nr_hidden_states", 1)-1
+        self.soft_parameter = cfg_dict.get("softparameter_tuning", 1)-1
         self.rs_module = torch.nn.ModuleList(
             [
                 MTLRSBlock(
@@ -138,7 +139,8 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
         target_reconstruction: torch.Tensor,
         hx: torch.Tensor = None,
         sigma: float = 1.0,
-        temperature: float =1.0
+        temperature: float =1.0,
+        epoch: float=1.0,
     ) -> Tuple[Union[List, torch.Tensor], torch.Tensor]:
         """Forward pass of :class:`MTLRS`.
 
@@ -167,7 +169,7 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
         pred_reconstructions = []
         pred_log_likelihoods = []
         pred_segmentations = []
-        for i,cascade in enumerate(self.rs_module):
+        for c,cascade in enumerate(self.rs_module):
             pred_reconstruction, pred_segmentation, hx, log_like = cascade(
                 y=y,
                 sensitivity_maps=sensitivity_maps,
@@ -181,9 +183,12 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
             pred_reconstructions.append(pred_reconstruction)
             pred_log_likelihoods.append(log_like)
             init_reconstruction_pred = pred_reconstruction[-1][-1]
+            pred_segmentations.append(pred_segmentation)
 
-            pred_segmentation_logit = pred_segmentation
-            if self.task_adaption_type == "multi_task_learning_dimitirs" and i >= self.combine_rs:
+            if self.task_adaption_type == "multi_task_learning_logit" and c >= self.combine_rs and epoch >= self.soft_parameter:
+                if self.deep_cascade:
+                    if c > 0:
+                        pred_segmentation = torch.sum(torch.stack(pred_segmentations, dim=0), dim=0)
                 hidden_states = [
                     torch.cat(
                         [torch.abs(init_reconstruction_pred.unsqueeze(self.coil_dim) * pred_segmentation)]
@@ -193,63 +198,27 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                     for f in self.reconstruction_module_recurrent_filters
                     if f != 0
                 ]
-
-            if not is_none(self.segmentation_classes_thresholds):
+            if self.task_adaption_type == "multi_task_learning_softmax" and c >= self.combine_rs and epoch >= self.soft_parameter:
+                if self.deep_cascade:
+                    if c > 0:
+                        pred_segmentation = torch.sum(torch.stack(pred_segmentations, dim=0), dim=0)
                 if self.consecutive_slices > 1:
-                    # reshape the target and prediction to [batch_size * consecutive_slices, nr_classes, n_x, n_y]
-                    batch_size, slices = pred_segmentation.shape[:2]
-                    if pred_segmentation.dim() == 5:
-                        pred_segmentation = pred_segmentation.reshape(batch_size * slices,
-                                                                      *pred_segmentation.shape[2:])
-                for class_idx, thres in enumerate(self.segmentation_classes_thresholds):
-                    if self.segmentation_activation == "sigmoid":
-                            cond = torch.sigmoid(pred_segmentation[:, class_idx])
-                    elif self.segmentation_activation == "softmax":
-                            cond = torch.softmax(pred_segmentation[:, class_idx].unsqueeze(1), dim=1)
-                    else:
-                            cond = pred_segmentation[:, class_idx]
-
-
-                    pred_segmentation[:, class_idx] = torch.where(
-                        cond >= thres,
-                        pred_segmentation[:, class_idx],
-                        torch.zeros_like(pred_segmentation[:, class_idx]),
+                    pred_segmentation = torch.softmax(pred_segmentation, dim=2)
+                else:
+                    pred_segmentation = torch.softmax(pred_segmentation, dim=1)
+                hidden_states = [
+                    torch.cat(
+                        [torch.sum(torch.abs(init_reconstruction_pred.unsqueeze(
+                            self.coil_dim) * pred_segmentation[..., 1:, :, :]), dim=self.coil_dim,
+                                   keepdim=True)]
+                        * f,
+                        dim=self.coil_dim,
                     )
+                    for f in self.reconstruction_module_recurrent_filters
+                    if f != 0
+                ]
 
-                if self.consecutive_slices > 1:
-                    # reshape the target and prediction to [batch_size * consecutive_slices, nr_classes, n_x, n_y]
-                    if pred_segmentation.dim() == 4:
-                        pred_segmentation = pred_segmentation.reshape(batch_size, slices,
-                                                                      *pred_segmentation.shape[1:])
-                if self.task_adaption_type == "multi_task_learning" and i >= self.combine_rs:
-                    hidden_states = [
-                        torch.cat(
-                            [torch.abs(init_reconstruction_pred.unsqueeze(self.coil_dim) * pred_segmentation)]
-                            * (f // self.segmentation_module_output_channels),
-                            dim=self.coil_dim,
-                        )
-                        for f in self.reconstruction_module_recurrent_filters
-                        if f != 0
-                    ]
-            else:
-                if self.segmentation_activation == "softmax":
-                    if self.consecutive_slices > 1:
-                        pred_segmentation = torch.softmax(pred_segmentation, dim=2)
-                    else:
-                        pred_segmentation = torch.softmax(pred_segmentation, dim=1)
-                if self.task_adaption_type == "multi_task_learning" and i >= self.combine_rs:
-                    hidden_states = [
-                        torch.cat(
-                            [torch.sum(torch.abs(init_reconstruction_pred.unsqueeze(
-                                self.coil_dim) * pred_segmentation[...,1:,:,:]),dim=self.coil_dim,keepdim=True)]
-                            * f,
-                            dim=self.coil_dim,
-                        )
-                        for f in self.reconstruction_module_recurrent_filters
-                        if f != 0
-                    ]
-
-            if self.task_adaption_type == "multi_task_learning" or self.task_adaption_type == "multi_task_learning_dimitirs" and i >= self.combine_rs:
+            if self.task_adaption_type == "multi_task_learning_softmax" or self.task_adaption_type == "multi_task_learning_logit" and c >= self.combine_rs and epoch >= self.soft_parameter:
                 # Check if the concatenated hidden states are the same size as the hidden state of the RNN
                 if hidden_states[0].shape[self.coil_dim] != hx[0].shape[self.coil_dim]:
                     prev_hidden_states = hidden_states
@@ -262,16 +231,20 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                                 dim=self.coil_dim,
                             )
                         hidden_states.append(new_hidden_state)
+                # if self.deep_cascade:
+                #     if c ==0:
+                #         hidden_states_memory = []
+                #         hidden_states_memory.append(hidden_states)
+                #         hx = [hx[i] + hidden_states[i] for i in range(len(hx))]
+                #     else:
+                #         hidden_states_memory.append(hidden_states)
+                #         hidden_states = [torch.stack(tensor).sum(dim=0) for tensor in zip(*hidden_states_memory)]
+                #         hx = [hx[i] + hidden_states[i] for i in range(len(hx))]
+                # else:
                 hx = [hx[i] + hidden_states[i] for i in range(len(hx))]
 
             init_reconstruction_pred = torch.view_as_real(init_reconstruction_pred)
-            if self.consecutive_slices > 1:
-                # reshape the target and prediction to [batch_size * consecutive_slices, nr_classes, n_x, n_y]
-                batch_size, slices = pred_segmentation.shape[:2]
-                if pred_segmentation.dim() == 5:
-                    pred_segmentation = pred_segmentation.reshape(batch_size * slices,
-                                                                  *pred_segmentation.shape[2:])
-            pred_segmentations.append(pred_segmentation_logit)
+
 
 
         return pred_reconstructions, pred_segmentations, pred_log_likelihoods

@@ -123,7 +123,7 @@ class MTLRSBlock(torch.nn.Module):
                     fft_centered=self.fft_centered,
                     fft_normalization=self.fft_normalization,
                     spatial_dims=self.spatial_dims,
-                    coil_dim=self.coil_dim,
+                    coil_dim=self.coil_dim-1,
                     dimensionality=self.reconstruction_module_dimensionality,
                     consecutive_slices=reconstruction_module_consecutive_slices,
                     coil_combination_method=self.coil_combination_method,
@@ -343,6 +343,8 @@ class MTLRSBlock(torch.nn.Module):
             _pred_reconstruction = _pred_reconstruction[-1]
         if _pred_reconstruction.shape[-1] != 2:
             _pred_reconstruction = torch.view_as_real(_pred_reconstruction)
+        if self.num_echoes>1 and self.combine_echoes:
+            _pred_reconstruction = torch.sum(_pred_reconstruction,dim=0,keepdim=True)
 
         if self.consecutive_slices > 1 and _pred_reconstruction.dim() == 5 and not self.segmentation_3d:
             _pred_reconstruction = _pred_reconstruction.reshape(
@@ -364,8 +366,6 @@ class MTLRSBlock(torch.nn.Module):
                 raise ValueError(f"The input channels must be either 1 or 2. Found: {self.input_channels}")
         else:
             _pred_reconstruction = _pred_reconstruction.unsqueeze(1)
-        if self.num_echoes>1 and self.combine_echoes:
-            _pred_reconstruction = torch.sum(_pred_reconstruction,dim=0,keepdim=True)
         pred_segmentation = self.segmentation_module(_pred_reconstruction)
 
         if self.normalize_segmentation_output:
@@ -374,11 +374,13 @@ class MTLRSBlock(torch.nn.Module):
             )
 
         pred_segmentation = torch.abs(pred_segmentation)
-
         if self.consecutive_slices > 1 and not self.segmentation_3d:
             # get batch size and number of slices from y, because if the reconstruction module is used they will
             # not be saved before
-            pred_segmentation = pred_segmentation.view([y.shape[0], y.shape[1], *pred_segmentation.shape[1:]])
+            if self.combine_echoes:
+                pred_segmentation = pred_segmentation.view([int(y.shape[0]/int(self.num_echoes)), y.shape[1], *pred_segmentation.shape[1:]])
+            else:
+                pred_segmentation = pred_segmentation.view([y.shape[0], y.shape[1], *pred_segmentation.shape[1:]])
 
         if self.consecutive_slices > 1 and self.segmentation_3d:
             # get batch size and number of slices from y, because if the reconstruction module is used they will
