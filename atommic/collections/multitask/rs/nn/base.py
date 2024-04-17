@@ -321,8 +321,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         #     )
         # else:
         self.cross_entropy_metric =None
-        if self.soft_parameter:
-            self.epoch =-2
+        self.epoch =-2
 
         self.temperature_loss = CrossEntropyLoss()
         self.ece_loss = ECELoss()
@@ -1121,7 +1120,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         Tune the tempearature of the model (using the validation set).
         We're going to set it to optimize NLL.
         valid_loader (DataLoader): validation set loader
-        Taken from: https://github.com/gpleiss/temperature_scaling/blob/master/temperature_scaling.py
+        Taken and adapted from: https://github.com/gpleiss/temperature_scaling/blob/master/temperature_scaling.py
         """
         logits_list = []
         labels_list = []
@@ -1146,7 +1145,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             return loss
         if self.epoch >= self.epoch_temp and self.temperature_scaling:
             optimizer.step(eval)
-            print('Optimal temperature: %.3f' % self.temperature.item())
+        print('Optimal temperature: %.3f' % self.temperature.item())
         scaled_logits = self.temperature_scale(logits)
         after_temperature_ece = self.ece_loss(labels, scaled_logits).item()
         self.temperature.requires_grad = False
@@ -1931,10 +1930,10 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             metrics_reconstruction["PSNR"] = self.PSNR(metrics_reconstruction["PSNR"])
             metrics_reconstruction["HaarPSI"] = self.HaarPSI(metrics_reconstruction["HaarPSI"])
             metrics_reconstruction["VSI"] = self.VSI(metrics_reconstruction["VSI"])
-        if self.epoch >=0:
-            ECE_score = self.set_temperature(self.validation_step_segmentation_logits)
-            metrics_segmentation["ECE"] = metrics_segmentation["ECE"] +ECE_score
-            metrics_segmentation["ECE"] = self.ECE(metrics_segmentation["ECE"])
+
+        ECE_score = self.set_temperature(self.validation_step_segmentation_logits)
+        metrics_segmentation["ECE"] = metrics_segmentation["ECE"] +ECE_score
+        metrics_segmentation["ECE"] = self.ECE(metrics_segmentation["ECE"])
         tot_examples = self.TotExamples(torch.tensor(local_examples))
 
         for metric, value in metrics_segmentation.items():

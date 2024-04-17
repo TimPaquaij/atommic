@@ -16,7 +16,6 @@ from atommic.collections.common.parts.utils import add_coil_dim_if_singlecoil, a
 from atommic.collections.common.parts.utils import coil_combination_method as coil_combination_method_func
 from atommic.collections.common.parts.utils import is_none, reshape_fortran, rss, to_tensor
 from atommic.collections.motioncorrection.parts.motionsimulation import MotionSimulation
-import matplotlib.pyplot as plt
 
 __all__ = [
     "Composer",
@@ -889,7 +888,6 @@ class Masker:
         is_complex = data.shape[-1] == 2
         spatial_dims = tuple(x - 1 for x in self.spatial_dims) if is_complex else self.spatial_dims
 
-
         if not is_none(mask) and isinstance(mask, list) and len(mask) > 0:
             masked_data = []
             masks = []
@@ -900,7 +898,6 @@ class Masker:
                         m = torch.from_numpy(m)
                     m = m.unsqueeze(0).unsqueeze(-1)
 
-
                 if not is_none(padding[0]) and padding[0] != 0:  # type: ignore
                     m[:, :, : padding[0]] = 0  # type: ignore
                     m[:, :, padding[1] :] = 0  # type: ignore
@@ -909,14 +906,12 @@ class Masker:
                         m = torch.from_numpy(m)
                     m = m.unsqueeze(0).unsqueeze(-1)
                     m = self.one_pad(m, (data.shape[spatial_dims[0]], data.shape[spatial_dims[1]]))
-                    plt.imshow(m[0,:,:,0])
-                    plt.show()
-
 
                 if self.shift_mask:
                     m = torch.fft.fftshift(m, dim=(spatial_dims[0], spatial_dims[1]))
 
                 m = m.to(torch.float32)
+
                 masked_data.append(data * m + 0.0)
                 masks.append(m)
 

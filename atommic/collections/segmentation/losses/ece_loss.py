@@ -1,8 +1,10 @@
+# coding=utf-8
+__author__ = "Dimitris Karkalousos"
+
+#Taken from: https://github.com/gpleiss/temperature_scaling/blob/master/temperature_scaling.py
+
 from atommic.core.classes.loss import Loss
-from typing import Optional, Sequence
 import torch
-from torch import Tensor
-from torch import nn
 from torch.nn import functional as F
 class ECELoss(Loss):
     """
@@ -23,7 +25,7 @@ class ECELoss(Loss):
     "Obtaining Well Calibrated Probabilities Using Bayesian Binning." AAAI.
     2015.
     """
-    def __init__(self, n_bins=15):
+    def __init__(self, n_bins=10):
         """
         n_bins (int): number of confidence interval bins
         """

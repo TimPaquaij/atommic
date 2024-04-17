@@ -14,7 +14,7 @@ class CrossEntropyLoss(Loss):
         self,
         num_samples: int = 50,
         ignore_index: int = -100,
-        reduction: str = "mean",
+        reduction: str = "none",
         label_smoothing: float = 0.0,
         weight: torch.Tensor = None,
     ):

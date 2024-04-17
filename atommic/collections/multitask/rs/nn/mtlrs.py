@@ -105,7 +105,7 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
         self.consecutive_slices = cfg_dict.get("consecutive_slices", 1)
         self.rs_cascades = cfg_dict.get("joint_reconstruction_segmentation_module_cascades", 1)
         self.combine_rs = cfg_dict.get("cascade_nr_hidden_states", 1)-1
-        self.soft_parameter = cfg_dict.get("softparameter_tuning", 1)-1
+        self.soft_parameter = cfg_dict.get("softparameter_tuning", 1)
         self.rs_module = torch.nn.ModuleList(
             [
                 MTLRSBlock(
