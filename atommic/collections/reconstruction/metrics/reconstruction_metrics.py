@@ -226,7 +226,7 @@ def vsi3d(gt: np.ndarray, pred: np.ndarray,maxval: np.ndarray = None) -> float:
 
     return __vsi / gt.shape[0]
 
-METRIC_FUNCS = dict(SSIM=ssim, HaarPSI=haarpsi3d, VSI=vsi3d)
+METRIC_FUNCS = dict(SSIM=ssim, HaarPSI=haarpsi3d, VSI=vsi3d,PSNR = psnr)
 
 
 

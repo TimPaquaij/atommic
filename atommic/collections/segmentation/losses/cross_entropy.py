@@ -5,6 +5,7 @@ import torch
 from torch import nn
 from typing import Optional
 from atommic.core.classes.loss import Loss
+from atommic.collections.common.parts.utils import is_none
 
 class CrossEntropyLoss(Loss):
     """Wrapper around PyTorch's CrossEntropyLoss to support 2D and 3D inputs."""
@@ -13,7 +14,7 @@ class CrossEntropyLoss(Loss):
         self,
         num_samples: int = 50,
         ignore_index: int = -100,
-        reduction: str = "none",
+        reduction: str = "mean",
         label_smoothing: float = 0.0,
         weight: torch.Tensor = None,
     ):
@@ -64,8 +65,13 @@ class CrossEntropyLoss(Loss):
         if target.dim() == 3:
             target = target.unsqueeze(0)
 
+        if not is_none(self.weight):
+            self.weight = torch.tensor(self.weight).to(_input)
+        else:
+            self.weight =None
+
         cross_entropy = torch.nn.CrossEntropyLoss(
-            weight=self.weight.to(_input),
+            weight=self.weight,
             ignore_index=self.ignore_index,
             reduction=self.reduction,
             label_smoothing=self.label_smoothing,

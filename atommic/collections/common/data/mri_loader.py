@@ -70,7 +70,7 @@ class MRIDataset(Dataset):
         n2r_supervised_rate: Optional[float] = 0.0,
         complex_target: bool = False,
         log_images_rate: Optional[float] = 1.0,
-        log_temp_rate: Optional[float] = 1.0,
+        log_temp_rate: Optional[int] = 1,
         transform: Optional[Callable] = None,
         **kwargs,  # pylint: disable=unused-argument
     ):
@@ -213,8 +213,8 @@ class MRIDataset(Dataset):
 
         self.indices_to_log = np.random.choice(
             len(self.examples), int(log_images_rate * len(self.examples)), replace=False)  # type: ignore
-        self.temperature_to_log = np.random.choice(
-            len(self.examples), int(log_temp_rate * len(self.examples)), replace=False)  # type: ignore
+        files_string = [str(file) for file in files]
+        self.temperature_to_log = np.random.choice(files_string, log_temp_rate, replace=False)# type: ignore
         # subsample if desired
         if sample_rate < 1.0:  # sample by slice
             # TODO Resample intergers amount slices based on sample rate

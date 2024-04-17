@@ -265,9 +265,9 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
 
         # Initialize the module
         super().__init__(cfg=cfg, trainer=trainer)
-        if self.temperature_scaling == True:
-            self.temperature = torch.nn.Parameter(torch.ones(1))
-            self.temperature.requires_grad = False
+        self.temperature = torch.nn.Parameter(torch.ones(1))
+        self.temperature.requires_grad = False
+        self.epoch_temp = cfg_dict.get("start_temp_epoch", 0)
         if self.estimate_coil_sensitivity_maps_with_nn:
             self.coil_sensitivity_maps_nn = atommic_common.nn.base.BaseSensitivityModel(  # type: ignore
                 cfg_dict.get("coil_sensitivity_maps_nn_chans", 8),
@@ -323,17 +323,10 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         self.cross_entropy_metric =None
         if self.soft_parameter:
             self.epoch =-2
-        if self.temperature_scaling:
-            self.temperature_focalloss = FocalLoss(num_samples=cfg_dict.get("focal_loss_num_samples", 50),
-                            ignore_index=cfg_dict.get("focal_loss_ignore_index", -100),
-                            reduction=cfg_dict.get("focal_loss_reduction", "none"),
-                            label_smoothing=cfg_dict.get("focal_loss_label_smoothing", 0.0),
-                            weight = cfg_dict.get("focal_loss_classes_weight", [0,1,1,1]),
-                            gamma =  cfg_dict.get("focal_loss_gamma", 2),
-                            alpha = cfg_dict.get("focal_loss_alpha", 0.25),
-                                                               )
-            self.ece_loss = ECELoss()
-            self.ECE= atommic_common.nn.base.DistributedMetricSum()  # type: ignore
+
+        self.temperature_loss = CrossEntropyLoss()
+        self.ece_loss = ECELoss()
+        self.ECE= atommic_common.nn.base.DistributedMetricSum()  # type: ignore
 
         self.dice_metric = Dice(
             include_background=dice_metric_include_background,
@@ -1146,11 +1139,12 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         def eval():
             optimizer.zero_grad()
             scaled_logits = self.temperature_scale(logits)
-            loss = self.temperature_focalloss(labels,scaled_logits)
+            print(scaled_logits.shape, labels.shape)
+            loss = self.temperature_loss(labels,scaled_logits)
             loss.requires_grad_()
             loss.backward()
             return loss
-        if self.epoch >= 0:
+        if self.epoch >= self.epoch_temp and self.temperature_scaling:
             optimizer.step(eval)
             print('Optimal temperature: %.3f' % self.temperature.item())
         scaled_logits = self.temperature_scale(logits)
@@ -1937,7 +1931,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             metrics_reconstruction["PSNR"] = self.PSNR(metrics_reconstruction["PSNR"])
             metrics_reconstruction["HaarPSI"] = self.HaarPSI(metrics_reconstruction["HaarPSI"])
             metrics_reconstruction["VSI"] = self.VSI(metrics_reconstruction["VSI"])
-        if self.temperature_scaling:
+        if self.epoch >=0:
             ECE_score = self.set_temperature(self.validation_step_segmentation_logits)
             metrics_segmentation["ECE"] = metrics_segmentation["ECE"] +ECE_score
             metrics_segmentation["ECE"] = self.ECE(metrics_segmentation["ECE"])
@@ -1954,6 +1948,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         if self.log_calibration_diagram and self.temperature_scaling and self.epoch >=0:
             self.log_temperature_plot(self.validation_step_segmentation_logits,self.temperature)
         self.epoch = self.epoch +1
+        self.validation_step_segmentation_logits.clear()
         print("validation epoch:",self.epoch)
 
 
@@ -2208,7 +2203,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             n2r_supervised_rate=cfg.get("n2r_supervised_rate", 0.0),
             complex_target=cfg.get("complex_target", False),
             log_images_rate=cfg.get("log_images_rate", 1.0),
-            log_temp_rate=cfg.get("log_images_rate",0),
+            log_temp_rate=cfg.get("log_temp_rate",0),
             transform=RSMRIDataTransforms(
                 complex_data=complex_data,
                 dataset_format=dataset_format,

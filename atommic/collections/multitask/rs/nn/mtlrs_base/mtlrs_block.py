@@ -167,6 +167,10 @@ class MTLRSBlock(torch.nn.Module):
                 chans=self.segmentation_module_params["channels"],
                 num_pool_layers=self.segmentation_module_params["pooling_layers"],
                 drop_prob=self.segmentation_module_params["dropout"],
+                query_depth=self.segmentation_module_params["query_depth"],
+                intra_depth=self.segmentation_module_params["intra_depth"],
+                receptive_kernel=self.segmentation_module_params["receptive_kernel"],
+                temporal_kernel=self.segmentation_module_params["temporal_kernel"],
                 num_slices=self.consecutive_slices
             )
         # elif segmentation_module.lower() == "vnet":
@@ -386,7 +390,10 @@ class MTLRSBlock(torch.nn.Module):
             # get batch size and number of slices from y, because if the reconstruction module is used they will
             # not be saved before
             pred_segmentation = pred_segmentation.permute(0,2,1,3,4)
-            pred_segmentation = pred_segmentation.view([y.shape[0], y.shape[1], *pred_segmentation.shape[2:]])
+            if self.combine_echoes:
+                pred_segmentation = pred_segmentation.view([int(y.shape[0]/int(self.num_echoes)), y.shape[1], *pred_segmentation.shape[2:]])
+            else:
+                pred_segmentation = pred_segmentation.view([y.shape[0], y.shape[1], *pred_segmentation.shape[2:]])
         if self.temperature_scaling:
             pred_segmentation = pred_segmentation/temperature
         return pred_reconstruction, pred_segmentation, hx, cascades_log_like  # type: ignore

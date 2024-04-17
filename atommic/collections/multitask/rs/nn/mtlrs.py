@@ -20,6 +20,7 @@ from atommic.collections.common.parts.utils import expand_op
 from atommic.collections.multitask.rs.nn.base import BaseMRIReconstructionSegmentationModel
 from atommic.collections.multitask.rs.nn.mtlrs_base.mtlrs_block import MTLRSBlock
 from atommic.core.classes.common import typecheck
+from atommic.collections.multitask.rs.nn.mtlrs_base.task_attention_module import TaskAttentionalModule
 
 __all__ = ["MTLRS"]
 
@@ -92,8 +93,10 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
             "channels": cfg_dict.get("segmentation_module_channels", 64),
             "pooling_layers": cfg_dict.get("segmentation_module_pooling_layers", 2),
             "dropout": cfg_dict.get("segmentation_module_dropout", 0.0),
-            "activation": cfg_dict.get("segmentation_module_activation", "elu"),
-            "bias": cfg_dict.get("segmentation_module_bias", False),
+            "query_depth":cfg_dict.get("segmentation_module_query_depth",None),
+            "intra_depth": cfg_dict.get("segmentation_module_intra_depth", None),
+            "receptive_kernel": cfg_dict.get("segmentation_module_receptive_kernel", None),
+            "temporal_kernel": cfg_dict.get("segmentation_module_temporal_kernel", None),
             "conv_dim": conv_dim,
             "segmentation_3d" : cfg_dict.get("segmentation_module_3d", False),
         }
@@ -127,6 +130,9 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
         )
 
         self.task_adaption_type = cfg_dict.get("task_adaption_type", "multi_task_learning")
+        self.task_attention_module = cfg_dict.get("task_attention_module",False)
+        if self.task_attention_module:
+            self.task_attention_block = TaskAttentionalModule(in_channels=cfg_dict.get("reconstruction_module_conv_filters")[0])
 
     # pylint: disable=arguments-differ
     @typecheck()
@@ -241,7 +247,11 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                 #         hidden_states = [torch.stack(tensor).sum(dim=0) for tensor in zip(*hidden_states_memory)]
                 #         hx = [hx[i] + hidden_states[i] for i in range(len(hx))]
                 # else:
-                hx = [hx[i] + hidden_states[i] for i in range(len(hx))]
+                if self.task_attention_module:
+                    hx = [self.task_attention_block(hx[i],hidden_states[i]) for i in range(len(hx))]
+
+                else:
+                    hx = [hx[i] + hidden_states[i] for i in range(len(hx))]
 
             init_reconstruction_pred = torch.view_as_real(init_reconstruction_pred)
 

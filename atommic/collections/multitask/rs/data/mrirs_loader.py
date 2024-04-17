@@ -472,20 +472,20 @@ class SKMTEARSMRIDataset(RSMRIDataset):
                 )
                 kspace = kspace[..., 0, :]
             kspace_old= kspace
-            if self.consecutive_slices>1:
-                kspace = kspace[:,48:-48, 40:-40]
-            else:
-                kspace = kspace[48:-48, 40:-40]
+            # if self.consecutive_slices>1:
+            #     kspace = kspace[:,48:-48, 40:-40]
+            # else:
+            #     kspace = kspace[48:-48, 40:-40]
 
             sensitivity_map = self.get_consecutive_slices(hf, "maps", dataslice).astype(np.complex64)
-            if self.consecutive_slices >1:
-                sensitivity_map_new  = []
-                for i in range(sensitivity_map.shape[0]):
-                    sensitivity_map_new.append(np.expand_dims(self.interpolate_slice(data=sensitivity_map[i, :, :,:, 0], array_shape_old=kspace_old.shape[1:],
-                                           array_shape_new=kspace.shape[1:], method='nearest'),axis=-1))
-                sensitivity_map=np.array(sensitivity_map_new)
-            else:
-                sensitivity_map = np.expand_dims(self.interpolate_slice(data=sensitivity_map[:,:,:,0],array_shape_old=kspace_old.shape,array_shape_new=kspace.shape,method = 'nearest'),-1)
+            # if self.consecutive_slices >1:
+            #     sensitivity_map_new  = []
+            #     for i in range(sensitivity_map.shape[0]):
+            #         sensitivity_map_new.append(np.expand_dims(self.interpolate_slice(data=sensitivity_map[i, :, :,:, 0], array_shape_old=kspace_old.shape[1:],
+            #                                array_shape_new=kspace.shape[1:], method='nearest'),axis=-1))
+            #     sensitivity_map=np.array(sensitivity_map_new)
+            # else:
+            #     sensitivity_map = np.expand_dims(self.interpolate_slice(data=sensitivity_map[:,:,:,0],array_shape_old=kspace_old.shape,array_shape_new=kspace.shape,method = 'nearest'),-1)
 
             if masking == "custom":
                 mask = np.array([])
@@ -534,14 +534,14 @@ class SKMTEARSMRIDataset(RSMRIDataset):
             )
 
             # TODO: This is hardcoded on the SKM-TEA side, how to generalize this?
-            if self.consecutive_slices >1:
-                segmentation_labels_new = []
-                for i in range(segmentation_labels.shape[0]):
-                    segmentation_labels_new.append(self.interpolate_slice(data=segmentation_labels[i,:, :, :], array_shape_old=kspace_old.shape[1:],
-                                           array_shape_new=kspace.shape[1:], method='nearest'))
-                segmentation_labels=np.array(segmentation_labels_new)
-            else:
-                segmentation_labels = self.interpolate_slice(data=segmentation_labels,array_shape_new =kspace.shape,array_shape_old=kspace_old.shape,method="nearest")
+            # if self.consecutive_slices >1:
+            #     segmentation_labels_new = []
+            #     for i in range(segmentation_labels.shape[0]):
+            #         segmentation_labels_new.append(self.interpolate_slice(data=segmentation_labels[i,:, :, :], array_shape_old=kspace_old.shape[1:],
+            #                                array_shape_new=kspace.shape[1:], method='nearest'))
+            #     segmentation_labels=np.array(segmentation_labels_new)
+            # else:
+            #     segmentation_labels = self.interpolate_slice(data=segmentation_labels,array_shape_new =kspace.shape,array_shape_old=kspace_old.shape,method="nearest")
             # # We need to crop the segmentation labels in the frequency domain to reduce the FOV.
             # segmentation_labels = np.fft.fftshift(np.fft.fft2(segmentation_labels))
             # segmentation_labels = segmentation_labels[:, 48:-48, 40:-40]
@@ -578,7 +578,7 @@ class SKMTEARSMRIDataset(RSMRIDataset):
             kspace = np.transpose(kspace, (2, 0, 1))
             sensitivity_map = np.transpose(sensitivity_map.squeeze(), (2, 0, 1))
         attrs["log_image"] = bool(slice_in_data in self.indices_to_log)
-        attrs["use_for_temp"] =bool(slice_in_data in self.temperature_to_log)
+        attrs["use_for_temp"] =bool(fname in self.temperature_to_log)
         return (
             (
                 kspace,
@@ -711,8 +711,7 @@ class SKMTEARSMRIDatasetlateral(RSMRIDataset):
 
 
         attrs["log_image"] = bool(slice_in_data in self.indices_to_log)
-        attrs["use_for_temp"] = bool(slice_in_data in self.temperature_to_log)
-
+        attrs["use_for_temp"] = bool(str(fname) in self.temperature_to_log)
         return (
             (
                 kspace,

@@ -5,9 +5,9 @@ mode: train
 model:
   model_name: MTLRS
   joint_reconstruction_segmentation_module_cascades: 5
-  task_adaption_type: multi_task_learning_softmax
+  task_adaption_type: multi_task_learning_logit
   cascade_nr_hidden_states: 1
-  deep_cascade: true  #Combine each MTL parameter to the next layers
+  deep_cascade: false  #Combine each MTL parameter to the next layers
   softparameter_tuning: -2
   use_reconstruction_module: true
   reconstruction_module_recurrent_layer: IndRNN
@@ -72,8 +72,8 @@ model:
   segmentation_module_pooling_layers: 2
   segmentation_module_dropout: 0.0
   segmentation_loss:
-    focal_loss: 0.8
-    dice: 0.2
+    focal_loss: 1
+  task_attention_module: false
   dice_loss_include_background: false  # always set to true if the background is removed
   dice_loss_to_onehot_y: false
   dice_loss_sigmoid: false
@@ -108,7 +108,8 @@ model:
   focal_loss_classes_weight: none
   segmentation_classes_thresholds: none
   segmentation_activation: softmax
-  temperature_scaling: false
+  temperature_scaling: true
+  start_temp_epoch: 4
   reconstruction_loss:
     l1: 0.8
     ssim: 0.2
@@ -138,7 +139,7 @@ model:
   ssdu: false
   n2r: false
   log_logliklihood_gradient_std: true
-  log_calibration_diagram: false
+  log_calibration_diagram: true
   save_logliklihood_gradient: false
   save_zero_filled: false
   save_intermediate_predictions: false
@@ -203,7 +204,7 @@ model:
     drop_last: false
 
   validation_ds:
-    data_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_val.json  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_val.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json
+    data_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_val.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_val.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
@@ -221,7 +222,7 @@ model:
     data_saved_per_slice: false
     complex_target: true
     log_images_rate: 0.003
-    log_temp_rate: 0.3
+    log_temp_rate: 1  #Select amount of full validation patient for temperature calibration.
     apply_prewhitening: false
     apply_gcc: false
     estimate_coil_sensitivity_maps: false
@@ -281,7 +282,7 @@ trainer:
   accelerator: gpu
   devices: 1
   num_nodes: 1
-  max_epochs: 10
+  max_epochs: 20
   precision: 16-mixed
   enable_checkpointing: false
   logger: false
@@ -290,11 +291,11 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/MTLRS_SENSE
+  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/MTLRS_SENSE_TEST
   ema:
     enable: false
   create_tensorboard_logger: false
   create_wandb_logger: true
   wandb_logger_kwargs:
-    project: MTLRS_SKMTEA
+    project: MTLRS_SKMTEA_TEST
   files_to_copy: [ ]

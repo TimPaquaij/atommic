@@ -9,13 +9,14 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
-
+import torch.nn.functional as F
 from atommic.collections.common.parts.coil_sensitivity_maps import EspiritCalibration
 from atommic.collections.common.parts.fft import fft2, ifft2
 from atommic.collections.common.parts.utils import add_coil_dim_if_singlecoil, apply_mask, center_crop
 from atommic.collections.common.parts.utils import coil_combination_method as coil_combination_method_func
 from atommic.collections.common.parts.utils import is_none, reshape_fortran, rss, to_tensor
 from atommic.collections.motioncorrection.parts.motionsimulation import MotionSimulation
+import matplotlib.pyplot as plt
 
 __all__ = [
     "Composer",
@@ -886,8 +887,8 @@ class Masker:
             Seed to apply. Default is ``None``.
         """
         is_complex = data.shape[-1] == 2
-
         spatial_dims = tuple(x - 1 for x in self.spatial_dims) if is_complex else self.spatial_dims
+
 
         if not is_none(mask) and isinstance(mask, list) and len(mask) > 0:
             masked_data = []
@@ -899,19 +900,27 @@ class Masker:
                         m = torch.from_numpy(m)
                     m = m.unsqueeze(0).unsqueeze(-1)
 
+
                 if not is_none(padding[0]) and padding[0] != 0:  # type: ignore
                     m[:, :, : padding[0]] = 0  # type: ignore
                     m[:, :, padding[1] :] = 0  # type: ignore
+                if self.dataset_format is not None and any("skm-tea" in s.lower() for s in self.dataset_format) and list(m.shape) != [data.shape[spatial_dims[0]], data.shape[spatial_dims[1]]]:
+                    if isinstance(m, np.ndarray):
+                        m = torch.from_numpy(m)
+                    m = m.unsqueeze(0).unsqueeze(-1)
+                    m = self.one_pad(m, (data.shape[spatial_dims[0]], data.shape[spatial_dims[1]]))
+                    plt.imshow(m[0,:,:,0])
+                    plt.show()
+
 
                 if self.shift_mask:
                     m = torch.fft.fftshift(m, dim=(spatial_dims[0], spatial_dims[1]))
 
                 m = m.to(torch.float32)
-
                 masked_data.append(data * m + 0.0)
                 masks.append(m)
 
-                if self.dataset_format is not None and "skm-tea" in self.dataset_format[0].lower():
+                if self.dataset_format is not None and any( "skm-tea" in s.lower() for s in self.dataset_format):
                     accelerations.append(float(self.acc[i]))
                 else:
                     accelerations.append(np.round(m.squeeze(0).squeeze(-1).numpy().size / m.numpy().sum()))
@@ -999,6 +1008,74 @@ class Masker:
             accelerations = [torch.empty([])]
 
         return masked_data, masks, accelerations
+
+    def pad(self,x: torch.Tensor, shape: Sequence[int], mode="constant", value=0) -> torch.Tensor:
+        """Center pad a batched tensor.
+
+        This function pads a tensor to a given shape such that the center
+        of the output tensor is equal to input ``x``. Padding is applied
+        on dimensions ``range(1, 1+len(shape))``.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (B, ...)
+            shape (Tuple[int]): Shape to zero pad to.
+                Use ``None`` to skip padding certain dimensions.
+                If ``len(shape) < x.ndim - 1``, then the last dimension(s)
+                of ``x`` will not be padded.
+
+        Returns:
+            torch.Tensor: Padded tensor of shape (B, ...)
+
+        Note:
+            The 0-th dimension is assumed to be the batch dimension and is not padded.
+            To pad this dimension, unsqueeze your tensor first.
+
+        Example:
+            >>> x = torch.randn(1, 100, 150, 3)
+            >>> out = pad(x, (200, 250))
+            >>> out.shape
+            torch.Size([1, 200, 250, 3])
+        """
+        x_shape = x.shape[1: 1 + len(shape)]
+        assert all(
+            x_shape[i] <= shape[i] or shape[i] is None for i in range(len(shape))
+        ), f"Tensor spatial dimensions {x_shape} smaller than zero pad dimensions"
+
+        total_padding = tuple(
+            desired - current if desired is not None else 0 for current, desired in zip(x_shape, shape)
+        )
+        # Adding no padding for terminal dimensions.
+        # torch.nn.functional.pad pads dimensions in reverse order.
+        total_padding += (0,) * (len(x.shape) - 1 - len(x_shape))
+        total_padding = total_padding[::-1]
+
+        pad = []
+        for padding in total_padding:
+            pad1 = padding // 2
+            pad2 = padding - pad1
+            pad.extend([pad1, pad2])
+
+        return F.pad(x, pad, mode=mode, value=value)
+
+    def one_pad(self,x: torch.Tensor, shape: Sequence[int]) -> torch.Tensor:
+        """Zero-pad a batched tensor.
+
+        See :func:`pad` for more details.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (B, ...).
+            shape (Tuple[int]): Shape to zero pad to.
+
+        Returns:
+            torch.Tensor: Zero-padded tensor.
+
+        Example:
+            >>> x = torch.randn(1, 100, 150, 3)
+            >>> out = zero_pad(x, (200, 250))
+            >>> out.shape
+            torch.Size([1, 200, 250, 3])
+        """
+        return self.pad(x, shape, mode="constant", value=0)
 
 
 class N2R:

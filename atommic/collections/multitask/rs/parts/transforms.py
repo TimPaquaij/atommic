@@ -23,7 +23,7 @@ from atommic.collections.common.parts.utils import add_coil_dim_if_singlecoil
 from atommic.collections.common.parts.utils import coil_combination_method as coil_combination_method_func
 from atommic.collections.common.parts.utils import is_none, to_tensor
 from atommic.collections.motioncorrection.parts.motionsimulation import MotionSimulation
-
+import torch.nn.functional as F
 __all__ = ["RSMRIDataTransforms"]
 
 
@@ -698,7 +698,6 @@ class RSMRIDataTransforms:
 
         if self.crop_before_masking:
             kspace = self.cropping(kspace, apply_backward_transform=not self.kspace_crop)  # type: ignore
-
         masked_kspace, mask, acc = self.masking(
             self.random_motion(kspace),  # type: ignore
             mask,

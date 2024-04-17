@@ -4,13 +4,13 @@ __author__ = "Dimitris Karkalousos"
 import json
 import os
 from pathlib import Path
-
+import torch
 import h5py
 import nibabel as nib
 import numpy as np
 from tqdm import tqdm
 import pandas as pd
-
+from atommic.collections.segmentation.losses.dice import one_hot
 from atommic.collections.segmentation.metrics.segmentation_metrics import (
     SegmentationMetrics,
     dice_metric,
@@ -22,7 +22,7 @@ from atommic.collections.segmentation.metrics.segmentation_metrics import (
 METRIC_FUNCS = {
     "DICE": dice_metric,
     "F1": f1_per_class_metric,
-    "HD95": lambda x, y: hausdorff_distance_95_metric(x, y, batched=True, sum_method="sum"),
+    "HD95": hausdorff_distance_95_metric,
     "IOU": iou_metric,
 }
 
@@ -86,20 +86,21 @@ def main(args):
             fname = fname.split(".nii")[0]
 
         predictions = h5py.File(Path(args.predictions_dir) / f"{fname}.h5", "r")["segmentation"][()].squeeze()
-        predictions = np.abs(predictions.astype(np.float32))
-        predictions = np.where(predictions > 0.5, 1, 0)
+        predictions = torch.softmax(torch.from_numpy(predictions), dim=1)
+        predictions = one_hot(torch.argmax(torch.abs(predictions), dim=1, keepdim=True),
+                                     num_classes=predictions.shape[1]).float().numpy()
 
         segmentation_labels = h5py.File(Path(args.predictions_dir) / f"{fname}.h5", "r")["target_segmentation"][()].squeeze()
         #segmentation_labels = np.transpose(segmentation_labels, (0, 3, 1, 2))
         #segmentation_labels = process_segmentation_labels(segmentation_labels)
-        segmentation_labels = np.abs(segmentation_labels.astype(np.float32))
-        segmentation_labels = np.where(segmentation_labels > 0.5, 1, 0)
+        segmentation_labels = torch.softmax(torch.from_numpy(segmentation_labels), dim=1)
+        segmentation_labels = one_hot(torch.argmax(torch.abs(segmentation_labels), dim=1, keepdim=True),
+                              num_classes=segmentation_labels.shape[1]).float().numpy()
         if evaluation_type == "per_slice":
             for sl in range(segmentation_labels.shape[0]):
-                #if segmentation_labels[sl].sum() > 0:
-                scores.push(segmentation_labels[sl].copy(), predictions[sl].copy())
+                scores.push(segmentation_labels[sl,1:][np.newaxis], predictions[sl,1:][np.newaxis])
         elif evaluation_type == "per_volume":
-            scores.push(segmentation_labels, predictions)
+            scores.push(segmentation_labels[:,1:], predictions[:,1:])
 
         model = args.predictions_dir.split("/")
         model = model[-4] if model[-4] != "default" else model[-5]
