@@ -204,7 +204,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                             ignore_index=cfg_dict.get("cross_entropy_loss_ignore_index", -100),
                             reduction=cfg_dict.get("cross_entropy_loss_reduction", "none"),
                             label_smoothing=cfg_dict.get("cross_entropy_loss_label_smoothing", 0.0),
-                            weight=torch.tensor(cfg_dict.get("cross_entropy_loss_classes_weight", [1, 1, 1, 1])),
+                            weight=torch.tensor(cfg_dict.get("cross_entropy_loss_classes_weight", [1,1, 1, 1, 1])),
                         )
                     else:
                         self.segmentation_losses[name] = CrossEntropyLoss(
@@ -212,32 +212,30 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                             ignore_index=cfg_dict.get("cross_entropy_loss_ignore_index", -100),
                             reduction=cfg_dict.get("cross_entropy_loss_reduction", "none"),
                             label_smoothing=cfg_dict.get("cross_entropy_loss_label_smoothing", 0.0),
-                            weight = torch.tensor(cfg_dict.get("cross_entropy_loss_classes_weight", [1,1,1,1])),
+                            weight = cfg_dict.get("cross_entropy_loss_classes_weight", None),
                         )
                 elif name=="focal_loss":
                     self.segmentation_losses[name] = FocalLoss(num_samples=cfg_dict.get("focal_loss_num_samples", 50),
-                            ignore_index=cfg_dict.get("focal_loss_ignore_index", -100),
-                            reduction=cfg_dict.get("focal_loss_reduction", "none"),
+                            ignore_index=cfg_dict.get("focal_loss_ignore_index", int(-100)),
+                            reduction=cfg_dict.get("focal_loss_reduction", "mean"),
                             label_smoothing=cfg_dict.get("focal_loss_label_smoothing", 0.0),
-                            weight = cfg_dict.get("focal_loss_classes_weight", [0,1,1,1]),
                             gamma =  cfg_dict.get("focal_loss_gamma", 2),
-                            alpha = cfg_dict.get("focal_loss_alpha", [1,1,1,1]),
+                            alpha = cfg_dict.get("focal_loss_alpha", 1),
                                                                )
                 elif name == "dice":
-                    self.segmentation_losses[name] = GeneralizedDiceLoss(
+                    self.segmentation_losses[name] = Dice(
                         include_background=cfg_dict.get("dice_loss_include_background", False),
                         to_onehot_y=cfg_dict.get("dice_loss_to_onehot_y", False),
                         sigmoid=cfg_dict.get("dice_loss_sigmoid", False),
-                        softmax=cfg_dict.get("dice_loss_softmax", False),
+                        softmax=cfg_dict.get("dice_loss_softmax", True),
                         other_act=cfg_dict.get("dice_loss_other_act", None),
                         squared_pred=cfg_dict.get("dice_loss_squared_pred", False),
                         jaccard=cfg_dict.get("dice_loss_jaccard", False),
                         flatten=cfg_dict.get("dice_loss_flatten", False),
-                        w_type= cfg_dict.get("dice_loss_weight", "none"),
-                        reduction=cfg_dict.get("dice_loss_reduction", "mean"),
+                        reduction=cfg_dict.get("dice_loss_reduction", "mean_batch"),
                         smooth_nr=cfg_dict.get("dice_loss_smooth_nr", 1e-5),
                         smooth_dr=cfg_dict.get("dice_loss_smooth_dr", 1e-5),
-                        batch=cfg_dict.get("dice_loss_batch", False),
+                        batch=cfg_dict.get("dice_loss_batch", True),
                     )
         self.segmentation_losses = {f"loss_{i+1}": v for i, v in enumerate(self.segmentation_losses.values())}
         self.total_segmentation_losses = len(self.segmentation_losses)
@@ -245,11 +243,6 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         self.total_reconstruction_loss_weight = cfg_dict.get("total_reconstruction_loss_weight", 1.0)
         self.temperature_scaling = cfg_dict.get("temperature_scaling",True)
         # Set the metrics
-        cross_entropy_metric_num_samples = cfg_dict.get("cross_entropy_metric_num_samples", 50)
-        cross_entropy_metric_ignore_index = cfg_dict.get("cross_entropy_metric_ignore_index", -100)
-        cross_entropy_metric_reduction = cfg_dict.get("cross_entropy_metric_reduction", "none")
-        cross_entropy_metric_label_smoothing = cfg_dict.get("cross_entropy_metric_label_smoothing", 0.0)
-        cross_entropy_metric_classes_weight = cfg_dict.get("cross_entropy_metric_classes_weight", None)
         dice_metric_include_background = cfg_dict.get("dice_metric_include_background", False)
         dice_metric_to_onehot_y = cfg_dict.get("dice_metric_to_onehot_y", False)
         dice_metric_sigmoid = cfg_dict.get("dice_metric_sigmoid", False)
@@ -302,28 +295,15 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             self.haarpsi_vals_reconstruction: Dict = defaultdict(dict)
             self.vsi_vals_reconstruction: Dict = defaultdict(dict)
 
-        # if not is_none(cross_entropy_metric_classes_weight) or cross_entropy_metric_classes_weight != 0.0:
-        #     #self.cross_entropy_metric = BinaryCrossEntropy_with_logits_Loss()
-        #     self.cross_entropy_metric = CrossEntropyLoss(
-        #         num_samples=cross_entropy_metric_num_samples,
-        #         ignore_index=cross_entropy_metric_ignore_index,
-        #         reduction=cross_entropy_metric_reduction,
-        #         label_smoothing=cross_entropy_metric_label_smoothing,
-        #         weight=cross_entropy_metric_classes_weight,
-        #     )
-        # elif "corss_entropy" in segmentation_losses_:
-        #     self.cross_entropy_metric = CrossEntropyLoss(
-        #         num_samples=cross_entropy_metric_num_samples,
-        #         ignore_index=cross_entropy_metric_ignore_index,
-        #         reduction=cross_entropy_metric_reduction,
-        #         label_smoothing=cross_entropy_metric_label_smoothing,
-        #         weight=cross_entropy_metric_classes_weight,
-        #     )
-        # else:
         self.cross_entropy_metric =None
         self.epoch =-2
 
-        self.temperature_loss = CrossEntropyLoss()
+        self.temperature_loss = CrossEntropyLoss(num_samples=cfg_dict.get("cross_entropy_loss_num_samples", 50),
+                            ignore_index=cfg_dict.get("cross_entropy_loss_ignore_index", -100),
+                            reduction=cfg_dict.get("cross_entropy_loss_reduction", "none"),
+                            label_smoothing=cfg_dict.get("cross_entropy_loss_label_smoothing", 0.0),
+                            weight = cfg_dict.get("cross_entropy_loss_classes_weight", None),
+                        )
         self.ece_loss = ECELoss()
         self.ECE= atommic_common.nn.base.DistributedMetricSum()  # type: ignore
 
@@ -983,7 +963,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
 
             dice_score, _ = self.dice_metric(output_target_segmentation, output_predictions_segmentation)
             self.dice_vals[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = dice_score
-            if self.temperature_scaling and attrs["use_for_temp"]:
+            if attrs["use_for_temp"]:
                 segmentation_logit = (target_segmentation,predictions_segmentation*self.temperature)
                 self.validation_step_segmentation_logits.append([str(fname[0]), slice_idx, segmentation_logit])
     def __check_noise_to_recon_inputs__(
@@ -1612,6 +1592,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             outputs["attrs"],
             outputs["r"],
         )
+
         if torch.isnan(val_loss):
              print(outputs["attrs"]['fname'],outputs["attrs"]['slice_idx'])
 
@@ -1716,7 +1697,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         if self.use_reconstruction_module:
             cascades_var_loglike = []
             cascades_inter_loglike = []
-            if isinstance(log_like, list) and self.save_logliklihood_gradient:
+            if isinstance(log_like, list):
                 while isinstance(log_like, list):
                     if len(log_like) == self.rs_cascades:
                         for cascade_rs in log_like:
@@ -1744,7 +1725,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                         log_like = log_like[-1]
             cascades_inter_pred = []
             cascades_var_pred = []
-            if isinstance(predictions_reconstruction, list) and self.save_intermediate_predictions:
+            if isinstance(predictions_reconstruction, list):
                 while isinstance(predictions_reconstruction, list):
                     if len(predictions_reconstruction) == self.rs_cascades:
                         for cascade_rs in predictions_reconstruction:
@@ -1930,10 +1911,10 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             metrics_reconstruction["PSNR"] = self.PSNR(metrics_reconstruction["PSNR"])
             metrics_reconstruction["HaarPSI"] = self.HaarPSI(metrics_reconstruction["HaarPSI"])
             metrics_reconstruction["VSI"] = self.VSI(metrics_reconstruction["VSI"])
-
-        ECE_score = self.set_temperature(self.validation_step_segmentation_logits)
-        metrics_segmentation["ECE"] = metrics_segmentation["ECE"] +ECE_score
-        metrics_segmentation["ECE"] = self.ECE(metrics_segmentation["ECE"])
+        if self.epoch>=0:
+            ECE_score = self.set_temperature(self.validation_step_segmentation_logits)
+            metrics_segmentation["ECE"] = metrics_segmentation["ECE"] +ECE_score
+            metrics_segmentation["ECE"] = self.ECE(metrics_segmentation["ECE"])
         tot_examples = self.TotExamples(torch.tensor(local_examples))
 
         for metric, value in metrics_segmentation.items():
@@ -1944,7 +1925,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         if self.use_reconstruction_module:
             for metric, value in metrics_reconstruction.items():
                 self.log(f"val_metrics/{metric}", value / tot_examples, prog_bar=True, sync_dist=True)
-        if self.log_calibration_diagram and self.temperature_scaling and self.epoch >=0:
+        if self.log_calibration_diagram and self.epoch >=0:
             self.log_temperature_plot(self.validation_step_segmentation_logits,self.temperature)
         self.epoch = self.epoch +1
         self.validation_step_segmentation_logits.clear()

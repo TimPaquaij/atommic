@@ -578,7 +578,7 @@ class SKMTEARSMRIDataset(RSMRIDataset):
             kspace = np.transpose(kspace, (2, 0, 1))
             sensitivity_map = np.transpose(sensitivity_map.squeeze(), (2, 0, 1))
         attrs["log_image"] = bool(slice_in_data in self.indices_to_log)
-        attrs["use_for_temp"] =bool(fname in self.temperature_to_log)
+        attrs["use_for_temp"] =bool(str(fname) in self.temperature_to_log)
         return (
             (
                 kspace,

@@ -215,6 +215,7 @@ class MRIDataset(Dataset):
             len(self.examples), int(log_images_rate * len(self.examples)), replace=False)  # type: ignore
         files_string = [str(file) for file in files]
         self.temperature_to_log = np.random.choice(files_string, log_temp_rate, replace=False)# type: ignore
+        print(self.temperature_to_log)
         # subsample if desired
         if sample_rate < 1.0:  # sample by slice
             # TODO Resample intergers amount slices based on sample rate

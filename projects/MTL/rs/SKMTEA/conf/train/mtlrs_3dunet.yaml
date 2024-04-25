@@ -137,7 +137,7 @@ model:
   ssdu: false
   n2r: false
   log_logliklihood_gradient_std: true
-  log_calibration_diagram: false
+  log_calibration_diagram: true
   save_logliklihood_gradient: false
   save_zero_filled: false
   save_intermediate_predictions: false
@@ -220,7 +220,7 @@ model:
     data_saved_per_slice: false
     complex_target: true
     log_images_rate: 0.003
-    log_temp_rate: 0.3
+    log_temp_rate: 1
     apply_prewhitening: false
     apply_gcc: false
     estimate_coil_sensitivity_maps: false

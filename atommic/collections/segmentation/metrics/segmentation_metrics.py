@@ -242,7 +242,7 @@ def f1_per_class_metric(
     )
     if f1_per_class.dim() == 0:
         f1_per_class = torch.stack([f1_per_class] * x.shape[1])
-    return f1_per_class.mean()
+    return f1_per_class.mean().numpy()
 
 
 def hausdorff_distance_metric(x: torch.Tensor, y: torch.Tensor, batched: bool = True, sum_method='max') -> float:
@@ -423,7 +423,7 @@ def precision_metric(
     include_background: bool = True,
     average="none",
     mdmc_average="samplewise",
-    reduction: Union[str, None] = "mean_batch",
+    reduction: Union[str, None] = "mean",
 ) -> float:
     """Compute Precision Score.
 
@@ -506,7 +506,7 @@ def recall_metric(
     include_background: bool = True,
     average="none",
     mdmc_average="samplewise",
-    reduction: Union[str, None] = "mean_batch",
+    reduction: Union[str, None] = "mean",
 ) -> float:
     """Compute Recall Score.
 
@@ -580,7 +580,7 @@ def recall_metric(
         )
         recall_score, _ = do_metric_reduction(recall_score, reduction=reduction)  # type: ignore
         rec.append(recall_score.item())
-    return torch.mean(torch.tensor(rec)).item()
+    return torch.mean(torch.tensor(rec)).item().numpy()
 
 
 def surface_distances(x, y, voxelspacing=None, connectivity=1):

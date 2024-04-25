@@ -17,6 +17,7 @@ from atommic.collections.segmentation.metrics.segmentation_metrics import (
     f1_per_class_metric,
     hausdorff_distance_95_metric,
     iou_metric,
+    asd,
 )
 
 METRIC_FUNCS = {
@@ -24,6 +25,7 @@ METRIC_FUNCS = {
     "F1": f1_per_class_metric,
     "HD95": hausdorff_distance_95_metric,
     "IOU": iou_metric,
+    "ASD": asd,
 }
 
 
@@ -102,22 +104,17 @@ def main(args):
         elif evaluation_type == "per_volume":
             scores.push(segmentation_labels[:,1:], predictions[:,1:])
 
-        model = args.predictions_dir.split("/")
-        model = model[-4] if model[-4] != "default" else model[-5]
-        print(f"{model+'_'+ str(target).rsplit('/', maxsplit=1)[-1]}: {repr(scores)}")
+
+        print(f"{str(target).rsplit('/', maxsplit=1)[-1]}: {scores.means()}")
         new_row = {"patiend_id":str(target).rsplit('/', maxsplit=1)[-1].replace('.h5',"")}
         new_row.update(scores.means())
         dataframe= dataframe._append(new_row,ignore_index=True)
-        if args.output_dir is not None:
-            output_dir = Path(args.output_dir)
-            output_dir.mkdir(parents=True, exist_ok=True)
-            # if file exists dont' overwrite, but append in a new line
-            with open(output_dir / "results_segmentation.txt", "a", encoding="utf-8") as f:
-                f.write(f"{model+'_'+ str(target).rsplit('/', maxsplit=1)[-1]}: {repr(scores)}")
     if args.output_dir is not None:
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         dataframe.to_csv(output_dir / "results_segmentation.csv")
+        with pd.ExcelWriter(output_dir / "results_segmentation.xlsx") as writer:
+            dataframe.to_excel(writer,sheet_name="Segmentation")
 
 if __name__ == "__main__":
     import argparse
@@ -128,7 +125,7 @@ if __name__ == "__main__":
     parser.add_argument("predictions_dir", type=str)
     parser.add_argument("--output_dir", type=str)
     parser.add_argument("--dataset_format", choices=["skm-tea", "brats", "private"], default="private")
-    parser.add_argument("--evaluation_type", choices=["per_slice", "per_volume"], default="per_slice")
+    parser.add_argument("--evaluation_type", choices=["per_slice", "per_volume"], default="per_volume")
     parser.add_argument("--fill_target_path", action="store_true")
     parser.add_argument("--fill_pred_path", action="store_true")
     args = parser.parse_args()

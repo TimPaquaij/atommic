@@ -14,14 +14,14 @@ from pytorch_lightning import Trainer
 from torch import nn
 from torch.utils.data import DataLoader
 from torchmetrics.metric import Metric
-
+import numpy as np
 from atommic.collections.common.parts import utils
 from atommic.collections.common.parts.fft import ifft2
 from atommic.collections.reconstruction.nn.unet_base.unet_block import NormUnet
 from atommic.core.classes import modelPT
 from atommic.utils import model_utils
 import sklearn.calibration as sc
-
+from timeit import default_timer as timer
 wandb.require("service")
 
 __all__ = ["DistributedMetricSum", "BaseMRIModel", "BaseSensitivityModel"]
@@ -165,26 +165,40 @@ class BaseMRIModel(modelPT.ModelPT, ABC):
     def log_temperature_plot(self,validation,temperature):
         logits_list = []
         labels_list = []
-        fig, ax = plt.subplots()
         for fname, slice_num, output in validation:
             segmentations_target, segmentations_logit = output
             logits_list.append(segmentations_logit.detach().cpu())
             labels_list.append(segmentations_target.detach().cpu())
-        logits = torch.softmax(torch.cat(logits_list, dim=0)/temperature.detach().cpu().float(),dim=1)
-        labels = torch.cat(labels_list, dim=0)
+        logits = torch.softmax(torch.cat(logits_list, dim=0)/temperature.detach().cpu().float(),dim=1).numpy()
+        labels = torch.cat(labels_list, dim=0).numpy()
         list_of_classes = ["Background","Patellar","Femoral","Tibial","Meniscus"]
+        fig, ax = plt.subplots(1,3,figsize=(15, 5))
         for cls in range(labels.shape[1]):
-            prob_true, prob_pred = sc.calibration_curve(labels[:, cls].reshape(-1),
-                                                              logits[:, cls].reshape(-1), n_bins=10)
-            plt.plot(prob_pred, prob_true, marker='o', linewidth=1, label=list_of_classes[cls])
+            prob_true, prob_pred = sc.calibration_curve(labels[:, cls].flatten(),
+                                                              logits[:, cls].flatten(), n_bins=10)
+            indices_false = np.where(labels[:, cls].flatten() == 0)
+            indices_true = np.where(labels[:, cls].flatten() == 1)
+            ax[0].hist(logits[:, cls].flatten()[indices_true], bins=10, alpha=0.5, label=list_of_classes[cls],weights= np.ones(len(logits[:,cls].flatten()[indices_true]))/len(logits[:,cls].flatten()[indices_true]))
+            ax[1].hist(logits[:, cls].flatten()[indices_false], bins=10, alpha=0.5, label=list_of_classes[cls],weights= np.ones(len(logits[:,cls].flatten()[indices_false]))/len(logits[:,cls].flatten()[indices_false]))
+            ax[2].plot(prob_pred, prob_true, linewidth=4, label=list_of_classes[cls], alpha=0.5)
         # reference line, legends, and axis labels
+        ax[0].set_title("Histogram Positive Probability")
+        ax[0].set_xlabel('Predicted Probability')
+        ax[0].set_ylabel('Percentage Occuring')
+        ax[1].set_title("Histrogram Negative Probability")
+        ax[1].set_xlabel('Predicted Probability')
+        ax[1].set_ylabel('Percentage Occuring')
+
         line = mlines.Line2D([0, 1], [0, 1], color='black')
-        transform = ax.transAxes
+        transform = ax[2].transAxes
         line.set_transform(transform)
-        ax.add_line(line)
-        ax.set_xlabel('Predicted probability')
-        ax.set_ylabel('True probability in each bin')
-        plt.legend()
+        ax[2].add_line(line)
+        ax[2].set_xlabel('Mean Predicted Value')
+        ax[2].set_ylabel('Fraction of Possetives')
+        ax[2].set_title("Reliability Plot")
+        lines, labels = ax[2].get_legend_handles_labels()
+        fig.legend(lines,labels,loc='upper center')
+        fig.tight_layout(pad=0.5)
         self.logger.experiment.log({f"Calibration plot with temperature: {temperature.detach().cpu().float()}": wandb.Image(plt)})
         plt.close()
 

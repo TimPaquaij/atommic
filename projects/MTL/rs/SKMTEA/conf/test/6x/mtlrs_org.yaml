@@ -1,0 +1,223 @@
+pretrained: true
+checkpoint: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_ORG/MTLRS_SENSE/default/2024-04-19_10-22-56/checkpoints/default--val_loss=0.0728-epoch=8-last.ckpt
+mode: test
+
+model:
+  model_name: MTLRS
+  joint_reconstruction_segmentation_module_cascades: 5
+  task_adaption_type: multi_task_learning_softmax
+  cascade_nr_hidden_states: 1
+  deep_cascade: true  #Combine each MTL parameter to the next layers
+  softparameter_tuning: -2
+  use_reconstruction_module: true
+  reconstruction_module_recurrent_layer: IndRNN
+  reconstruction_module_conv_filters:
+    - 64
+    - 64
+    - 2
+  reconstruction_module_conv_kernels:
+    - 5
+    - 3
+    - 3
+  reconstruction_module_conv_dilations:
+    - 1
+    - 2
+    - 1
+  reconstruction_module_conv_bias:
+    - true
+    - true
+    - false
+  reconstruction_module_conv_dropout:
+    - 0
+    - 0
+    - 0
+  reconstruction_module_conv_activations:
+    - RELU
+    - RELU
+    - None
+  reconstruction_module_recurrent_filters:
+    - 64
+    - 64
+    - 0
+  reconstruction_module_recurrent_kernels:
+    - 1
+    - 1
+    - 0
+  reconstruction_module_recurrent_dilations:
+    - 1
+    - 1
+    - 0
+  reconstruction_module_recurrent_bias:
+    - true
+    - true
+    - false
+  reconstruction_module_recurrent_dropout:
+    - 0
+    - 0
+    - 0
+  reconstruction_module_depth: 2
+  reconstruction_module_time_steps: 8
+  reconstruction_module_conv_dim: 2
+  reconstruction_module_num_cascades: 1
+  reconstruction_module_dimensionality: 2
+  reconstruction_module_no_dc: true
+  reconstruction_module_keep_prediction: true
+  reconstruction_module_accumulate_predictions: true
+  segmentation_module_accumulate_predictions: true
+  segmentation_module: AttentionUNet
+  segmentation_module_3d: false
+  segmentation_module_input_channels: 1
+  segmentation_module_output_channels: 5
+  segmentation_module_channels: 64
+  segmentation_module_pooling_layers: 2
+  segmentation_module_dropout: 0.0
+  segmentation_loss:
+    cross_entropy: 1
+  task_attention_module: false
+  propagation_module: false
+  cross_entropy_loss_num_samples: 50
+  cross_entropy_ignore_index: -100
+  cross_entropy_reduction: none
+  cross_entropy_label_smoothing: 0.0
+  cross_entropy_loss_classes_weight: [ 1,1,1,1,1 ]
+  dice_metric_include_background: false  # always set to true if the background is removed
+  dice_metric_to_onehot_y: false
+  dice_metric_sigmoid: false
+  dice_metric_softmax: false
+  dice_metric_other_act: none
+  dice_metric_squared_pred: false
+  dice_metric_jaccard: false
+  dice_metric_flatten: false
+  dice_metric_reduction: mean_batch
+  dice_metric_smooth_nr: 1e-5
+  dice_metric_smooth_dr: 1e-5
+  dice_metric_batch: true
+  segmentation_classes_thresholds: none
+  segmentation_activation: softmax
+  temperature_scaling: false
+  reconstruction_loss:
+    l1: 0.8
+    ssim: 0.2
+  kspace_reconstruction_loss: false
+  total_reconstruction_loss_weight: 0.9
+  total_segmentation_loss_weight: 0.1
+  fft_centered: true
+  fft_normalization: ortho
+  spatial_dims:
+    - -2
+    - -1
+  magnitude_input: true
+  combine_echoes: true
+  num_echoes: 2
+  log_multiple_modalities: false  # log all modalities in the same image, e.g. T1, T2, T1ce, FLAIR will be concatenated
+  normalization_type: minmax
+  normalize_segmentation_output: false
+  complex_valued_type: stacked
+  unnormalize_loss_inputs: false
+  unnormalize_log_outputs: false
+  complex_data: true
+  consecutive_slices: 1
+  dimensionality: 2
+  coil_combination_method: SENSE
+  coil_dim: 1
+  estimate_coil_sensitivity_maps_with_nn: false
+  ssdu: false
+  n2r: false
+  log_logliklihood_gradient_std: false
+  log_calibration_diagram: false
+  save_logliklihood_gradient: false
+  save_zero_filled: false
+  save_intermediate_predictions: false
+
+  test_ds:
+    data_path:  /data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_test.json
+    coil_sensitivity_maps_path: None
+    mask_path: None
+    noise_path: None
+    initial_predictions_path: None
+    dataset_format:
+    - skm-tea-echo1-echo2
+    sample_rate: 1
+    volume_sample_rate: None
+    use_dataset_cache: false
+    dataset_cache_file: None
+    num_cols: None
+    consecutive_slices: 1
+    data_saved_per_slice: false
+    complex_target: true
+    log_images_rate: 0
+    log_temp_rate: 0  #Select amount of full validation patient for temperature calibration.
+    apply_prewhitening: false
+    apply_gcc: false
+    estimate_coil_sensitivity_maps: false
+    coil_combination_method: SENSE
+    dimensionality: 2
+    mask_args:
+      type: poisson2d  # the mask will be loaded from the dataset, but we need to specify the type here
+      accelerations:
+        - 6  # 4, 6, 8, 10, 12, 16
+      shift_mask: false
+      use_seed: true
+    partial_fourier_percentage: 0.0
+    remask: false
+    ssdu: false
+    n2r: false
+    unsupervised_masked_target: false
+    crop_size: None
+    kspace_crop: false
+    crop_before_masking: true
+    kspace_zero_filling_size: None
+    normalize_inputs: true
+    normalization_type: minmax
+    kspace_normalization: false
+    fft_centered: true
+    fft_normalization: ortho
+    spatial_dims:
+      - -2
+      - -1
+    coil_dim: 2
+    use_seed: true
+    segmentations_path: /data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/ #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
+    construct_knee_label: false
+    include_background_label: true
+    segmentation_classes: 5
+    complex_data: true
+    batch_size: 1
+    shuffle: false
+    num_workers: 8
+    pin_memory: false
+    drop_last: false
+
+  optim:
+    name: adam
+    lr: 1e-4
+    betas:
+      - 0.9
+      - 0.99
+    weight_decay: 0.0
+    sched:
+      name: InverseSquareRootAnnealing
+      min_lr: 0.0
+      last_epoch: -1
+      warmup_ratio: 0.1
+
+trainer:
+  strategy: ddp_find_unused_parameters_true
+  accelerator: gpu
+  devices: 1
+  num_nodes: 1
+  max_epochs: 10
+  precision: 16-mixed
+  enable_checkpointing: false
+  logger: false
+  log_every_n_steps: 50
+  check_val_every_n_epoch: -1
+  max_steps: -1
+
+exp_manager:
+  exp_dir: /data/projects/utwente/recon/SKM-TEA/v1-release/predictions/MTLRS_SENSE_ORG/predictions_6x/best/2024-04-19_10-22-56
+  create_tensorboard_logger: false
+  create_wandb_logger: true
+  wandb_logger_kwargs:
+    project: MTLRS_SKMTEA_ORG
+  files_to_copy: [ ]

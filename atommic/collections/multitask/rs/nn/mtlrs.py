@@ -21,6 +21,7 @@ from atommic.collections.multitask.rs.nn.base import BaseMRIReconstructionSegmen
 from atommic.collections.multitask.rs.nn.mtlrs_base.mtlrs_block import MTLRSBlock
 from atommic.core.classes.common import typecheck
 from atommic.collections.multitask.rs.nn.mtlrs_base.task_attention_module import TaskAttentionalModule
+from atommic.collections.multitask.rs.nn.mtlrs_base.propagation_module import FeaturePropagationModule
 
 __all__ = ["MTLRS"]
 
@@ -131,8 +132,11 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
 
         self.task_adaption_type = cfg_dict.get("task_adaption_type", "multi_task_learning")
         self.task_attention_module = cfg_dict.get("task_attention_module",False)
+        self.propagation_module = cfg_dict.get("propagation_module", False)
         if self.task_attention_module:
             self.task_attention_block = TaskAttentionalModule(in_channels=cfg_dict.get("reconstruction_module_conv_filters")[0])
+        if self.propagation_module:
+            self.propagation_block = FeaturePropagationModule(num_tasks=2,per_task_channels=cfg_dict.get("reconstruction_module_conv_filters")[0])
 
     # pylint: disable=arguments-differ
     @typecheck()
@@ -249,6 +253,8 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                 # else:
                 if self.task_attention_module:
                     hx = [self.task_attention_block(hx[i],hidden_states[i]) for i in range(len(hx))]
+                if self.propagation_module:
+                    hx = [self.propagation_block(hx[i],hidden_states[i]) for i in range(len(hx))]
 
                 else:
                     hx = [hx[i] + hidden_states[i] for i in range(len(hx))]
