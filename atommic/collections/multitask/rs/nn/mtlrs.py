@@ -201,8 +201,8 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                         pred_segmentation = torch.sum(torch.stack(pred_segmentations, dim=0), dim=0)
                 hidden_states = [
                     torch.cat(
-                        [torch.abs(init_reconstruction_pred.unsqueeze(self.coil_dim) * pred_segmentation)]
-                        * (f // self.segmentation_module_output_channels),
+                        [torch.abs(init_reconstruction_pred.unsqueeze(self.coil_dim) * pred_segmentation[...,1:,:,:])]
+                        * (f // self.segmentation_module_output_channels-1),
                         dim=self.coil_dim,
                     )
                     for f in self.reconstruction_module_recurrent_filters
@@ -368,6 +368,7 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                 for cascade_pred in rs_cascade_pred:
                     time_steps_weights = torch.logspace(-1, 0, steps=len(cascade_pred)).to(
                         target.device)
+                    #time_steps_weights = torch.ones(len(cascade_pred)).to(target.device)
                     if self.consecutive_slices >1:
                         time_steps_loss = [
                             compute_reconstruction_loss(target,

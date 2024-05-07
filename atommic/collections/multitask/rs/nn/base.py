@@ -222,6 +222,8 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                             gamma =  cfg_dict.get("focal_loss_gamma", 2),
                             alpha = cfg_dict.get("focal_loss_alpha", 1),
                                                                )
+                elif name== "focal_loss_m":
+                    self.segmentation_losses[name] = FocalLoss()
                 elif name == "dice":
                     self.segmentation_losses[name] = Dice(
                         include_background=cfg_dict.get("dice_loss_include_background", False),
@@ -237,6 +239,8 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                         smooth_dr=cfg_dict.get("dice_loss_smooth_dr", 1e-5),
                         batch=cfg_dict.get("dice_loss_batch", True),
                     )
+                elif name == "gen_dice":
+                    self.segmentation_losses[name] = GeneralizedDiceLoss()
         self.segmentation_losses = {f"loss_{i+1}": v for i, v in enumerate(self.segmentation_losses.values())}
         self.total_segmentation_losses = len(self.segmentation_losses)
         self.total_segmentation_loss_weight = cfg_dict.get("total_segmentation_loss_weight", 1.0)
@@ -1321,6 +1325,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         )
 
 
+
         if self.consecutive_slices > 1:
         ## reshape the target and prediction to [batch_size * consecutive_slices, nr_classes, n_x, n_y]
             batch_size, slices = target_segmentation.shape[:2]
@@ -1710,6 +1715,10 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                                                 time_step = torch.view_as_real(time_step)
                                             if self.consecutive_slices > 1:
                                                 time_step = time_step[:, self.consecutive_slices // 2]
+                                            if self.num_echoes > 1:
+                                                batch_size = time_step.shape[0] / self.num_echoes
+                                                # reshape to [batch_size, num_echoes, n_x, n_y]
+                                                time_step = time_step.reshape((int(batch_size),self.num_echoes,*time_step.shape[1:]))
                                             time_step = (
                                                 torch.view_as_complex(time_step.type(torch.float32))
                                                 .cpu()
@@ -1738,6 +1747,10 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                                                 time_step = torch.view_as_real(time_step)
                                             if self.consecutive_slices > 1:
                                                 time_step = time_step[:, self.consecutive_slices // 2]
+                                            if self.num_echoes > 1:
+                                                batch_size = time_step.shape[0] / self.num_echoes
+                                                # reshape to [batch_size, num_echoes, n_x, n_y]
+                                                time_step = time_step.reshape((int(batch_size),self.num_echoes,*time_step.shape[1:]))
                                             time_step = (
                                                 torch.view_as_complex(time_step.type(torch.float32))
                                                 .cpu()
@@ -2075,14 +2088,11 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                 reconstructions[fname] = np.stack([out for _, out in sorted(reconstructions[fname])])
             for fname in targets_reconstructions:
                 targets_reconstructions[fname] = np.stack([out for _, out in sorted(targets_reconstructions[fname])])
-            if self.save_logliklihood_gradient:
-                for fname in loglike_reconstructions:
-                    loglike_reconstructions[fname] = np.stack([out for _, out in sorted(loglike_reconstructions[fname])])
-            if self.save_logliklihood_gradient:
-                for fname in innit_reconstructions:
-                    innit_reconstructions[fname] = np.stack([out for _, out in sorted(innit_reconstructions[fname])])
-            if self.save_logliklihood_gradient:
-                for fname in inter_reconstructions:
+            for fname in loglike_reconstructions:
+                loglike_reconstructions[fname] = np.stack([out for _, out in sorted(loglike_reconstructions[fname])])
+            for fname in innit_reconstructions:
+                innit_reconstructions[fname] = np.stack([out for _, out in sorted(innit_reconstructions[fname])])
+            for fname in inter_reconstructions:
                     inter_reconstructions[fname] = np.stack([out for _, out in sorted(inter_reconstructions[fname])])
 
         else:

@@ -599,6 +599,8 @@ class RSMRIDataTransforms:
                     scan = torch.view_as_complex(target_reconstruction)
                 else:
                     scan = target_reconstruction
+                if scan.ndim > 2:
+                    scan =scan[0]
                 scan = torch.abs(scan / torch.max(torch.abs(scan)))
                 mask_1 = (scan > 0.04) * 1
                 scan_filt = scan + 10 * mask_1

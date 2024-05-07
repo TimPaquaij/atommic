@@ -5,9 +5,9 @@ mode: train
 model:
   model_name: MTLRS
   joint_reconstruction_segmentation_module_cascades: 5
-  task_adaption_type: multi_task_learning_softmax
+  task_adaption_type: multi_task_learning_logit
   cascade_nr_hidden_states: 1
-  deep_cascade: true  #Combine each MTL parameter to the next layers
+  deep_cascade: false  #Combine each MTL parameter to the next layers
   softparameter_tuning: -2
   use_reconstruction_module: true
   reconstruction_module_recurrent_layer: IndRNN
@@ -72,14 +72,27 @@ model:
   segmentation_module_pooling_layers: 2
   segmentation_module_dropout: 0.0
   segmentation_loss:
-    focal_loss: 1
+    focal_loss_m: 0.8
+    gen_dice: 0.2
   task_attention_module: false
   propagation_module: false
   cross_entropy_loss_num_samples: 50
   cross_entropy_ignore_index: -100
-  cross_entropy_reduction: mean
+  cross_entropy_reduction: none
   cross_entropy_label_smoothing: 0.0
   cross_entropy_loss_classes_weight: none
+  dice_loss_include_background: true  # always set to true if the background is removed
+  dice_loss_to_onehot_y: false
+  dice_loss_sigmoid: false
+  dice_loss_softmax: true
+  dice_loss_other_act: none
+  dice_loss_squared_pred: false
+  dice_loss_jaccard: false
+  dice_loss_flatten: false
+  dice_loss_reduction: mean_batch
+  dice_loss_smooth_nr: 1e-5
+  dice_loss_smooth_dr: 1e-5
+  dice_loss_batch: true
   dice_metric_include_background: false  # always set to true if the background is removed
   dice_metric_to_onehot_y: false
   dice_metric_sigmoid: false
@@ -277,11 +290,11 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/MTLRS_SENSE_DEF
+  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/MTLRS_SENSE_focal_gedice
   ema:
     enable: false
   create_tensorboard_logger: false
   create_wandb_logger: true
   wandb_logger_kwargs:
-    project: MTLRS_SKMTEA_DEF
+    project: MTLRS_SKMTEA_focal_gedice
   files_to_copy: [ ]

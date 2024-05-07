@@ -171,7 +171,7 @@ class BaseMRIModel(modelPT.ModelPT, ABC):
             labels_list.append(segmentations_target.detach().cpu())
         logits = torch.softmax(torch.cat(logits_list, dim=0)/temperature.detach().cpu().float(),dim=1).numpy()
         labels = torch.cat(labels_list, dim=0).numpy()
-        list_of_classes = ["Background","Patellar","Femoral","Tibial","Meniscus"]
+        list_of_classes = ["Background","Patellar","Femoral","Tibial","Meniscus","Knee"]
         fig, ax = plt.subplots(1,3,figsize=(15, 5))
         for cls in range(labels.shape[1]):
             prob_true, prob_pred = sc.calibration_curve(labels[:, cls].flatten(),

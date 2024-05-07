@@ -112,7 +112,6 @@ def main(args):
     if args.output_dir is not None:
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        dataframe.to_csv(output_dir / "results_segmentation.csv")
         with pd.ExcelWriter(output_dir / "results_segmentation.xlsx") as writer:
             dataframe.to_excel(writer,sheet_name="Segmentation")
 
