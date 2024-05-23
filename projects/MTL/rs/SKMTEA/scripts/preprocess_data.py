@@ -172,27 +172,31 @@ def main(args):
             segmentation_one = collect_mask(segmentation_one, (0, 1, (2, 3), (4, 5)), out_channel_first=False)
 
             # Remove undersampling kspace and prepare for lateral reconstruction
-            kspace = torch.fft.fft(torch.fft.ifftshift(torch.as_tensor(kspace), dim=0), dim=0)
-            kspace = torch.fft.fftshift(kspace, dim=0)[48:-48, :, 40:-40, ...]
-            kspace = kspace[int(kspace.shape[0] / 2 - (kspace.shape[0] * crop_scale[0] / 2)):int(kspace.shape[0] / 2 + (kspace.shape[0] * crop_scale[0] / 2)),
-                            int(kspace.shape[1] / 2 - (kspace.shape[1] * crop_scale[1] / 2)):int(kspace.shape[1] / 2 + (kspace.shape[1] * crop_scale[1] / 2)),
-                            int(kspace.shape[2] / 2 - (kspace.shape[2] * crop_scale[2] / 2)):int(kspace.shape[2] / 2 + (kspace.shape[2] * crop_scale[2] / 2)),
-                            :,
-                            :]
-            kspace = torch.fft.ifft(torch.fft.ifftshift(kspace, dim=2), dim=2)
-            kspace = torch.fft.fftshift(kspace, dim=2).numpy()
+            kspace = torch.fft.fftshift(torch.fft.fft(torch.fft.ifftshift(torch.as_tensor(kspace), dim=0), dim=0),
+                                        dim=0)
+            kspace = kspace[int(kspace.shape[0] / 2 - (kspace.shape[0] * crop_scale[0] / 2)):int(
+                kspace.shape[0] / 2 + (kspace.shape[0] * crop_scale[0] / 2)),
+                     int(kspace.shape[1] / 2 - (kspace.shape[1] * crop_scale[1] / 2)):int(
+                         kspace.shape[1] / 2 + (kspace.shape[1] * crop_scale[1] / 2)),
+                     int(kspace.shape[2] / 2 - (kspace.shape[2] * crop_scale[2] / 2)):int(
+                         kspace.shape[2] / 2 + (kspace.shape[2] * crop_scale[2] / 2)),
+                     :,
+                     :]
+            kspace = torch.fft.fftshift(torch.fft.ifft(torch.fft.ifftshift(kspace, dim=2), dim=2), dim=2)
+
+
             kspace = np.transpose(kspace, (2, 0, 1, 3, 4))
             print('Cropped and hybridized kspace',kspace.shape)
             ####Interpolate segmentation ####
             arr_shape = np.transpose(maps,(2,0,1,3,4)).shape[0:3]
 
-            pixelsize_x_old = 0.34
-            pixelsize_y_old = 0.34
+            pixelsize_x_old = 0.3125
+            pixelsize_y_old = 0.3125
             slice_thickness_old = meta_data['SliceThickness'].iloc[0]
 
-            pixelsize_x_new = 0.34 * (1 / (416 / 512)) * (1 / crop_scale[0])
-            pixelsize_y_new = 0.34 * (1 / crop_scale[1])
-            slice_thickness_new = meta_data['SliceThickness'].iloc[0] * (1 / (80 / 160)) * (1 / crop_scale[2])
+            pixelsize_x_new = 0.3125 * (1 / crop_scale[0])
+            pixelsize_y_new = 0.3125 * (1 / crop_scale[1])
+            slice_thickness_new = meta_data['SliceThickness'].iloc[0] * (1 / crop_scale[2])
 
             x_old = np.linspace(0, (arr_shape[1] - 1) * pixelsize_x_old, arr_shape[1])
             y_old = np.linspace(0, (arr_shape[2] - 1) * pixelsize_y_old, arr_shape[2])
@@ -263,9 +267,9 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("data_path", type=Path, default=None, help="Path to the annotations json file.")
-    parser.add_argument("annotations_path", type=Path, default=None, help="Path to the annotations json file.")
+    parser.add_argument("data_path", type=Path, default=None, help="Path to the raw data bench mark.")
+    parser.add_argument("annotations_path", type=Path, default=None, help="Path to the annotations json file of the preprocessed data.")
     parser.add_argument("--data_type", choices=["raw", "image"], default="raw", help="Type of data to split.")
-    parser.add_argument("--crop_scale", type=list, default=[0.5,0.5,1], help="List with scalers for croppig")
+    parser.add_argument("--crop_scale", type=list, default=[0.5,0.5,0.5], help="List with scalers for croppig")
     args = parser.parse_args()
     main(args)

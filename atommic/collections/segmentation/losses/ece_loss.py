@@ -25,7 +25,7 @@ class ECELoss(Loss):
     "Obtaining Well Calibrated Probabilities Using Bayesian Binning." AAAI.
     2015.
     """
-    def __init__(self, n_bins=10):
+    def __init__(self, n_bins=30):
         """
         n_bins (int): number of confidence interval bins
         """

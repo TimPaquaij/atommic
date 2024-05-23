@@ -157,7 +157,7 @@ def main(args):
             annotation_set = json.load(f)
         # read the "images" key and for every instance get the "file_name" key
         for image in tqdm(range(len(annotation_set["images"]))):
-            if annotation_set["images"][image][file_name] == "MTR_135.h5":
+            if annotation_set["images"][image]["file_name"] == "MTR_135.h5":
                 rfname = f'{raw_data_path}/{annotation_set["images"][image]["file_name"]}'
                 wfname = f'{save_data_path}/{annotation_set["images"][image]["file_name"]}'
                 segrfname = f'{seg_data_path}/{annotation_set["images"][image]["file_name"]}'.replace('.h5','.nii.gz')

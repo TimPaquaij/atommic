@@ -23,13 +23,13 @@ class TaskAttentionalModule(nn.Module):
         # Conv-deconvolution layers for spatial attention
         res_block = torch.sigmoid(self.residual_block(balanced_output))
         # Generate gated features
-        gated_depth_features = (1 + res_block) * reconstruction_features
+        gated_rec_features = (1 + res_block) * reconstruction_features
         gated_segmentation_features = (1 + res_block) * segmentation_features
 
         # Concatenate and apply convolutional layer
-        concatenated_features = torch.cat((gated_depth_features, gated_segmentation_features), dim=1)
-        output = self.fc(concatenated_features)
-        return output
+        #concatenated_features = torch.cat((gated_depth_features, gated_segmentation_features), dim=1)
+        # output = self.fc(concatenated_features)
+        return gated_rec_features
 
 
 class ResidualBlock(nn.Module):

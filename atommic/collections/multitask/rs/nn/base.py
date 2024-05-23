@@ -220,10 +220,16 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                             reduction=cfg_dict.get("focal_loss_reduction", "mean"),
                             label_smoothing=cfg_dict.get("focal_loss_label_smoothing", 0.0),
                             gamma =  cfg_dict.get("focal_loss_gamma", 2),
-                            alpha = cfg_dict.get("focal_loss_alpha", 1),
+                            alpha = cfg_dict.get("focal_loss_alpha", 0.25),
                                                                )
                 elif name== "focal_loss_m":
-                    self.segmentation_losses[name] = FocalLoss()
+                    self.segmentation_losses[name] = FocalLoss(use_softmax=cfg_dict.get("focal_loss_softmax", True),
+                                                               include_background=cfg_dict.get("focal_loss_include_background", True),
+                                                               to_onehot_y=cfg_dict.get("focal_loss_to_onehot_y", True),
+                                                               gamma=cfg_dict.get("focal_loss_gamma", 2),
+                                                               #alpha=cfg_dict.get("focal_loss_alpha", None),
+                                                               #weight=cfg_dict.get("focal_loss_weight", None),
+                                                               reduction=cfg_dict.get("focal_loss_reduction", "mean"))
                 elif name == "dice":
                     self.segmentation_losses[name] = Dice(
                         include_background=cfg_dict.get("dice_loss_include_background", False),
@@ -302,12 +308,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         self.cross_entropy_metric =None
         self.epoch =-2
 
-        self.temperature_loss = CrossEntropyLoss(num_samples=cfg_dict.get("cross_entropy_loss_num_samples", 50),
-                            ignore_index=cfg_dict.get("cross_entropy_loss_ignore_index", -100),
-                            reduction=cfg_dict.get("cross_entropy_loss_reduction", "none"),
-                            label_smoothing=cfg_dict.get("cross_entropy_loss_label_smoothing", 0.0),
-                            weight = cfg_dict.get("cross_entropy_loss_classes_weight", None),
-                        )
+        self.temperature_loss = CrossEntropyLoss()
         self.ece_loss = ECELoss()
         self.ECE= atommic_common.nn.base.DistributedMetricSum()  # type: ignore
 
@@ -1122,7 +1123,6 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         def eval():
             optimizer.zero_grad()
             scaled_logits = self.temperature_scale(logits)
-            print(scaled_logits.shape, labels.shape)
             loss = self.temperature_loss(labels,scaled_logits)
             loss.requires_grad_()
             loss.backward()
@@ -1724,9 +1724,9 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                                                 .cpu()
                                                 .numpy()
                                             )
-                                            # time_step = np.abs(time_step/np.max(np.abs(time_step)))
+                                            time_step = np.abs(time_step/np.max(np.abs(time_step)))
                                             time_steps.append(time_step)
-                                        var_cascade = np.std(np.array(time_steps), axis=0)
+                                        var_cascade = np.var(np.array(time_steps), axis=0)
                                         cascades_var_loglike.append(var_cascade)
                                         cascades_inter_loglike.append(time_steps[-1])
                         log_like = log_like[-1]

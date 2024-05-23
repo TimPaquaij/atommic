@@ -200,7 +200,7 @@ class MRIDataset(Dataset):
                     if fname in n2r_supervised_files:
                         metadata["n2r_supervised"] = True
 
-                self.examples += [(fname, slice_ind, metadata,self.int_total_slices+i) for i,slice_ind in enumerate(range(num_slices))]
+                self.examples += [(fname, slice_ind, metadata,self.int_total_slices+i) for i,slice_ind in enumerate(range(num_slices))] #
                 self.int_total_slices = self.examples[-1][3]
             if dataset_cache.get(root) is None and use_dataset_cache:
                 dataset_cache[root] = self.examples

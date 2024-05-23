@@ -28,7 +28,7 @@ class GeneralizedDiceLoss(Loss):
 
     def __init__(
             self,
-            include_background: bool = True,
+            include_background: bool = False,
             to_onehot_y: bool = False,
             sigmoid: bool = False,
             softmax: bool = True,
