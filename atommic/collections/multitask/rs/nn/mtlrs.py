@@ -143,7 +143,7 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
         if self.attention_module == "PropagationModule":
             self.attention_module_block = FeaturePropagationModule(num_tasks=2,per_task_channels=cfg_dict.get("reconstruction_module_conv_filters")[0])
         if self.attention_module == "SemanticGuidanceModule":
-            self.attention_module_block = SASG(channels=cfg_dict.get("reconstruction_module_conv_filters")[0])
+            self.attention_module_block = SASG(channels_rec=cfg_dict.get("reconstruction_module_conv_filters")[0],channels_seg=self.segmentation_module_output_channels-1)
     # pylint: disable=arguments-differ
     @typecheck()
     def forward(
@@ -223,7 +223,7 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                 else:
                     pred_segmentation = torch.softmax(pred_segmentation, dim=1)
                 if self.attention_module == "SemanticGuidanceModule":
-                    hidden_states = [pred_segmentation for _ in self.reconstruction_module_recurrent_filters]
+                    hidden_states = [pred_segmentation[:,1:] for _ in self.reconstruction_module_recurrent_filters]
                 else:
                     hidden_states = [
                         torch.cat(
@@ -236,9 +236,9 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                         if f != 0
                     ]
 
-            if self.task_adaption_type == "multi_task_learning_softmax" and not self.attention_module =="SemanticGuidanceModule" and c >= self.combine_rs and epoch >= self.soft_parameter or self.task_adaption_type == "multi_task_learning_logit" and c >= self.combine_rs and epoch >= self.soft_parameter and not self.attention_module =="SemanticGuidanceModule":
+            if self.task_adaption_type == "multi_task_learning_softmax" and c >= self.combine_rs and epoch >= self.soft_parameter or self.task_adaption_type == "multi_task_learning_logit" and c >= self.combine_rs and epoch >= self.soft_parameter:
                 # Check if the concatenated hidden states are the same size as the hidden state of the RNN
-                if hidden_states[0].shape[self.coil_dim] != hx[0].shape[self.coil_dim]:
+                if hidden_states[0].shape[self.coil_dim] != hx[0].shape[self.coil_dim] and not self.attention_module =="SemanticGuidanceModule":
                     prev_hidden_states = hidden_states
                     hidden_states = []
                     for hs in prev_hidden_states:

@@ -16,7 +16,7 @@ from atommic.collections.segmentation.losses.dice import one_hot
 from atommic.collections.segmentation.losses.utils import do_metric_reduction
 
 
-def asd(x, y, voxelspacing=None, connectivity=1):
+def asd(x, y, voxelspacing=[0.4,0.312/2,0.312/2], connectivity=1):
     """Compute Average Symmetric Surface Distance (ASD) between a binary object and its reference.
 
     Parameters
@@ -618,9 +618,10 @@ def surface_distances(x, y, voxelspacing=None, connectivity=1):
         This function is based on the medpy implementation of the Average Symmetric Surface Distance (ASD) metric.
         Source: https://github.com/loli/medpy/blob/master/medpy/metric/binary.py#L458
     """
-    x = np.atleast_1d(np.array([x]).astype(np.bool_))
-    y = np.atleast_1d(np.array([y]).astype(np.bool_))
-
+    x = np.sum(x,axis=1).astype(np.bool_)
+    y = np.sum(y, axis=1).astype(np.bool_)
+    # x = np.atleast_1d(np.array([x])
+    # y = np.atleast_1d(np.array([y])
     if voxelspacing is not None:
         voxelspacing = _ni_support._normalize_sequence(voxelspacing, y.ndim)  # pylint: disable=protected-access
         voxelspacing = np.asarray(voxelspacing, dtype=np.float64)

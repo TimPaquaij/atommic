@@ -63,20 +63,24 @@ def main(args):
                 kspace_fft_6 = torch.fft.fftshift(kspace_fft_5, dim=(0, 1))
                 image_fft = kspace_fft_6 * torch.conj(torch.as_tensor(maps[i, :, :, :, :]))
                 target_scan[i,...] = torch.sum(image_fft, dim=-1, keepdim=False)[:,:,0].numpy() ##Select which echo to compare
+        if evaluation_type == "per_slice":
+            for sl in range(target_scan.shape[0]):
+                if args.normalisation_method == 'complex_abs':
+                    target_scan[sl] = target_scan[sl]**2
+                    reconstruction[sl] = reconstruction[sl] **2
+                if args.normalisation_method == 'complex_abs_sqrt':
+                    target_scan[sl] = np.sqrt(target_scan[sl] ** 2)
+                    reconstruction[sl] = np.sqrt(reconstruction[sl] ** 2)
+                if  args.normalisation_method == 'stacked':
+                    target_scan[sl] = target_scan[sl]
+                    reconstruction[sl] = reconstruction[sl]
 
-        for sl in range(target_scan.shape[0]):
-            if args.normalisation_method == 'complex_abs':
-                target_scan[sl] = target_scan[sl]**2
-                reconstruction[sl] = reconstruction[sl] **2
-            if args.normalisation_method == 'complex_abs_sqrt':
-                target_scan[sl] = np.sqrt(target_scan[sl] ** 2)
-                reconstruction[sl] = np.sqrt(reconstruction[sl] ** 2)
-            if  args.normalisation_method == 'stacked':
-                target_scan[sl] = target_scan[sl]
-                reconstruction[sl] = reconstruction[sl]
+                target_scan[sl] = target_scan[sl] / np.max(np.abs(target_scan[sl]))
+                reconstruction[sl] = reconstruction[sl] / np.max(np.abs(reconstruction[sl]))
+        else:
+            target_scan = np.abs(target_scan) / np.max(np.abs(target_scan))
+            reconstruction = np.abs(reconstruction) / np.max(np.abs(reconstruction))
 
-            target_scan[sl] = target_scan[sl] / np.max(np.abs(target_scan[sl]))
-            reconstruction[sl] = reconstruction[sl] / np.max(np.abs(reconstruction[sl]))
 
         reconstruction = np.abs(reconstruction).real.astype(np.float32)
         target_scan = np.abs(target_scan).real.astype(np.float32)
@@ -93,19 +97,17 @@ def main(args):
                         scores.push(target_slice, reconstruction_slice, maxval=maxvalue)
 
                 elif evaluation_type == "per_volume":
-                    print(target_scan.shape,reconstruction.shape)
                     scores.push(target_scan[:,i], reconstruction[:,i], maxval=maxvalue)
 
                 model = args.reconstructions_dir.split("/")
                 model = model[-4] if model[-4] != "default" else model[-5]
-                print(f"{model+'_'+ str(target).rsplit('/', maxsplit=1)[-1]} Echo{i+1}: {repr(scores)}")
-                new_row = {"patiend_id": str(target).rsplit('/', maxsplit=1)[-1].replace('.h5', "")}
+                new_row = {"id": str(target).rsplit('/', maxsplit=1)[-1].replace('.h5', "")}
                 new_row.update(scores.means())
                 if i ==0:
                     dataframe_echo_1 = dataframe_echo_1._append(new_row, ignore_index=True)
                 else:
                     dataframe_echo_2=dataframe_echo_2._append(new_row, ignore_index=True)
-        if target_scan.ndim ==4 and reconstruction.ndim ==5:
+        elif target_scan.ndim ==4 and reconstruction.ndim ==5:
             for i in range(reconstruction.shape[2]):
                 for c in range(reconstruction.shape[1]):
                     scores = ReconstructionMetrics(METRIC_FUNCS)
@@ -123,7 +125,7 @@ def main(args):
                     model = args.reconstructions_dir.split("/")
                     model = model[-4] if model[-4] != "default" else model[-5]
                     print(f"{model+'_'+ str(target).rsplit('/', maxsplit=1)[-1]} Echo{i+1}: {repr(scores)}")
-                    new_row = {"patiend_id": str(target).rsplit('/', maxsplit=1)[-1].replace('.h5', ""),"Cascade":int(c+1)}
+                    new_row = {"id": str(target).rsplit('/', maxsplit=1)[-1].replace('.h5', ""),"Cascade":int(c+1)}
                     new_row.update(scores.means())
                     if i ==0:
                         dataframe_echo_1 = dataframe_echo_1._append(new_row, ignore_index=True)
@@ -143,17 +145,18 @@ def main(args):
 
             # model = args.reconstructions_dir.split("/")
             # model = model[-4] if model[-4] != "default" else model[-5]
-            print(f"{str(target).rsplit('/', maxsplit=1)[-1]} : {repr(scores)}")
-            new_row = {"patient_id": str(target).rsplit('/', maxsplit=1)[-1].replace('.h5', "")}
+            new_row = {"id": str(target).rsplit('/', maxsplit=1)[-1].replace('.h5', "")}
             new_row.update(scores.means())
             dataframe = dataframe._append(new_row, ignore_index=True)
 
     if args.output_dir is not None:
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        with pd.ExcelWriter(output_dir / ("results_reconstruction_" + args.normalisation_method + "_target:_"+ str(args.target) +"Inter:_"+str(args.inter)+ "_.xlsx")) as writer:
-            dataframe_echo_1.to_excel(writer,sheet_name="Echo 1" )
-            dataframe_echo_2.to_excel(writer, sheet_name="Echo 2")
+    else:
+        output_dir = Path(args.reconstructions_dir)
+    with pd.ExcelWriter(output_dir / "results_reconstruction.xlsx") as writer:
+        dataframe_echo_1.to_excel(writer,sheet_name="Echo 1" )
+        dataframe_echo_2.to_excel(writer, sheet_name="Echo 2")
 
 
 if __name__ == "__main__":
@@ -162,11 +165,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("targets_dir", type=str)
     parser.add_argument("reconstructions_dir", type=str)
-    parser.add_argument("normalisation_method", type=str)
+    parser.add_argument("--normalisation_method", type=str, default='stacked')
     parser.add_argument("--target", type=bool, default=False)
-    parser.add_argument("--inter", type=bool, default=True)
+    parser.add_argument("--inter", type=bool, default=False)
     parser.add_argument("--output_dir", type=str)
-    parser.add_argument("--evaluation_type", choices=["per_slice", "per_volume"], default="per_slice")
+    parser.add_argument("--evaluation_type", choices=["per_slice", "per_volume"], default="per_volume")
     parser.add_argument("--fill_target_path", action="store_true")
     parser.add_argument("--fill_pred_path", action="store_true")
     args = parser.parse_args()

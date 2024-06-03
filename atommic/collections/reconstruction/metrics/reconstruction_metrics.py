@@ -149,21 +149,12 @@ def ssim(x: np.ndarray, y: np.ndarray,  maxval: np.ndarray = None) -> float:
         The SSIM is computed using the scikit-image implementation of the SSIM metric.
         Source: https://scikit-image.org/docs/dev/api/skimage.metrics.html#skimage.metrics.structural_similarity
     """
-    if x.ndim == 2:
-        x = x[np.newaxis, :, :]
-    if y.ndim == 2:
-        y = y[np.newaxis, :, :]
-    if x.ndim != 3:
-        raise ValueError("Unexpected number of dimensions in ground truth.")
-    if x.ndim != y.ndim:
-        raise ValueError("Ground truth dimensions does not match prediction dimensions.")
+
 
     maxval = max(np.max(x) - np.min(x), np.max(y) - np.min(y)) if maxval is None else maxval
     maxval = max(maxval, 1)
-    ssim_score = sum(
-        structural_similarity(x[slice_num], y[slice_num], data_range=maxval) for slice_num in range(x.shape[0])
-    )
-    return ssim_score / x.shape[0]
+    ssim_score = structural_similarity(x, y, data_range=maxval)
+    return ssim_score
 
 def haarpsi3d(gt: np.ndarray, pred: np.ndarray,maxval: np.ndarray = None) -> float:
     """Compute Structural Similarity Index Metric (SSIM)"""
@@ -184,13 +175,10 @@ def haarpsi3d(gt: np.ndarray, pred: np.ndarray,maxval: np.ndarray = None) -> flo
     maxval = np.max(gt) if maxval is None else maxval
     _haarpsi = functools.partial(haarpsi, scales=scales, subsample=subsample, c=c, alpha=alpha,
                                  data_range=maxval, reduction=reduction)
-    __haarpsi = sum(
-        _haarpsi(torch.from_numpy(gt[slice_num]).unsqueeze(0).float(),
-                 torch.from_numpy(pred[slice_num]).unsqueeze(0).float()) for slice_num in
-        range(gt.shape[0])
-    ).numpy()
+    __haarpsi = _haarpsi(torch.from_numpy(gt),
+                 torch.from_numpy(pred)).item()
 
-    return __haarpsi / gt.shape[0]
+    return __haarpsi
 
 def vsi3d(gt: np.ndarray, pred: np.ndarray,maxval: np.ndarray = None) -> float:
     """Compute Structural Similarity Index Metric (SSIM)"""
@@ -218,13 +206,11 @@ def vsi3d(gt: np.ndarray, pred: np.ndarray,maxval: np.ndarray = None) -> float:
         vsi, c1=c1, c2=c2, c3=c3, alpha=alpha, beta=beta, omega_0=omega_0,
         sigma_f=sigma_f, sigma_d=sigma_d, sigma_c=sigma_c, data_range=maxval,
         reduction=reduction)
-    __vsi = sum(
-        _vsi(torch.from_numpy(gt[slice_num]).unsqueeze(0).float(),
-             torch.from_numpy(pred[slice_num]).unsqueeze(0).float()) for slice_num in
-        range(gt.shape[0])
-    ).numpy()
+    __vsi =_vsi(torch.from_numpy(gt),
+             torch.from_numpy(pred)
+    ).item()
 
-    return __vsi / gt.shape[0]
+    return __vsi
 
 METRIC_FUNCS = dict(SSIM=ssim, HaarPSI=haarpsi3d, VSI=vsi3d,PSNR = psnr)
 

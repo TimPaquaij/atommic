@@ -88,9 +88,12 @@ def main(args):
             fname = fname.split(".nii")[0]
 
         predictions = h5py.File(Path(args.predictions_dir) / f"{fname}.h5", "r")["segmentation"][()].squeeze()
+        if predictions.ndim ==5:
+            predictions=predictions[:,-1]
         predictions = torch.softmax(torch.from_numpy(predictions), dim=1)
         predictions = one_hot(torch.argmax(torch.abs(predictions), dim=1, keepdim=True),
                                      num_classes=predictions.shape[1]).float().numpy()
+
 
         segmentation_labels = h5py.File(Path(args.predictions_dir) / f"{fname}.h5", "r")["target_segmentation"][()].squeeze()
         #segmentation_labels = np.transpose(segmentation_labels, (0, 3, 1, 2))
@@ -98,29 +101,29 @@ def main(args):
         segmentation_labels = torch.softmax(torch.from_numpy(segmentation_labels), dim=1)
         segmentation_labels = one_hot(torch.argmax(torch.abs(segmentation_labels), dim=1, keepdim=True),
                               num_classes=segmentation_labels.shape[1]).float().numpy()
+
         if evaluation_type == "per_slice":
             for sl in range(segmentation_labels.shape[0]):
                 scores.push(segmentation_labels[sl,1:][np.newaxis], predictions[sl,1:][np.newaxis])
         elif evaluation_type == "per_volume":
             scores.push(segmentation_labels[:,1:], predictions[:,1:])
 
-
-        print(f"{str(target).rsplit('/', maxsplit=1)[-1]}: {scores.means()}")
-        new_row = {"patiend_id":str(target).rsplit('/', maxsplit=1)[-1].replace('.h5',"")}
+        new_row = {"id":str(target).rsplit('/', maxsplit=1)[-1].replace('.h5',"")}
         new_row.update(scores.means())
         dataframe= dataframe._append(new_row,ignore_index=True)
     if args.output_dir is not None:
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        with pd.ExcelWriter(output_dir / "results_segmentation.xlsx") as writer:
-            dataframe.to_excel(writer,sheet_name="Segmentation")
+    else:
+        output_dir = Path(args.predictions_dir)
+    with pd.ExcelWriter(output_dir / "results_segmentation.xlsx") as writer:
+        dataframe.to_excel(writer,sheet_name="Segmentation")
 
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
     parser.add_argument("targets_dir", type=str)
-    #parser.add_argument("segmentations_dir", type=str)
     parser.add_argument("predictions_dir", type=str)
     parser.add_argument("--output_dir", type=str)
     parser.add_argument("--dataset_format", choices=["skm-tea", "brats", "private"], default="private")

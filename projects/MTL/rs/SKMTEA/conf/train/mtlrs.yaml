@@ -5,9 +5,9 @@ mode: train
 model:
   model_name: MTLRS
   joint_reconstruction_segmentation_module_cascades: 5
-  task_adaption_type: no_multi_task_learning
+  task_adaption_type: multi_task_learning_logit
   cascade_nr_hidden_states: 1
-  deep_cascade: false  #Combine each MTL parameter to the next layers
+  deep_cascade: true  #Combine each MTL parameter to the next layers
   softparameter_tuning: -2
   use_reconstruction_module: true
   reconstruction_module_recurrent_layer: IndRNN
@@ -74,7 +74,7 @@ model:
   segmentation_loss:
     cross_entropy: 0.5
     dice: 0.5
-  attention_module: false #[TaskAttentionModule,PropagationModule,SemanticGuidanceModule,false]
+  attention_module: SemanticGuidanceModule #[TaskAttentionModule,PropagationModule,SemanticGuidanceModule,false]
   cross_entropy_loss_num_samples: 50
   cross_entropy_ignore_index: -100
   cross_entropy_reduction: none
@@ -295,11 +295,11 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/MTLRS_SENSE_NO_MTL_def
+  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/MTLRS_SKMTEA_LOGIT_SUM_TAM_2
   ema:
     enable: false
   create_tensorboard_logger: false
-  create_wandb_logger: true
+  create_wandb_logger: false
   wandb_logger_kwargs:
-    project: MTLRS_SKMTEA_NO_MTL_def
-  files_to_copy: [ ]
+    project: MTLRS_SKMTEA_LOGIT_TAM_DEF_2
+  files_to_copy: []

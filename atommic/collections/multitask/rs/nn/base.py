@@ -91,6 +91,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         self.save_logliklihood_gradient = cfg_dict.get('save_logliklihood_gradient', False)
         self.save_zero_filled = cfg_dict.get('save_zero_filled',False)
         self.save_intermediate_predictions = cfg_dict.get('save_intermediate_predictions',False)
+        self.save_intermediate_segmentations = cfg_dict.get('save_intermediate_segmentations', False)
         self.use_reconstruction_module = cfg_dict.get("use_reconstruction_module",True)
         if self.use_reconstruction_module:
             # Initialize loss related parameters.
@@ -935,27 +936,52 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             if self.use_reconstruction_module:
                 output_predictions_reconstruction = output_predictions_reconstruction.numpy()
                 output_target_reconstruction = output_target_reconstruction.numpy()
-                max_value = max(np.max(output_target_reconstruction)-np.min(output_target_reconstruction), np.max(output_predictions_reconstruction)-np.min(output_predictions_reconstruction))
-                self.mse_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
-                    mse(output_target_reconstruction, output_predictions_reconstruction,maxval = max_value)
-                ).view(1)
-                self.nmse_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
-                    nmse(output_target_reconstruction, output_predictions_reconstruction,maxval = max_value)
-                ).view(1)
-                self.ssim_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
-                    ssim(output_target_reconstruction, output_predictions_reconstruction, maxval=max_value)
-                ).view(1)
-                self.psnr_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
-                    psnr(output_target_reconstruction, output_predictions_reconstruction, maxval=max_value)
-                ).view(1)
-                max_value = max(np.max(output_target_reconstruction),
-                                np.max(output_predictions_reconstruction))
-                self.haarpsi_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
-                    haarpsi3d(output_target_reconstruction, output_predictions_reconstruction, maxval=max_value)
-                ).view(1)
-                self.vsi_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
-                    vsi3d(output_target_reconstruction, output_predictions_reconstruction, maxval=max_value)
-                ).view(1)
+                if self.num_echoes ==1:
+                    max_value = max(np.max(output_target_reconstruction)-np.min(output_target_reconstruction), np.max(output_predictions_reconstruction)-np.min(output_predictions_reconstruction))
+                    self.mse_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
+                        mse(output_target_reconstruction, output_predictions_reconstruction,maxval = max_value)
+                    ).view(1)
+                    self.nmse_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
+                        nmse(output_target_reconstruction, output_predictions_reconstruction,maxval = max_value)
+                    ).view(1)
+                    self.ssim_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
+                        ssim(output_target_reconstruction, output_predictions_reconstruction, maxval=max_value)
+                    ).view(1)
+                    self.psnr_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
+                        psnr(output_target_reconstruction, output_predictions_reconstruction, maxval=max_value)
+                    ).view(1)
+                    max_value = max(np.max(output_target_reconstruction),
+                                    np.max(output_predictions_reconstruction))
+                    self.haarpsi_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
+                        haarpsi3d(output_target_reconstruction, output_predictions_reconstruction, maxval=max_value)
+                    ).view(1)
+                    self.vsi_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(
+                        vsi3d(output_target_reconstruction, output_predictions_reconstruction, maxval=max_value)
+                    ).view(1)
+                else:
+                    max_value = max(np.max(output_target_reconstruction) - np.min(output_target_reconstruction),
+                                    np.max(output_predictions_reconstruction) - np.min(output_predictions_reconstruction))
+                    self.mse_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.mean(torch.tensor([
+                        mse(output_target_reconstruction[i], output_predictions_reconstruction[i],maxval=max_value)
+                        for i in range(output_target_reconstruction.shape[0])])).view(1)
+                    self.nmse_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.mean(torch.tensor([
+                        nmse(output_target_reconstruction[i], output_predictions_reconstruction[i], maxval=max_value)
+                        for i in range(output_target_reconstruction.shape[0])])).view(1)
+                    self.ssim_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.mean(torch.tensor([
+                        ssim(output_target_reconstruction[i], output_predictions_reconstruction[i], maxval=max_value)
+                        for i in range(output_target_reconstruction.shape[0])])).view(1)
+                    self.psnr_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.mean(torch.tensor([
+                        psnr(output_target_reconstruction[i], output_predictions_reconstruction[i], maxval=max_value)
+                        for i in range(output_target_reconstruction.shape[0])])).view(1)
+                    max_value = max(np.max(output_target_reconstruction),
+                                    np.max(output_predictions_reconstruction))
+                    self.haarpsi_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.mean(torch.tensor([
+                        haarpsi3d(output_target_reconstruction[i], output_predictions_reconstruction[i], maxval=max_value)
+                        for i in range(output_target_reconstruction.shape[0])])).view(1)
+                    self.vsi_vals_reconstruction[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.mean(torch.tensor([
+                        vsi3d(output_target_reconstruction[i], output_predictions_reconstruction[i], maxval=max_value)
+                        for i in range(output_target_reconstruction.shape[0])])).view(1)
+
             output_target_segmentation = output_target_segmentation.unsqueeze(0)
             output_predictions_segmentation = output_predictions_segmentation.unsqueeze(0)
             if self.cross_entropy_metric is not None:
@@ -1691,9 +1717,11 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         )
 
 
-        if isinstance(predictions_segmentation, list):
+        if isinstance(predictions_segmentation, list) and not self.save_intermediate_segmentations:
             while isinstance(predictions_segmentation, list):
                 predictions_segmentation = predictions_segmentation[-1]
+        else:
+            predictions_segmentation = torch.cat([i.unsqueeze(1) for i in predictions_segmentation],dim=1)
 
         # if isinstance(predictions_reconstruction, list):
         #     while isinstance(predictions_reconstruction, list):
@@ -1710,6 +1738,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                                 for cascade in cascade_rs:
                                     if len(cascade) == self.reconstruction_module_time_steps:
                                         time_steps = []
+                                        time_steps_norm = []
                                         for time_step in cascade:
                                             if torch.is_complex(time_step) and time_step.shape[-1] != 2:
                                                 time_step = torch.view_as_real(time_step)
@@ -1724,9 +1753,9 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                                                 .cpu()
                                                 .numpy()
                                             )
-                                            time_step = np.abs(time_step/np.max(np.abs(time_step)))
                                             time_steps.append(time_step)
-                                        var_cascade = np.var(np.array(time_steps), axis=0)
+                                            time_steps_norm.append(np.abs(time_step)/np.max(np.abs(time_step)))
+                                        var_cascade = np.std(np.array(time_steps_norm), axis=0)
                                         cascades_var_loglike.append(var_cascade)
                                         cascades_inter_loglike.append(time_steps[-1])
                         log_like = log_like[-1]
@@ -1742,6 +1771,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                                 for cascade in cascade_rs:
                                     if len(cascade) == self.reconstruction_module_time_steps:
                                         time_steps = []
+                                        time_steps_norm = []
                                         for time_step in cascade:
                                             if torch.is_complex(time_step) and time_step.shape[-1] != 2:
                                                 time_step = torch.view_as_real(time_step)
@@ -1757,7 +1787,8 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                                                 .numpy()
                                             )
                                             time_steps.append(time_step)
-                                        var_cascade = np.std(np.array(time_steps), axis=0)
+                                            time_steps_norm.append(np.abs(time_step) / np.max(np.abs(time_step)))
+                                        var_cascade = np.std(np.array(time_steps_norm), axis=0)
                                         cascades_var_pred.append(var_cascade)
                                         cascades_inter_pred.append(time_steps[-1])
                         predictions_reconstruction = predictions_reconstruction[-1]
@@ -1768,12 +1799,8 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         if self.consecutive_slices > 1:
             # reshape the target and prediction to [batch_size, self.consecutive_slices, nr_classes, n_x, n_y]
             batch_size = predictions_segmentation.shape[0] // self.consecutive_slices
-            predictions_segmentation = predictions_segmentation.reshape(
-                batch_size, self.consecutive_slices, predictions_segmentation.shape[-3],
-                predictions_segmentation.shape[-2], predictions_segmentation.shape[-1])
-            target_segmentation = target_segmentation.reshape(
-                batch_size, self.consecutive_slices, target_segmentation.shape[-3],
-                target_segmentation.shape[-2], target_segmentation.shape[-1])
+            predictions_segmentation = predictions_segmentation.reshape(batch_size, self.consecutive_slices, predictions_segmentation.shape[1:])
+            target_segmentation = target_segmentation.reshape(batch_size, self.consecutive_slices, predictions_segmentation.shape[1:])
             target_segmentation = target_segmentation[:, self.consecutive_slices // 2]
             target_reconstruction = target_reconstruction[:, self.consecutive_slices // 2]
             predictions_segmentation = predictions_segmentation[:, self.consecutive_slices // 2]
@@ -1827,12 +1854,9 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
 
         self.test_step_outputs.append([str(fname[0]), slice_idx, predictions])  # type: ignore
         self.test_step_targets.append([str(fname[0]), slice_idx, targets])
-        if self.save_logliklihood_gradient:
-            self.test_step_loglike.append([str(fname[0]), slice_idx, cascades_loglike])
-        if self.save_zero_filled:
-            self.test_step_innit.append([str(fname[0]), slice_idx, initial_prediction_reconstruction])
-        if self.save_intermediate_predictions:
-            self.test_step_inter_pred.append([str(fname[0]), slice_idx, cascades_pred])
+        self.test_step_loglike.append([str(fname[0]), slice_idx, cascades_loglike])
+        self.test_step_innit.append([str(fname[0]), slice_idx, initial_prediction_reconstruction])
+        self.test_step_inter_pred.append([str(fname[0]), slice_idx, cascades_pred])
 
     def on_validation_epoch_end(self):  # noqa: MC0001
         """Called at the end of validation epoch to aggregate outputs.
