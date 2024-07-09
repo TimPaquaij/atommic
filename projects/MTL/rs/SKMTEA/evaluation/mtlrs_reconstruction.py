@@ -63,41 +63,21 @@ def main(args):
                 kspace_fft_6 = torch.fft.fftshift(kspace_fft_5, dim=(0, 1))
                 image_fft = kspace_fft_6 * torch.conj(torch.as_tensor(maps[i, :, :, :, :]))
                 target_scan[i,...] = torch.sum(image_fft, dim=-1, keepdim=False)[:,:,0].numpy() ##Select which echo to compare
-        if evaluation_type == "per_slice":
-            for sl in range(target_scan.shape[0]):
-                if args.normalisation_method == 'complex_abs':
-                    target_scan[sl] = target_scan[sl]**2
-                    reconstruction[sl] = reconstruction[sl] **2
-                if args.normalisation_method == 'complex_abs_sqrt':
-                    target_scan[sl] = np.sqrt(target_scan[sl] ** 2)
-                    reconstruction[sl] = np.sqrt(reconstruction[sl] ** 2)
-                if  args.normalisation_method == 'stacked':
-                    target_scan[sl] = target_scan[sl]
-                    reconstruction[sl] = reconstruction[sl]
 
-                target_scan[sl] = target_scan[sl] / np.max(np.abs(target_scan[sl]))
-                reconstruction[sl] = reconstruction[sl] / np.max(np.abs(reconstruction[sl]))
-        else:
-            target_scan = np.abs(target_scan) / np.max(np.abs(target_scan))
-            reconstruction = np.abs(reconstruction) / np.max(np.abs(reconstruction))
-
-
-        reconstruction = np.abs(reconstruction).real.astype(np.float32)
-        target_scan = np.abs(target_scan).real.astype(np.float32)
-        maxvalue = max(np.max(target_scan), np.max(reconstruction))
+        target_scan = np.abs(target_scan)
+        reconstruction = np.abs(reconstruction)
 
         if target_scan.ndim ==4 and reconstruction.ndim ==4:
             for i in range(target_scan.shape[1]):
                 scores = ReconstructionMetrics(METRIC_FUNCS)
                 if evaluation_type == "per_slice":
-                    print(target_scan.shape, reconstruction.shape)
                     for sl in range(target_scan.shape[0]):
                         reconstruction_slice = reconstruction[sl,i]
                         target_slice = target_scan[sl,i]
-                        scores.push(target_slice, reconstruction_slice, maxval=maxvalue)
+                        scores.push(target_slice, reconstruction_slice)
 
                 elif evaluation_type == "per_volume":
-                    scores.push(target_scan[:,i], reconstruction[:,i], maxval=maxvalue)
+                    scores.push(target_scan[:,i], reconstruction[:,i])
 
                 model = args.reconstructions_dir.split("/")
                 model = model[-4] if model[-4] != "default" else model[-5]
@@ -116,15 +96,14 @@ def main(args):
                         for sl in range(reconstruction.shape[0]):
                             reconstruction_slice = reconstruction[sl,c,i]
                             target_slice = target_scan[sl,i]
-                            scores.push(target_slice, reconstruction_slice, maxval=maxvalue)
+                            scores.push(target_slice, reconstruction_slice)
 
                     elif evaluation_type == "per_volume":
                         print(target_scan.shape,reconstruction.shape)
-                        scores.push(target_scan[:,i], reconstruction[:,c,i], maxval=maxvalue)
+                        scores.push(target_scan[:,i], reconstruction[:,c,i])
 
                     model = args.reconstructions_dir.split("/")
                     model = model[-4] if model[-4] != "default" else model[-5]
-                    print(f"{model+'_'+ str(target).rsplit('/', maxsplit=1)[-1]} Echo{i+1}: {repr(scores)}")
                     new_row = {"id": str(target).rsplit('/', maxsplit=1)[-1].replace('.h5', ""),"Cascade":int(c+1)}
                     new_row.update(scores.means())
                     if i ==0:
@@ -138,10 +117,10 @@ def main(args):
                 for sl in range(target_scan.shape[0]):
                     reconstruction_slice = reconstruction[sl]
                     target_slice = target_scan[sl]
-                    scores.push(target_slice, reconstruction_slice, maxval=maxvalue)
+                    scores.push(target_slice, reconstruction_slice)
 
             elif evaluation_type == "per_volume":
-                scores.push(target_scan, reconstruction, maxval=maxvalue)
+                scores.push(target_scan, reconstruction)
 
             # model = args.reconstructions_dir.split("/")
             # model = model[-4] if model[-4] != "default" else model[-5]
@@ -154,7 +133,7 @@ def main(args):
         output_dir.mkdir(parents=True, exist_ok=True)
     else:
         output_dir = Path(args.reconstructions_dir)
-    with pd.ExcelWriter(output_dir / "results_reconstruction.xlsx") as writer:
+    with pd.ExcelWriter(output_dir / "results_reconstruction_inter.xlsx") as writer:
         dataframe_echo_1.to_excel(writer,sheet_name="Echo 1" )
         dataframe_echo_2.to_excel(writer, sheet_name="Echo 2")
 
@@ -167,7 +146,7 @@ if __name__ == "__main__":
     parser.add_argument("reconstructions_dir", type=str)
     parser.add_argument("--normalisation_method", type=str, default='stacked')
     parser.add_argument("--target", type=bool, default=False)
-    parser.add_argument("--inter", type=bool, default=False)
+    parser.add_argument("--inter", type=bool, default=True)
     parser.add_argument("--output_dir", type=str)
     parser.add_argument("--evaluation_type", choices=["per_slice", "per_volume"], default="per_volume")
     parser.add_argument("--fill_target_path", action="store_true")

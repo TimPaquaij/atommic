@@ -172,7 +172,7 @@ def haarpsi3d(gt: np.ndarray, pred: np.ndarray,maxval: np.ndarray = None) -> flo
     c = 30.0
     alpha = 4.2
 
-    maxval = np.max(gt) if maxval is None else maxval
+    maxval = max(np.max(gt) ,np.max(pred)) if maxval is None else maxval
     _haarpsi = functools.partial(haarpsi, scales=scales, subsample=subsample, c=c, alpha=alpha,
                                  data_range=maxval, reduction=reduction)
     __haarpsi = _haarpsi(torch.from_numpy(gt),
@@ -201,7 +201,7 @@ def vsi3d(gt: np.ndarray, pred: np.ndarray,maxval: np.ndarray = None) -> float:
     sigma_d: float = 145.
     sigma_c: float = 0.001
 
-    maxval = np.max(gt) if maxval is None else maxval
+    maxval = max(np.max(gt) ,np.max(pred)) if maxval is None else maxval
     _vsi = functools.partial(
         vsi, c1=c1, c2=c2, c3=c3, alpha=alpha, beta=beta, omega_0=omega_0,
         sigma_f=sigma_f, sigma_d=sigma_d, sigma_c=sigma_c, data_range=maxval,

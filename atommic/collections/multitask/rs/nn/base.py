@@ -749,9 +749,8 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                                                     .cpu()
                                                     .numpy()
                                                 )
-                                                # time_step = np.abs(time_step/np.max(np.abs(time_step)))
                                                 time_steps.append(time_step)
-                                            var_cascade = np.mean(np.std(np.array(time_steps), axis=0))
+                                            var_cascade = np.mean(np.std(np.abs(np.array(time_steps)), axis=0))
                                             cascades_var.append(var_cascade)
                             log_like = log_like[-1]
                         else:
@@ -1738,7 +1737,6 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                                 for cascade in cascade_rs:
                                     if len(cascade) == self.reconstruction_module_time_steps:
                                         time_steps = []
-                                        time_steps_norm = []
                                         for time_step in cascade:
                                             if torch.is_complex(time_step) and time_step.shape[-1] != 2:
                                                 time_step = torch.view_as_real(time_step)
@@ -1753,9 +1751,9 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                                                 .cpu()
                                                 .numpy()
                                             )
+
                                             time_steps.append(time_step)
-                                            time_steps_norm.append(np.abs(time_step)/np.max(np.abs(time_step)))
-                                        var_cascade = np.std(np.array(time_steps_norm), axis=0)
+                                        var_cascade = np.std(np.abs(np.array(time_steps)), axis=0)
                                         cascades_var_loglike.append(var_cascade)
                                         cascades_inter_loglike.append(time_steps[-1])
                         log_like = log_like[-1]
@@ -1771,7 +1769,6 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                                 for cascade in cascade_rs:
                                     if len(cascade) == self.reconstruction_module_time_steps:
                                         time_steps = []
-                                        time_steps_norm = []
                                         for time_step in cascade:
                                             if torch.is_complex(time_step) and time_step.shape[-1] != 2:
                                                 time_step = torch.view_as_real(time_step)
@@ -1787,8 +1784,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                                                 .numpy()
                                             )
                                             time_steps.append(time_step)
-                                            time_steps_norm.append(np.abs(time_step) / np.max(np.abs(time_step)))
-                                        var_cascade = np.std(np.array(time_steps_norm), axis=0)
+                                        var_cascade = np.std(np.abs(np.array(time_steps)), axis=0)
                                         cascades_var_pred.append(var_cascade)
                                         cascades_inter_pred.append(time_steps[-1])
                         predictions_reconstruction = predictions_reconstruction[-1]

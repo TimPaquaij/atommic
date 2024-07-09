@@ -208,7 +208,7 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                 hidden_states = [
                     torch.cat(
                         [torch.abs(init_reconstruction_pred.unsqueeze(self.coil_dim)) * pred_segmentation[...,1:,:,:]]
-                        * (f // self.segmentation_module_output_channels-1),
+                        * (f // (self.segmentation_module_output_channels-1)),
                         dim=self.coil_dim,
                     )
                     for f in self.reconstruction_module_recurrent_filters
@@ -345,7 +345,7 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                 #p = torch.abs(p / torch.max(torch.abs(p)))
 
             if "ssim" in str(loss_func).lower():
-                p = torch.abs(p / torch.max(torch.abs(p)))
+                p = torch.abs(p / torch.max(torch.abs(p))) #TODO Why normalizing change to only mag?
                 t = torch.abs(t / torch.max(torch.abs(t)))
                 loss = loss_func(t,p,data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(dim=0).to(t))
                 return loss

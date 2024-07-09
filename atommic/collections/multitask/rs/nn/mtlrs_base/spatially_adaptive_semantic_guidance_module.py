@@ -37,5 +37,4 @@ class SPADE(nn.Module):
         hidden_layers_features = self.instance(hidden_layers_features)
         segmentation_prob = self.act(self.conv_1(segmentation_prob))
         hidden_layers_features_refined = torch.mul(self.conv_2(segmentation_prob),hidden_layers_features) + self.conv_2(segmentation_prob)
-
         return hidden_layers_features_refined

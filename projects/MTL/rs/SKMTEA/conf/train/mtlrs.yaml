@@ -5,7 +5,7 @@ mode: train
 model:
   model_name: MTLRS
   joint_reconstruction_segmentation_module_cascades: 5
-  task_adaption_type: multi_task_learning_logit
+  task_adaption_type: multi_task_learning_softmax
   cascade_nr_hidden_states: 1
   deep_cascade: true  #Combine each MTL parameter to the next layers
   softparameter_tuning: -2
@@ -150,15 +150,13 @@ model:
 
 
   train_ds:
-    data_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_train.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_train.json #/data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_train.json   #/data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_train.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_train.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_train.json
+    data_path: /data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_train.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_train.json #/data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_train.json   #/data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_train.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_train.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_train.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
     initial_predictions_path: None
     dataset_format:
     - SKM-TEA-echo1-echo2
-    - custom_masking
-    - lateral
     sample_rate: 1
     volume_sample_rate: None
     use_dataset_cache: false
@@ -172,7 +170,7 @@ model:
     coil_combination_method: SENSE
     dimensionality: 2
     mask_args:
-      type: gaussian2d  # the mask will be loaded from the dataset, but we need to specify the type here
+      type: poisson2d  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
         - 8  # 4, 6, 8, 10, 12, 16
       shift_mask: false
@@ -196,27 +194,25 @@ model:
       - -1
     coil_dim: 2
     use_seed: false
-    segmentations_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/ #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track/ #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track/ # #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
+    segmentations_path: /data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/ #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track/ #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track/ # #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
     construct_knee_label: false
     include_background_label: true
     segmentation_classes: 5
     complex_data: true
     batch_size: 1
     shuffle: true
-    num_workers: 8
+    num_workers: 4
     pin_memory: false
     drop_last: false
 
   validation_ds:
-    data_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_val.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_val.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json
+    data_path: /data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_val.json #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA_small/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json #/data/projects/utwente/recon/SKM-TEA/v1-release/json/files_recon_calib-24_val.json  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/json/files_recon_calib-24_val.json
     coil_sensitivity_maps_path: None
     mask_path: None
     noise_path: None
     initial_predictions_path: None
     dataset_format:
     - SKM-TEA-echo1-echo2
-    - custom_masking
-    - lateral
     sample_rate: 1
     volume_sample_rate: None
     use_dataset_cache: false
@@ -225,7 +221,7 @@ model:
     consecutive_slices: 1
     data_saved_per_slice: false
     complex_target: true
-    log_images_rate: 0.003
+    log_images_rate: 0.0003
     log_temp_rate: 1  #Select amount of full validation patient for temperature calibration.
     apply_prewhitening: false
     apply_gcc: false
@@ -233,7 +229,7 @@ model:
     coil_combination_method: SENSE
     dimensionality: 2
     mask_args:
-      type: gaussian2d  # the mask will be loaded from the dataset, but we need to specify the type here
+      type: poisson2d  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
         - 8 # 4, 6, 8, 10, 12, 16
       shift_mask: false
@@ -257,14 +253,14 @@ model:
       - -1
     coil_dim: 2
     use_seed: true
-    segmentations_path: /data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/ #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
+    segmentations_path: /data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/ #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track/ #/data/projects/utwente/recon/SKM-TEA_small/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/utwente/recon/SKM-TEA/v1-release/segmentation_masks/raw-data-track/  #/data/projects/recon/data/public/multitask/skm-tea/v1-release/segmentation_masks/raw-data-track
     construct_knee_label: false
     include_background_label: true
     segmentation_classes: 5
     complex_data: true
     batch_size: 1
     shuffle: false
-    num_workers: 8
+    num_workers: 4
     pin_memory: false
     drop_last: false
 
@@ -295,11 +291,11 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/MTLRS_SKMTEA_LOGIT_SUM_TAM_2
+  exp_dir: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA/MTLRS_SENSE_SASG_DEF_ORG
   ema:
     enable: false
   create_tensorboard_logger: false
-  create_wandb_logger: false
+  create_wandb_logger: true
   wandb_logger_kwargs:
-    project: MTLRS_SKMTEA_LOGIT_TAM_DEF_2
+    project: MTLRS_SENSE_SASG_DEF_ORG
   files_to_copy: []

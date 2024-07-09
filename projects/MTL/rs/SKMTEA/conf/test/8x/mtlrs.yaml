@@ -1,11 +1,11 @@
 pretrained: true
-checkpoint:  /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/MTLRS_SKMTEA_SOFTMAX_SASG_def/default/2024-05-28_20-53-08/checkpoints/default--val_loss=0.1610-epoch=10-last.ckpt
+checkpoint: /scratch/tmpaquaij/Results/atommic/mltrs/trained_models/SKMTEA_small/MTLRS_SENSE_NO_MTL_def/default/2024-06-09_19-16-53/checkpoints/default--val_loss=0.1636-epoch=10-last.ckpt
 mode: test
 
 model:
   model_name: MTLRS
   joint_reconstruction_segmentation_module_cascades: 5
-  task_adaption_type: multi_task_learning_softmax
+  task_adaption_type: no_task_learning_softmax
   cascade_nr_hidden_states: 1
   deep_cascade: true  #Combine each MTL parameter to the next layers
   softparameter_tuning: -2
@@ -74,7 +74,7 @@ model:
   segmentation_loss:
     cross_entropy: 0.5
     dice: 0.5
-  attention_module: SemanticGuidanceModule #[TaskAttentionModule,PropagationModule,SemanticGuidanceModule,false]
+  attention_module: false #[TaskAttentionModule,PropagationModule,SemanticGuidanceModule,false]
   cross_entropy_loss_num_samples: 50
   cross_entropy_ignore_index: -100
   cross_entropy_reduction: none
@@ -237,9 +237,9 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /data/projects/utwente/recon/SKM-TEA/v1-release/predictions/MTLRS_SENSE/predictions_8x/MTLRS_SKMTEA_SOFTMAX_SASG_def/2024-05-28_20-53-08
+  exp_dir: /data/projects/utwente/recon/SKM-TEA/v1-release/predictions/MTLRS_SENSE/predictions_8x/MTLRS_SENSE_NO_MTL_def/2024-06-09_19-16-53
   create_tensorboard_logger: false
   create_wandb_logger: true
   wandb_logger_kwargs:
-    project: MTLRS_SKMTEA_SOFTMAX_SASG_def
+    project: MTLRS_SENSE_NO_MTL_def
   files_to_copy: []
