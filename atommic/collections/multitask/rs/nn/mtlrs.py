@@ -67,8 +67,7 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
             "depth": cfg_dict.get("reconstruction_module_depth"),
             "conv_dim": conv_dim,
             "pretrained": cfg_dict.get("pretrained"),
-            "accumulate_predictions": self.reconstruction_module_accumulate_predictions,
-        }
+            "accumulate_predictions": self.reconstruction_module_accumulate_predictions,}
 
         self.segmentation_module_output_channels = cfg_dict.get("segmentation_module_output_channels", 2)
         segmentation_module_params = {
