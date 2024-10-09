@@ -139,7 +139,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             self.normalization_type = cfg_dict.get("normalization_type", "max")
 
             # Refers to cascading or iterative reconstruction methods.
-            self.accumulate_predictions = cfg_dict.get("accumulate_predictions", False)
+            self.reconstruction_module_accumulate_predictions = cfg_dict.get("reconstruction_module_accumulate_predictions", False)
 
             # Refers to the type of the complex-valued data. It can be either "stacked" or "complex_abs" or
             # "complex_sqrt_abs".
