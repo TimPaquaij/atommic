@@ -33,7 +33,7 @@ from tests.collections.reconstruction.mri_data.conftest import create_input
                 "reconstruction_module_depth": 2,
                 "reconstruction_module_conv_dim": 2,
                 "reconstruction_module_time_steps": 8,
-                "reconstruction_module_num_cascades": 5,
+                "reconstruction_module_num_cascades": 1,
                 "reconstruction_module_dimensionality": 2,
                 "reconstruction_module_accumulate_predictions": True,
                 "reconstruction_module_no_dc": True,
@@ -103,7 +103,7 @@ from tests.collections.reconstruction.mri_data.conftest import create_input
                 "reconstruction_module_depth": 2,
                 "reconstruction_module_conv_dim": 2,
                 "reconstruction_module_time_steps": 8,
-                "reconstruction_module_num_cascades": 5,
+                "reconstruction_module_num_cascades": 1,
                 "reconstruction_module_dimensionality": 2,
                 "reconstruction_module_accumulate_predictions": True,
                 "reconstruction_module_no_dc": True,
@@ -173,7 +173,7 @@ from tests.collections.reconstruction.mri_data.conftest import create_input
                 "reconstruction_module_depth": 2,
                 "reconstruction_module_conv_dim": 2,
                 "reconstruction_module_time_steps": 8,
-                "reconstruction_module_num_cascades": 5,
+                "reconstruction_module_num_cascades": 1,
                 "reconstruction_module_dimensionality": 2,
                 "reconstruction_module_accumulate_predictions": True,
                 "reconstruction_module_no_dc": True,
@@ -285,19 +285,18 @@ def test_mtlmrirs(shape, cfg, center_fractions, accelerations, dimensionality, s
         )
 
     if cfg.get("reconstruction_module_accumulate_predictions"):
-        print(len(pred_reconstruction))
         if len(pred_reconstruction) !=cfg.get("joint_reconstruction_segmentation_module_cascades"):
             raise AssertionError("Number of predictions are not equal to the number of cascades")
         if cfg.get("reconstruction_module_keep_prediction"):
-            if len(pred_reconstruction[0]) !=cfg.get("reconstruction_module_time_steps"):
-                raise AssertionError(f"Number of intermediate predictions are not equal to the number of time steps")
-
-        
-    
+            if len(pred_reconstruction[0]) !=cfg.get("reconstruction_module_num_cascades"):
+                raise AssertionError("Number of predictions are not equal to the number of cascades")
+        if cfg.get("reconstruction_module_keep_prediction"):
+            if len(pred_reconstruction[0][0]) !=cfg.get("reconstruction_module_time_steps"):
+                raise AssertionError("Number of predictions are not equal to the number of intermediate predictions")
             
     if cfg.get("segmentation_module_accumulate_predictions"):
         if len(pred_segmentation) !=cfg.get("joint_reconstruction_segmentation_module_cascades"):
-            raise AssertionError("Number of segmentations are not equal to the number of cascades")
+            raise AssertionError(f"Number of segmentations are not equal to the number of cascades")
 
     while isinstance(pred_reconstruction, list):
         pred_reconstruction = pred_reconstruction[-1]

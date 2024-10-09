@@ -196,7 +196,7 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
 
             init_reconstruction_pred = torch.view_as_real(init_reconstruction_pred)
 
-        return pred_reconstructions, pred_segmentation
+        return pred_reconstructions, pred_segmentations
 
     def process_reconstruction_loss(  # noqa: MC0001
         self,
