@@ -1747,13 +1747,16 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         complex_data = cfg.get("complex_data", True)
 
         dataset_format = cfg.get("dataset_format", None)
-        if dataset_format.lower() in (
+        if any(s.lower() in (
             "skm-tea-echo1",
             "skm-tea-echo2",
             "skm-tea-echo1+echo2",
             "skm-tea-echo1+echo2-mc",
-        ):
-            dataloader = mrirs_loader.SKMTEARSMRIDataset
+            "skm-tea-echo1-echo2") for s in dataset_format):
+            if any(a.lower() == "lateral" for a in dataset_format):
+                dataloader = mrirs_loader.SKMTEARSMRIDatasetlateral
+            else:
+                dataloader = mrirs_loader.SKMTEARSMRIDataset
         else:
             dataloader = mrirs_loader.RSMRIDataset
 
