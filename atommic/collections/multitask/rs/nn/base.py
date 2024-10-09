@@ -139,18 +139,18 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             self.normalization_type = cfg_dict.get("normalization_type", "max")
 
             # Refers to cascading or iterative reconstruction methods.
-            self.accumulate_predictions = cfg_dict.get("accumulate_predictions", False)
+            self.reconstruction_module_accumulate_predictions = cfg_dict.get("reconstruction_module_accumulate_predictions", False)
 
             # Refers to the type of the complex-valued data. It can be either "stacked" or "complex_abs" or
             # "complex_sqrt_abs".
             self.complex_valued_type = cfg_dict.get("complex_valued_type", "stacked")
 
         # Set normalization parameters for logging
+        self.segmentation_module_accumulate_predictions = cfg_dict.get("segmentation_module_accumulate_predictions", False)
         self.unnormalize_loss_inputs = cfg_dict.get("unnormalize_loss_inputs", False)
         self.unnormalize_log_outputs = cfg_dict.get("unnormalize_log_outputs", False)
         self.normalization_type = cfg_dict.get("normalization_type", "max")
         self.normalize_segmentation_output = cfg_dict.get("normalize_segmentation_output", True)
-
         # Whether to log multiple modalities, e.g. T1, T2, and FLAIR will be stacked and logged.
         self.log_multiple_modalities = cfg_dict.get("log_multiple_modalities", False)
 
@@ -530,7 +530,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
 
         return compute_reconstruction_loss(target, prediction, sensitivity_maps)
 
-    def process_segmentation_loss(self, target: torch.Tensor, prediction: torch.Tensor, attrs: Dict) -> Dict:
+    def process_segmentation_loss(self, target: torch.Tensor, prediction: torch.Tensor, attrs: Dict,loss_func:torch.nn.Module) -> Dict:
         """Processes the segmentation loss.
 
         Parameters
@@ -549,16 +549,22 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             are used, the dictionary will contain the keys ``cross_entropy_loss``, ``dice_loss``, and
             (combined) ``segmentation_loss``.
         """
-        if self.unnormalize_loss_inputs:
-            target, prediction, _ = self.__unnormalize_for_loss_or_log__(target, prediction, None, attrs, attrs["r"])
-        losses = {}
-        for name, loss_func in self.segmentation_losses.items():
+        if self.segmentation_module_accumulate_predictions:
+            rs_cascades_weights = torch.logspace(-1, 0, steps=len(prediction)).to(
+                target.device)
+            rs_cascades_loss = []
+            for pred in prediction:
+                loss = loss_func(target, pred)
+                if isinstance(loss, tuple):
+                    loss = loss[1][0]
+                rs_cascades_loss.append(loss)
+            loss = sum(x * w for x, w in zip(rs_cascades_loss, rs_cascades_weights)) / sum(rs_cascades_weights)
+        else:
+            prediction = prediction[-1]
             loss = loss_func(target, prediction)
             if isinstance(loss, tuple):
-                # In case of the dice loss, the loss is a tuple of the form (dice, dice loss)
-                loss = loss[1]
-            losses[name] = loss
-        return self.total_segmentation_loss(**losses) * self.total_segmentation_loss_weight
+                loss = loss[1][0]
+        return loss
 
     def __compute_loss__(
         self,
@@ -601,11 +607,18 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             If self.accumulate_loss is True, returns an accumulative result of all intermediate losses.
             Otherwise, returns the loss of the last intermediate loss.
         """
-        if self.consecutive_slices > 1:
-            batch_size, slices = target_segmentation.shape[:2]
-            target_segmentation = target_segmentation.reshape(batch_size * slices, *target_segmentation.shape[2:])
 
-        segmentation_loss = self.process_segmentation_loss(target_segmentation, predictions_segmentation, attrs)
+        losses = {}
+        for name, loss_func in self.segmentation_losses.items():
+            losses[name] = (
+                    self.process_segmentation_loss(
+                        target_segmentation,
+                        predictions_segmentation,
+                        attrs,
+                        loss_func=loss_func,
+                    )
+            )
+        segmentation_loss = self.total_segmentation_loss(**losses)
 
         if self.use_reconstruction_module:
             if predictions_reconstruction_n2r is not None and not attrs["n2r_supervised"]:
@@ -638,12 +651,9 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         loss = (
             self.total_segmentation_loss_weight * segmentation_loss
             + self.total_reconstruction_loss_weight * reconstruction_loss
-        )
+        )  
 
-        if self.accumulate_predictions:
-            loss = sum(list(loss))
-
-        return loss
+        return loss,reconstruction_loss,segmentation_loss
 
     def __compute_and_log_metrics_and_outputs__(  # noqa: MC0001
         self,
