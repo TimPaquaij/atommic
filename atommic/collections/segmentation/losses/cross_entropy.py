@@ -3,7 +3,8 @@ __author__ = "Dimitris Karkalousos"
 
 import torch
 from torch import nn
-
+import warnings
+from atommic.collections.segmentation.losses.utils import one_hot
 
 class CrossEntropyLoss(nn.Module):
     """Wrapper around PyTorch's CrossEntropyLoss to support 2D and 3D inputs."""
@@ -15,6 +16,8 @@ class CrossEntropyLoss(nn.Module):
         reduction: str = "none",
         label_smoothing: float = 0.0,
         weight: torch.Tensor = None,
+        to_onehot_y: bool = False,
+        include_background: bool = True,
     ):
         """Inits :class:`CrossEntropyLoss`.
 
@@ -33,6 +36,8 @@ class CrossEntropyLoss(nn.Module):
         """
         super().__init__()
         self.mc_samples = num_samples
+        self.include_background = include_background
+        self.to_onehot_y = to_onehot_y
         self.cross_entropy = torch.nn.CrossEntropyLoss(
             weight=weight,
             ignore_index=ignore_index,
@@ -58,15 +63,28 @@ class CrossEntropyLoss(nn.Module):
             Loss tensor. Shape: (batch_size, *spatial_dims)
         """
         # In case we do not have a batch dimension, add it
-        if _input.dim() == 3:
-            _input = _input.unsqueeze(0)
-        if target.dim() == 3:
-            target = target.unsqueeze(0)
 
-        self.cross_entropy.weight = self.cross_entropy.weight.clone().to(_input.device)
+        n_pred_ch = _input.shape[1]
+
+        if self.to_onehot_y:
+            if n_pred_ch == 1:
+                warnings.warn("single channel prediction, `to_onehot_y=True` ignored.")
+            else:
+                target = one_hot(target, num_classes=n_pred_ch)
+
+        if not self.include_background:
+            if n_pred_ch == 1:
+                warnings.warn("single channel prediction, `include_background=False` ignored.")
+            else:
+                # if skipping background, removing first channel
+                target = target[:, 1:]
+                _input = _input[:, 1:]
+        
+        
+        self.cross_entropy.weight = self.cross_entropy.weight.clone().to(_input.device) if self.cross_entropy.weight is not None else None
 
         if self.mc_samples == 1 or pred_log_var is None:
-            return self.cross_entropy(_input.float(), target).mean()
+            return self.cross_entropy(_input.float(), target)
 
         pred_shape = [self.mc_samples, *_input.shape]
         noise = torch.randn(pred_shape, device=_input.device)
@@ -74,4 +92,4 @@ class CrossEntropyLoss(nn.Module):
         noisy_pred = noisy_pred.view(-1, *_input.shape[1:])
         tiled_target = target.unsqueeze(0).tile((self.mc_samples,)).view(-1, *target.shape[1:])
         loss = self.cross_entropy(noisy_pred, tiled_target).view(self.mc_samples, -1, *_input.shape[-2:]).mean(0)
-        return loss.mean()
+        return loss

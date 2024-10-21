@@ -35,10 +35,10 @@ class GeneralizedDiceLoss(Loss):
         include_background: bool = True,
         to_onehot_y: bool = False,
         sigmoid: bool = False,
-        softmax: bool = False,
+        softmax: bool = True,
         other_act: Callable | None = None,
         w_type: str = "square",
-        reduction: str='mean_batch',
+        reduction: str='mean_channel',
         smooth_nr: float = 1e-5,
         smooth_dr: float = 1e-5,
         batch: bool = False,
@@ -72,7 +72,7 @@ class GeneralizedDiceLoss(Loss):
                 Incompatible values.
 
         """
-        super().__init__(reduction=LossReduction(reduction).value)
+        super().__init__()
         if other_act is not None and not callable(other_act):
             raise TypeError(f"other_act must be None or callable but is {type(other_act).__name__}.")
         if int(sigmoid) + int(softmax) + int(other_act is not None) > 1:
@@ -83,7 +83,7 @@ class GeneralizedDiceLoss(Loss):
         self.sigmoid = sigmoid
         self.softmax = softmax
         self.other_act = other_act
-
+        self.reduction = reduction
         self.w_type = w_type
 
         self.smooth_nr = float(smooth_nr)
@@ -97,7 +97,7 @@ class GeneralizedDiceLoss(Loss):
             return torch.reciprocal(grnd * grnd)
         return torch.ones_like(grnd)
 
-    def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    def forward(self, target: torch.Tensor, input: torch.Tensor) -> torch.Tensor:
         """
         Args:
             input: the shape should be BNH[WD].
@@ -160,6 +160,7 @@ class GeneralizedDiceLoss(Loss):
         final_reduce_dim = 0 if self.batch else 1
         numer = 2.0 * (intersection * w).sum(final_reduce_dim, keepdim=True) + self.smooth_nr
         denom = (denominator * w).sum(final_reduce_dim, keepdim=True) + self.smooth_dr
+        gendice_score= (numer / denom)
         gendice_score = torch.where(denominator > 0, gendice_score, torch.tensor(1.0).to(pred_o.device))
         gendice_score, _ = do_metric_reduction(gendice_score, reduction=self.reduction)
         f: torch.Tensor = 1.0 - gendice_score

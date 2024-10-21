@@ -63,17 +63,17 @@ class Dice(Loss):
     def __init__(
         self,
         include_background: bool = True,
-        to_onehot_y: bool = False,
-        sigmoid: bool = True,
-        softmax: bool = False,
+        to_onehot_y: bool = True,
+        sigmoid: bool = False,
+        softmax: bool = True,
         other_act: Optional[Callable] = None,
         squared_pred: bool = False,
         jaccard: bool = False,
         flatten: bool = False,
-        reduction: str = "mean",
+        reduction: str = "mean_channel",
         smooth_nr: float = 1e-5,
         smooth_dr: float = 1e-5,
-        batch: bool = True,
+        batch: bool = False,
     ):
         """Inits :class:`Dice`.
 
@@ -168,6 +168,7 @@ class Dice(Loss):
                 warnings.warn("single channel prediction, `softmax=True` ignored.")
             else:
                 _input = torch.softmax(_input.float(), 1).to(_input)
+        print(_input.shape)
 
         if self.other_act is not None:
             _input = self.other_act(_input)
@@ -176,6 +177,7 @@ class Dice(Loss):
             if n_pred_ch == 1:
                 warnings.warn("single channel prediction, `to_onehot_y=True` ignored.")
             else:
+                print(n_pred_ch,target.shape)
                 target = one_hot(target, num_classes=n_pred_ch)
 
         if not self.include_background:
@@ -205,6 +207,8 @@ class Dice(Loss):
             denominator = 2.0 * (denominator - intersection)
         dice_score = (2.0 * intersection + self.smooth_nr) / (denominator + self.smooth_dr)
         dice_score = torch.where(denominator > 0, dice_score, torch.tensor(1.0).to(pred_o.device))
+        print(dice_score)
         dice_score, _ = do_metric_reduction(dice_score, reduction=self.reduction)
+        print(dice_score)
         f: torch.Tensor = 1.0 - dice_score
         return dice_score, f

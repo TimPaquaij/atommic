@@ -7,10 +7,10 @@ __author__ = "Tim Paquaij"
 
 import warnings
 from typing import Any, Callable, List, Optional, Tuple, Union, Sequence
-
 import numpy as np
 import torch
 from torch import Tensor
+import torch.nn.functional as F
 
 from atommic.collections.common.parts.utils import is_none
 from atommic.collections.segmentation.losses.utils import do_metric_reduction, one_hot
@@ -65,8 +65,8 @@ class FocalLoss(Loss):
         gamma: float = 2.0,
         alpha: float | None = None,
         weight: Sequence[float] | float | int | torch.Tensor | None = None,
-        reduction: str= "mean",
-        use_softmax: bool = False,
+        reduction: str= "none",
+        use_softmax: bool = True,
     ) -> None:
         """
         Args:
@@ -100,6 +100,7 @@ class FocalLoss(Loss):
             >>> fl(pred, grnd)
         """
         super().__init__()
+        self.reduction = reduction
         self.include_background = include_background
         self.to_onehot_y = to_onehot_y
         self.gamma = gamma
@@ -110,7 +111,7 @@ class FocalLoss(Loss):
         self.register_buffer("class_weight", weight)
         self.class_weight: None | torch.Tensor
 
-    def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    def forward(self, target: torch.Tensor,input: torch.Tensor, ) -> torch.Tensor:
         """
         Args:
             input: the shape should be BNH[WD], where N is the number of classes.
