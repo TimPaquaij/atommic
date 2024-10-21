@@ -2,11 +2,12 @@
 __author__ = "Dimitris Karkalousos"
 
 import torch
+from atommic.core.classes.loss import Loss
 from torch import nn
 import warnings
 from atommic.collections.segmentation.losses.utils import one_hot
 
-class CategoricalCrossEntropyLoss(nn.Module):
+class CategoricalCrossEntropyLoss(Loss):
     """Wrapper around PyTorch's CrossEntropyLoss to support 2D and 3D inputs."""
 
     def __init__(
@@ -95,15 +96,16 @@ class CategoricalCrossEntropyLoss(nn.Module):
         return loss
 
 
-class BinaryCrossEntropyLoss(nn.Module):
+class BinaryCrossEntropyLoss(Loss):
     """Wrapper around PyTorch's BinaryCrossEntropyLoss to support 2D and 3D inputs."""
 
     def __init__(
         self,
+        num_samples: int = 50,
         weight: torch.Tensor = None,
         size_average:bool =True,
-        reduce: bool =True,
-        reduction:str = 'mean',
+        reduce: bool =False,
+        reduction:str = 'none',
     ):
         """Inits :class:`BinaryCrossEntropyLoss`.
 
@@ -121,6 +123,7 @@ class BinaryCrossEntropyLoss(nn.Module):
             Weight for each class, by default None
         """
         super().__init__()
+        self.mc_samples=num_samples,
         self.weight = weight
         self.size_average = size_average
         self.reduce = reduce
@@ -145,9 +148,7 @@ class BinaryCrossEntropyLoss(nn.Module):
             Loss tensor. Shape: (batch_size, *spatial_dims)
         """
         # In case we do not have a batch dimension, add it
-
-        n_pred_ch = _input.shape[1]
-        self.cross_entropy.weight = self.cross_entropy.weight.clone().to(_input.device) if self.cross_entropy.weight is not None else None
+        self.weight = self.weight.clone().to(_input.device) if self.weight is not None else None
 
         if self.mc_samples == 1 or pred_log_var is None:
             return self.binary_cross_entropy(_input.float(), target)
@@ -157,5 +158,5 @@ class BinaryCrossEntropyLoss(nn.Module):
         noisy_pred = _input.unsqueeze(0) + torch.sqrt(torch.exp(pred_log_var)).unsqueeze(0) * noise
         noisy_pred = noisy_pred.view(-1, *_input.shape[1:])
         tiled_target = target.unsqueeze(0).tile((self.mc_samples,)).view(-1, *target.shape[1:])
-        loss = self.cross_entropy(noisy_pred, tiled_target).view(self.mc_samples, -1, *_input.shape[-2:]).mean(0)
+        loss = self.binary_cross_entropy(noisy_pred, tiled_target).view(self.mc_samples, -1, *_input.shape[-2:]).mean(0)
         return loss

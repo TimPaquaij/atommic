@@ -27,13 +27,13 @@ class TestCELosses:
         assert result.shape[0] ==2
 
     def test_BCE_loss(self):
-        y = torch.randn((2,2,10,10))
-        y = torch.softmax(y,dim=1)
-        y = torch.argmax(y,dim=1,keepdim=False)
-        x = torch.randn((2,10,10))
+        y = torch.rand(2, 5,10,10, requires_grad=False)
+        y = (y >0.5)*1
+        x = torch.randn(2,5,10,10, requires_grad=True)
+        x = torch.sigmoid(x)
         ce_loss = BinaryCrossEntropyLoss()
-        result = ce_loss(y, x)
-        assert result.shape[0] ==2
+        result = ce_loss(y.float(), x)
+        assert result.shape[0]==2
 
         
     

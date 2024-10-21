@@ -1163,6 +1163,17 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                         predictions_segmentation[:, class_idx],
                         torch.zeros_like(predictions_segmentation[:, class_idx]),
                     )
+        if is_none(self.segmentation_classes_thresholds) and self.segmentation_type=='MCS':
+            if isinstance(predictions_segmentation, list):
+                if self.consecutive_slices>1:
+                    predictions_segmentation= [torch.softmax(pred,dim=2) for pred in predictions_segmentation]
+                else:
+                    predictions_segmentation= [torch.softmax(pred,dim=1) for pred in predictions_segmentation]
+            else:
+                if self.consecutive_slices>1:
+                    predictions_segmentation= torch.softmax(predictions_segmentation,dim=2) 
+                else:
+                    predictions_segmentation= torch.softmax(predictions_segmentation,dim=1)
 
         # Noise-to-Recon forward pass, if Noise-to-Recon is used.
         predictions_reconstruction_n2r = None

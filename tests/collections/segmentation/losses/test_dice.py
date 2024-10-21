@@ -12,10 +12,11 @@ class TestDiceLosses:
         y = torch.softmax(y,dim=1)
         y = torch.argmax(y,dim=1,keepdim=True)
         x = torch.randn((2,5,10,10))
-        dice_loss = Dice(include_background=True,to_onehot_y=True,batch=False,reduction='mean_channel')
+        x = torch.softmax(x,dim=1)
+        dice_loss = Dice(include_background=True,to_onehot_y=True,batch=False,reduction='mean_channel',softmax=False)
         _,result = dice_loss(y, x)
         assert result.shape[0] ==2
-        dice_loss = Dice(include_background=True,to_onehot_y=True,batch=False,reduction='none')
+        dice_loss = Dice(include_background=True,to_onehot_y=True,batch=False,reduction='none',softmax=False)
         _,result = dice_loss(y, x)
         assert result.shape[0] ==2 and result.shape[1] ==5
 
@@ -24,10 +25,11 @@ class TestDiceLosses:
         y = torch.softmax(y,dim=1)
         y = torch.argmax(y,dim=1,keepdim=True)
         x = torch.randn((2,5,10,10))
-        gendice_loss = GeneralizedDiceLoss(include_background=True,to_onehot_y=True,batch=False,reduction='mean_channel')
+        x = torch.softmax(x,dim=1)
+        gendice_loss = GeneralizedDiceLoss(include_background=True,to_onehot_y=True,batch=False,reduction='mean_channel',softmax=False)
         _,result = gendice_loss(y, x)
         assert result.shape[0] ==2
-        gendice_loss = GeneralizedDiceLoss(include_background=True,to_onehot_y=True,batch=False,reduction='none')
+        gendice_loss = GeneralizedDiceLoss(include_background=True,to_onehot_y=True,batch=False,reduction='none',softmax=False)
         _,result = gendice_loss(y, x)
         assert result.shape[0] ==2 and result.shape[1] ==5
 
