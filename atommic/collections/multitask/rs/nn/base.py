@@ -37,7 +37,7 @@ from atommic.collections.multitask.rs.parts.transforms import RSMRIDataTransform
 from atommic.collections.reconstruction.losses.na import NoiseAwareLoss
 from atommic.collections.reconstruction.losses.ssim import SSIMLoss
 from atommic.collections.reconstruction.metrics import mse, nmse, psnr, ssim
-from atommic.collections.segmentation.losses.cross_entropy import CrossEntropyLoss
+from atommic.collections.segmentation.losses.cross_entropy import CategoricalCrossEntropyLoss
 from atommic.collections.segmentation.losses.dice import Dice
 
 __all__ = ["BaseMRIReconstructionSegmentationModel"]

@@ -3,8 +3,7 @@ __author__ = "Tim Paquaij"
 
 import pytest
 import torch
-from atommic.collections.segmentation.losses.dice import Dice
-from atommic.collections.segmentation.losses.gendice import GeneralizedDiceLoss
+from atommic.collections.segmentation.losses.dice import Dice, GeneralizedDiceLoss
 
 class TestDiceLosses:
 

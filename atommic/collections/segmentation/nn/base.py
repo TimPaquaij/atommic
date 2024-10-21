@@ -26,7 +26,8 @@ from atommic.collections.segmentation.data.mri_segmentation_loader import (
     SegmentationMRIDataset,
     SKMTEASegmentationMRIDataset,
 )
-from atommic.collections.segmentation.losses.cross_entropy import CrossEntropyLoss
+from atommic.collections.segmentation.losses.cross_entropy import CategoricalCrossEntropyLoss
+from atommic.collections.segmentation.losses.cross_entropy import BinaryCrossEntropyLoss
 from atommic.collections.segmentation.losses.dice import Dice
 from atommic.collections.segmentation.parts.transforms import SegmentationMRIDataTransforms
 

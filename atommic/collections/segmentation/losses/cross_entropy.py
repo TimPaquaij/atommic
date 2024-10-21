@@ -6,7 +6,7 @@ from torch import nn
 import warnings
 from atommic.collections.segmentation.losses.utils import one_hot
 
-class CrossEntropyLoss(nn.Module):
+class CategoricalCrossEntropyLoss(nn.Module):
     """Wrapper around PyTorch's CrossEntropyLoss to support 2D and 3D inputs."""
 
     def __init__(
@@ -85,6 +85,72 @@ class CrossEntropyLoss(nn.Module):
 
         if self.mc_samples == 1 or pred_log_var is None:
             return self.cross_entropy(_input.float(), target)
+
+        pred_shape = [self.mc_samples, *_input.shape]
+        noise = torch.randn(pred_shape, device=_input.device)
+        noisy_pred = _input.unsqueeze(0) + torch.sqrt(torch.exp(pred_log_var)).unsqueeze(0) * noise
+        noisy_pred = noisy_pred.view(-1, *_input.shape[1:])
+        tiled_target = target.unsqueeze(0).tile((self.mc_samples,)).view(-1, *target.shape[1:])
+        loss = self.cross_entropy(noisy_pred, tiled_target).view(self.mc_samples, -1, *_input.shape[-2:]).mean(0)
+        return loss
+
+
+class BinaryCrossEntropyLoss(nn.Module):
+    """Wrapper around PyTorch's BinaryCrossEntropyLoss to support 2D and 3D inputs."""
+
+    def __init__(
+        self,
+        weight: torch.Tensor = None,
+        size_average:bool =True,
+        reduce: bool =True,
+        reduction:str = 'mean',
+    ):
+        """Inits :class:`BinaryCrossEntropyLoss`.
+
+        Parameters
+        ----------
+        num_samples : int, optional
+            Number of Monte Carlo samples, by default 50
+        ignore_index : int, optional
+            Index to ignore, by default -100
+        reduction : str, optional
+            Reduction method, by default "none"
+        label_smoothing : float, optional
+            Label smoothing, by default 0.0
+        weight : torch.Tensor, optional
+            Weight for each class, by default None
+        """
+        super().__init__()
+        self.weight = weight
+        self.size_average = size_average
+        self.reduce = reduce
+        self.reduction = reduction
+        self.binary_cross_entropy = torch.nn.BCELoss(weight=self.weight, size_average=self.size_average, reduce=self.reduce, reduction=self.reduction)
+
+    def forward(self, target: torch.Tensor, _input: torch.Tensor, pred_log_var: torch.Tensor = None) -> torch.Tensor:
+        """Forward pass of :class:`BinaryCrossEntropyLoss`.
+
+        Parameters
+        ----------
+        target : torch.Tensor
+            Target tensor. Shape: (batch_size, num_classes, *spatial_dims)
+        _input : torch.Tensor
+            Prediction tensor. Shape: (batch_size, num_classes, *spatial_dims)
+        pred_log_var : torch.Tensor, optional
+            Prediction log variance tensor. Shape: (batch_size, num_classes, *spatial_dims). Default is ``None``.
+
+        Returns
+        -------
+        torch.Tensor
+            Loss tensor. Shape: (batch_size, *spatial_dims)
+        """
+        # In case we do not have a batch dimension, add it
+
+        n_pred_ch = _input.shape[1]
+        self.cross_entropy.weight = self.cross_entropy.weight.clone().to(_input.device) if self.cross_entropy.weight is not None else None
+
+        if self.mc_samples == 1 or pred_log_var is None:
+            return self.binary_cross_entropy(_input.float(), target)
 
         pred_shape = [self.mc_samples, *_input.shape]
         noise = torch.randn(pred_shape, device=_input.device)

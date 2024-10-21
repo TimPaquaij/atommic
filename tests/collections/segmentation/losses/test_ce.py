@@ -4,8 +4,7 @@ __author__ = "Tim Paquaij"
 import pytest
 import torch
 from atommic.collections.segmentation.losses.focal import FocalLoss
-from atommic.collections.segmentation.losses.cross_entropy import CrossEntropyLoss
-
+from atommic.collections.segmentation.losses.cross_entropy import CategoricalCrossEntropyLoss, BinaryCrossEntropyLoss
 
 class TestCELosses:
 
@@ -18,11 +17,21 @@ class TestCELosses:
         result = focal_loss(y, x)
         assert result.shape[0] ==2
     
-    def test_CE_loss(self):
-        y = torch.ones((2,5,10,10))
-        y[0] = y[0]*0
-        x = torch.rand((2,5,10,10))
-        ce_loss = CrossEntropyLoss(to_onehot_y=True,include_background=True)
+    def test_CCE_loss(self):
+        y = torch.randn((2,5,10,10))
+        y = torch.softmax(y,dim=1)
+        y = torch.argmax(y,dim=1,keepdim=True)
+        x = torch.randn((2,5,10,10))
+        ce_loss = CategoricalCrossEntropyLoss(to_onehot_y=True,include_background=True)
+        result = ce_loss(y, x)
+        assert result.shape[0] ==2
+
+    def test_BCE_loss(self):
+        y = torch.randn((2,2,10,10))
+        y = torch.softmax(y,dim=1)
+        y = torch.argmax(y,dim=1,keepdim=False)
+        x = torch.randn((2,10,10))
+        ce_loss = BinaryCrossEntropyLoss()
         result = ce_loss(y, x)
         assert result.shape[0] ==2
 
