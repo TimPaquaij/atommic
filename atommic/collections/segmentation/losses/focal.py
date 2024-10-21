@@ -6,7 +6,7 @@ __author__ = "Tim Paquaij"
 
 
 import warnings
-from typing import Any, Callable, List, Optional, Tuple, Union, Sequence,
+from typing import Any, Callable, List, Optional, Tuple, Union, Sequence
 
 import numpy as np
 import torch
@@ -65,7 +65,7 @@ class FocalLoss(Loss):
         gamma: float = 2.0,
         alpha: float | None = None,
         weight: Sequence[float] | float | int | torch.Tensor | None = None,
-        reduction: "mean",
+        reduction: str= "mean",
         use_softmax: bool = False,
     ) -> None:
         """
