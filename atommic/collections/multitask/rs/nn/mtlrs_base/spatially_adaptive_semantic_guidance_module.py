@@ -5,11 +5,10 @@ from torch.functional import F
 
 class SASG(nn.Module):
 
-    def __init__(self, channels_rec,channels_seg):
+    def __init__(self, channels_rec,channels_seg,kernel_size,padding):
         super().__init__()
-        self.conv = nn.Conv2d(channels_rec, channels_rec, kernel_size=1)
-        self.spade  = SPADE(segmentation_channels=channels_seg,reconstruction_channels=channels_rec
-                            )
+        self.conv = nn.Conv2d(channels_rec, channels_rec, kernel_size=kernel_size,padding=padding)
+        self.spade  = SPADE(channels_seg,channels_rec,kernel_size, padding)
         self.act = nn.LeakyReLU(negative_slope=0.2)
 
 
@@ -26,10 +25,10 @@ class SASG(nn.Module):
 
 class SPADE(nn.Module):
 
-    def __init__(self, segmentation_channels,reconstruction_channels):
+    def __init__(self, segmentation_channels,reconstruction_channels,kernel_size,padding):
         super().__init__()
-        self.conv_1 = nn.Conv2d(segmentation_channels, segmentation_channels, kernel_size=1)
-        self.conv_2 = nn.Conv2d(segmentation_channels, reconstruction_channels, kernel_size=1)
+        self.conv_1 = nn.Conv2d(segmentation_channels, segmentation_channels, kernel_size=kernel_size,padding=padding)
+        self.conv_2 = nn.Conv2d(segmentation_channels, reconstruction_channels, kernel_size=kernel_size,padding=padding)
         self.instance = nn.InstanceNorm2d(64)
         self.act = nn.LeakyReLU(negative_slope=0.2)
 

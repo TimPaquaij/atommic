@@ -112,6 +112,8 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
 
         self.task_adaption_type = cfg_dict.get("task_adaption_type", "multi_task_learning")
         self.attention_module = cfg_dict.get("attention_module",False)
+        self.attention_module_kernel_size = cfg_dict.get("attention_module_kernel_size", 3)
+        self.attention_module_padding = cfg_dict.get("attention_module_padding", 1)
         if self.attention_module == "SemanticGuidanceModule" and self.task_adaption_type == "multi_task_learning_logit":
             print("Logits can not be used with semantic guidance module, logits will be transfomed into probabilities with softmax")
             self.task_adaption_type ="multi_task_learning_softmax"
@@ -127,7 +129,7 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
         )
         if self.attention_module == "SemanticGuidanceModule":
             self.attention_module_block = torch.nn.ModuleList(
-            [SASG(channels_rec=cfg_dict.get("reconstruction_module_conv_filters")[0],channels_seg=self.segmentation_module_output_channels-1)for _ in range(self.rs_cascades)
+            [SASG(channels_rec=cfg_dict.get("reconstruction_module_conv_filters")[0],channels_seg=self.segmentation_module_output_channels-1,kernel_size=self.attention_module_kernel_size,padding=self.attention_module_padding)for _ in range(self.rs_cascades)
             ]
         )
 

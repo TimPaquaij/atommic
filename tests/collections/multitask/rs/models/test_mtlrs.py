@@ -48,6 +48,8 @@ from tests.collections.reconstruction.mri_data.conftest import create_input
                 "segmentation_loss": {"dice": 1.0},
                 "segmentation_module_accumulate_predictions": True,
                 "attention_module": "SemanticGuidanceModule",
+                "attention_module_kernel_size": 3,
+                "attention_module_padding": 1,
                 "dice_loss_include_background": False,
                 "dice_loss_to_onehot_y": False,
                 "dice_loss_sigmoid": True,
