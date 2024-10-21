@@ -70,10 +70,10 @@ class Dice(Loss):
         squared_pred: bool = False,
         jaccard: bool = False,
         flatten: bool = False,
-        reduction: str = "mean_channel",
+        reduction: str = "mean",
         smooth_nr: float = 1e-5,
         smooth_dr: float = 1e-5,
-        batch: bool = False,
+        batch: bool = True,
     ):
         """Inits :class:`Dice`.
 

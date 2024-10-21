@@ -38,10 +38,10 @@ class GeneralizedDiceLoss(Loss):
         softmax: bool = True,
         other_act: Callable | None = None,
         w_type: str = "square",
-        reduction: str='mean_channel',
+        reduction: str='mean',
         smooth_nr: float = 1e-5,
         smooth_dr: float = 1e-5,
-        batch: bool = False,
+        batch: bool = True,
     ) -> None:
         """
         Args:
