@@ -168,6 +168,7 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
             Tuple containing the predicted reconstruction and segmentation.
         """
         pred_reconstructions = []
+        pred_segmentations = []
         for c,cascade in enumerate(self.rs_module):
             pred_reconstruction, pred_segmentation, hx = cascade(
                 y=y,
@@ -179,6 +180,7 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                 sigma=sigma,
             )
             pred_reconstructions.append(pred_reconstruction)
+            pred_segmentations.append(pred_segmentation)
             init_reconstruction_pred = pred_reconstruction[-1][-1]
 
             if self.task_adaption_type == "multi_task_learning":
@@ -200,6 +202,7 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                     pred_segmentation = torch.softmax(pred_segmentation, dim=2)
                 else:
                     pred_segmentation = torch.softmax(pred_segmentation, dim=1)
+                    #print(pred_segmentation.shape)
                 if self.attention_module == "SemanticGuidanceModule":
                     hidden_states = [pred_segmentation[:,1:] for _ in self.reconstruction_module_recurrent_filters]
                 else:
@@ -215,7 +218,7 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                     ]
 
                 # Check if the concatenated hidden states are the same size as the hidden state of the RNN
-                if hidden_states[0].shape[self.coil_dim] != hx[0].shape[self.coil_dim]:
+                if hidden_states[0].shape[self.coil_dim] != hx[0].shape[self.coil_dim] and not self.attention_module =="SemanticGuidanceModule":
                     prev_hidden_states = hidden_states
                     hidden_states = []
                     for hs in prev_hidden_states:
@@ -231,10 +234,9 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                 else:
                     hx = [hx[i] + hidden_states[i] for i in range(len(hx))]
 
-
             init_reconstruction_pred = torch.view_as_real(init_reconstruction_pred)
 
-        return pred_reconstructions, pred_segmentation
+        return pred_reconstructions, pred_segmentations
 
     def process_reconstruction_loss(  # noqa: MC0001
         self,
