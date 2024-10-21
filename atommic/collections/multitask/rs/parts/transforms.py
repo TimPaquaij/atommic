@@ -98,6 +98,8 @@ class RSMRIDataTransforms:
         spatial_dims: Sequence[int] = None,
         coil_dim: int = 0,
         consecutive_slices: int = 1,  # pylint: disable=unused-argument
+        include_background_label: bool =True,
+
         use_seed: bool = True,
     ):
         """Inits :class:`RSMRIDataTransforms`.
@@ -256,6 +258,7 @@ class RSMRIDataTransforms:
         self.fft_normalization = fft_normalization
         self.spatial_dims = spatial_dims if spatial_dims is not None else [-2, -1]
         self.coil_dim = coil_dim - 1 if dimensionality == 2 and not is_none(coil_dim) else coil_dim
+
 
         if not self.complex_data:
             if not is_none(coil_combination_method):
@@ -436,6 +439,7 @@ class RSMRIDataTransforms:
                 self.normalization,  # type: ignore
             ]
         )
+        self.include_background_label = include_background_label
 
         self.cropping = Composer([self.cropping])  # type: ignore
         self.normalization = Composer([self.normalization])  # type: ignore
@@ -574,6 +578,22 @@ class RSMRIDataTransforms:
             segmentation_labels = segmentation_labels.float()
         segmentation_labels = torch.abs(segmentation_labels)
 
+        if self.include_background_label ==True:
+            if self.consecutive_slices >1:
+                segmentation_labels_bg = torch.zeros((segmentation_labels.shape[0],segmentation_labels.shape[2],segmentation_labels.shape[3]))
+                segmentation_labels_new = torch.zeros(
+                    (segmentation_labels.shape[0],segmentation_labels.shape[1]+1, segmentation_labels.shape[2], segmentation_labels.shape[3]))
+                for i in range(target_reconstruction.shape[0]):
+                    idx_background = torch.where(torch.sum(segmentation_labels[i], dim=0) ==0)
+                    segmentation_labels_bg[i][idx_background] = 1
+                    segmentation_labels_new[i] = torch.concat((segmentation_labels_bg[i].unsqueeze(0),segmentation_labels[i]), dim=0)
+                segmentation_labels=segmentation_labels_new
+            else:
+                segmentation_labels_bg = torch.zeros((segmentation_labels.shape[-2], segmentation_labels.shape[-1]))
+                idx_background = torch.where(torch.sum(segmentation_labels, dim=0) == 0)
+                segmentation_labels_bg[idx_background] = 1
+                segmentation_labels= torch.concat((segmentation_labels_bg.unsqueeze(0),segmentation_labels), dim=0)
+                
         attrs.update(
             self.__parse_normalization_vars__(
                 kspace_pre_normalization_vars,

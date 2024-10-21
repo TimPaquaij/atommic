@@ -72,3 +72,41 @@ def do_metric_reduction(f: torch.Tensor, reduction: str = "mean") -> Tuple[Tenso
             '["mean", "sum", "mean_batch", "sum_batch", "mean_channel", "sum_channel" "none"].'
         )
     return f, not_nans
+
+
+def one_hot(labels: torch.Tensor, num_classes: int, dtype: torch.dtype = torch.float, dim: int = 1) -> torch.Tensor:
+    """Convert labels to one-hot representation.
+
+    Parameters
+    ----------
+    labels: torch.Tensor
+        the labels of shape [BNHW[D]].
+    num_classes: int
+        number of classes.
+    dtype: torch.dtype
+        the data type of the returned tensor.
+    dim: int
+        the dimension to expand the one-hot tensor.
+
+    Returns
+    -------
+    torch.Tensor
+        The one-hot representation of the labels.
+
+    Examples
+    --------
+    >>> labels = torch.tensor([[[[0, 1, 2]]]])
+    >>> one_hot(labels, num_classes=3)
+    tensor([[[[1., 0., 0.],
+                [0., 1., 0.],
+                [0., 0., 1.]]]])
+    """
+    # if `dim` is bigger, add singleton dim at the end
+    if labels.ndim < dim + 1:
+        shape = list(labels.shape) + [1] * (dim + 1 - len(labels.shape))
+        labels = torch.reshape(labels, shape)
+    sh = list(labels.shape)
+    sh[dim] = num_classes
+    o = torch.zeros(size=sh, dtype=dtype, device=labels.device)
+    labels = o.scatter_(dim=dim, index=labels.long(), value=1)
+    return labels

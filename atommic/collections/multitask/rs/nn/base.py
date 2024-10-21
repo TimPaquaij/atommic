@@ -155,6 +155,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
         self.log_multiple_modalities = cfg_dict.get("log_multiple_modalities", False)
 
         # Set threshold for segmentation classes. If None, no thresholding is applied.
+        self.segmentation_type = cfg_dict.get("segmentation_type", "MCS")
         self.segmentation_classes_thresholds = cfg_dict.get("segmentation_classes_thresholds", None)
         self.segmentation_activation = cfg_dict.get("segmentation_activation", None)
 
@@ -1131,7 +1132,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             attrs["noise"],
         )
 
-        if not is_none(self.segmentation_classes_thresholds):
+        if not is_none(self.segmentation_classes_thresholds) and self.segmentation_type=='MLS':
             for class_idx, thres in enumerate(self.segmentation_classes_thresholds):
                 if self.segmentation_activation == "sigmoid":
                     if isinstance(predictions_segmentation, list):

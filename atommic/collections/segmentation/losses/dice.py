@@ -11,7 +11,7 @@ import torch
 from torch import Tensor
 
 from atommic.collections.common.parts.utils import is_none
-from atommic.collections.segmentation.losses.utils import do_metric_reduction
+from atommic.collections.segmentation.losses.utils import do_metric_reduction, one_hot
 from atommic.core.classes.loss import Loss
 
 
@@ -208,41 +208,3 @@ class Dice(Loss):
         dice_score, _ = do_metric_reduction(dice_score, reduction=self.reduction)
         f: torch.Tensor = 1.0 - dice_score
         return dice_score, f
-
-
-def one_hot(labels: torch.Tensor, num_classes: int, dtype: torch.dtype = torch.float, dim: int = 1) -> torch.Tensor:
-    """Convert labels to one-hot representation.
-
-    Parameters
-    ----------
-    labels: torch.Tensor
-        the labels of shape [BNHW[D]].
-    num_classes: int
-        number of classes.
-    dtype: torch.dtype
-        the data type of the returned tensor.
-    dim: int
-        the dimension to expand the one-hot tensor.
-
-    Returns
-    -------
-    torch.Tensor
-        The one-hot representation of the labels.
-
-    Examples
-    --------
-    >>> labels = torch.tensor([[[[0, 1, 2]]]])
-    >>> one_hot(labels, num_classes=3)
-    tensor([[[[1., 0., 0.],
-                [0., 1., 0.],
-                [0., 0., 1.]]]])
-    """
-    # if `dim` is bigger, add singleton dim at the end
-    if labels.ndim < dim + 1:
-        shape = list(labels.shape) + [1] * (dim + 1 - len(labels.shape))
-        labels = torch.reshape(labels, shape)
-    sh = list(labels.shape)
-    sh[dim] = num_classes
-    o = torch.zeros(size=sh, dtype=dtype, device=labels.device)
-    labels = o.scatter_(dim=dim, index=labels.long(), value=1)
-    return labels
