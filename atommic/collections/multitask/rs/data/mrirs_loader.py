@@ -416,6 +416,8 @@ class SKMTEARSMRIDataset(RSMRIDataset):
                 kspace = kspace[:, :, 0, :] + kspace[:, :, 1, :]
             elif not is_none(dataset_format) and dataset_format == "skm-tea-echo1+echo2-mc":
                 kspace = np.concatenate([kspace[:, :, 0, :], kspace[:, :, 1, :]], axis=-1)
+            elif not is_none(dataset_format) and dataset_format == "skm-tea-echo1-echo2":
+                kspace =kspace
             else:
                 warnings.warn(
                     f"Dataset format {dataset_format} is either not supported or set to None. "
@@ -499,7 +501,15 @@ class SKMTEARSMRIDataset(RSMRIDataset):
                 metadata["noise"] = 1.0
 
             attrs.update(metadata)
-
+        if not is_none(dataset_format) and dataset_format == "skm-tea-echo1-echo2":
+            if self.consecutive_slices > 1:
+                segmentation_labels = np.transpose(segmentation_labels, (0, 3, 1, 2))
+                kspace = np.transpose(kspace, (3, 0, 4, 1, 2))
+                sensitivity_map = np.transpose(sensitivity_map, (4, 0, 3, 1, 2))
+            else:
+                segmentation_labels = np.transpose(segmentation_labels, (2, 0, 1))
+                kspace = np.transpose(kspace, (2, 3, 0, 1))
+                sensitivity_map = np.transpose(sensitivity_map, (3, 2, 0, 1))
         kspace = np.transpose(kspace, (2, 0, 1))
         sensitivity_map = np.transpose(sensitivity_map.squeeze(), (2, 0, 1))
 
