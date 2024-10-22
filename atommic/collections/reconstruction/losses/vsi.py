@@ -51,7 +51,7 @@ class VSILoss(Loss):
     """
 
     def __init__(self, reduction: str = 'mean', c1: float = 1.27, c2: float = 386., c3: float = 130.,
-                 alpha: float = 0.4, beta: float = 0.02, data_range:[int, float] = 1.,
+                 alpha: float = 0.4, beta: float = 0.02,
                  omega_0: float = 0.021, sigma_f: float = 1.34, sigma_d: float = 145., sigma_c: float = 0.001) -> None:
         super().__init__()
         self.reduction = reduction
@@ -64,11 +64,10 @@ class VSILoss(Loss):
         self.sigma_f = sigma_f
         self.sigma_d = sigma_d
         self.sigma_c = sigma_c
-        self.data_range = data_range
 
 
 
-    def forward(self, x: torch.Tensor, y: torch.Tensor,data_range: torch.Tensor):
+    def forward(self, x: torch.Tensor, y: torch.Tensor,data_range: torch.Tensor=None):
         r"""Computation of VSI as a loss function.
 
         Args:
@@ -83,6 +82,8 @@ class VSILoss(Loss):
             Nevertheless, the method supports greyscale images, which they are converted to RGB by copying the grey
             channel 3 times.
         """
+        if data_range is None:
+            data_range = torch.tensor([max(X.max() - X.min(), Y.max() - Y.min())]).to(Y)
 
         self.vsi = functools.partial(
             vsi, c1=self.c1, c2=self.c2, c3=self.c3, alpha=self.alpha, beta=self.beta, omega_0=self.omega_0,
@@ -126,8 +127,9 @@ def vsi(x: torch.Tensor, y: torch.Tensor, reduction: str = 'mean', data_range: U
         The original method supports only RGB image.
         See https://ieeexplore.ieee.org/document/6873260 for details.
     """
-    x =  x.unsqueeze(1)
-    y = y.unsqueeze(1)
+    if x.dim() and y.dim() < 4:
+        x =  x.unsqueeze(1)
+        y = y.unsqueeze(1)
     _validate_input([x, y], dim_range=(4, 4), data_range=(0, data_range))
 
     if x.size(1) == 1:
