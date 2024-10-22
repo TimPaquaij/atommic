@@ -6,6 +6,10 @@ __author__ = "Dimitris Karkalousos"
 import numpy as np
 from runstats import Statistics
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity
+import functools
+import torch
+from atommic.collections.reconstruction.losses.haarpsi import haarpsi
+from atommic.collections.reconstruction.losses.vsi import vsi
 
 
 def mse(x: np.ndarray, y: np.ndarray, maxval: np.ndarray = None) -> float:  # pylint: disable=unused-argument
@@ -162,8 +166,66 @@ def ssim(x: np.ndarray, y: np.ndarray, maxval: np.ndarray = None) -> float:
     )
     return ssim_score / x.shape[0]
 
+def haarpsi3d(gt: np.ndarray, pred: np.ndarray,maxval: np.ndarray = None) -> float:
+    """Compute Structural Similarity Index Metric (SSIM)"""
+    if gt.ndim == 2:
+        gt = gt[np.newaxis, :, :]
+    if pred.ndim == 2:
+        pred = pred[np.newaxis, :, :]
+    if gt.ndim != 3:
+        raise ValueError("Unexpected number of dimensions in ground truth.")
+    if gt.ndim != pred.ndim:
+        raise ValueError("Ground truth dimensions does not match pred.")
+    reduction = 'mean'
+    scales = 3
+    subsample = True
+    c = 30.0
+    alpha = 4.2
 
-METRIC_FUNCS = {"MSE": mse, "NMSE": nmse, "PSNR": psnr, "SSIM": ssim}
+    maxval = max(np.max(gt) ,np.max(pred)) if maxval is None else maxval
+    _haarpsi = functools.partial(haarpsi, scales=scales, subsample=subsample, c=c, alpha=alpha,
+                                 data_range=maxval, reduction=reduction)
+    __haarpsi = _haarpsi(torch.from_numpy(gt),
+                 torch.from_numpy(pred)).item()
+
+    return __haarpsi
+
+def vsi3d(gt: np.ndarray, pred: np.ndarray,maxval: np.ndarray = None) -> float:
+    """Compute Structural Similarity Index Metric (SSIM)"""
+    if gt.ndim == 2:
+        gt = gt[np.newaxis, :, :]
+    if pred.ndim == 2:
+        pred = pred[np.newaxis, :, :]
+    if gt.ndim != 3:
+        raise ValueError("Unexpected number of dimensions in ground truth.")
+    if gt.ndim != pred.ndim:
+        raise ValueError("Ground truth dimensions does not match pred.")
+    reduction = 'mean'
+    c1: float = 1.27
+    c2: float = 386.
+    c3: float = 130.
+    alpha: float = 0.4
+    beta: float = 0.02
+    omega_0: float = 0.021
+    sigma_f: float = 1.34
+    sigma_d: float = 145.
+    sigma_c: float = 0.001
+
+    maxval = max(np.max(gt) ,np.max(pred)) if maxval is None else maxval
+    _vsi = functools.partial(
+        vsi, c1=c1, c2=c2, c3=c3, alpha=alpha, beta=beta, omega_0=omega_0,
+        sigma_f=sigma_f, sigma_d=sigma_d, sigma_c=sigma_c, data_range=maxval,
+        reduction=reduction)
+    __vsi =_vsi(torch.from_numpy(gt),
+             torch.from_numpy(pred)
+    ).item()
+
+    return __vsi
+
+METRIC_FUNCS = dict(SSIM=ssim, HaarPSI=haarpsi3d, VSI=vsi3d,PSNR = psnr)
+
+
+METRIC_FUNCS = {"MSE": mse, "NMSE": nmse, "PSNR": psnr, "SSIM": ssim, "VSI":vsi3d,'HaarPSI':haarpsi3d}
 
 
 class ReconstructionMetrics:
