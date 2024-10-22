@@ -38,7 +38,7 @@ from atommic.collections.reconstruction.losses.na import NoiseAwareLoss
 from atommic.collections.reconstruction.losses.ssim import SSIMLoss
 from atommic.collections.reconstruction.losses.haarpsi import HaarPSILoss
 from atommic.collections.reconstruction.losses.vsi import VSILoss
-from atommic.collections.reconstruction.metrics import mse, nmse, psnr, ssim, haarpsi3d, vsi3d
+from atommic.collections.reconstruction.metrics.reconstruction_metrics import mse, nmse, psnr, ssim, haarpsi3d, vsi3d
 from atommic.collections.segmentation.losses.cross_entropy import CrossEntropyLoss
 from atommic.collections.segmentation.losses.dice import Dice
 
