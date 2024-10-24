@@ -113,6 +113,8 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
         self.attention_module = cfg_dict.get("attention_module",False)
         self.attention_module_kernel_size = cfg_dict.get("attention_module_kernel_size", 3)
         self.attention_module_padding = cfg_dict.get("attention_module_padding", 1)
+        self.attention_module_remove_background = cfg_dict.get("attention_module_remove_background", True)
+        self.attention_module_segmentation_input = self.segmentation_module_output_channels-1 if self.attention_module_remove_background else self.segmentation_module_output_channels
         if self.attention_module == "SemanticGuidanceModule" and self.task_adaption_type == "multi_task_learning_logit":
             print("Logits can not be used with semantic guidance module, logits will be transfomed into probabilities with softmax")
             self.task_adaption_type ="multi_task_learning_softmax"
@@ -123,7 +125,7 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
         )
         if self.attention_module == "SemanticGuidanceModule":
             self.attention_module_block = torch.nn.ModuleList(
-            [SASG(channels_rec=cfg_dict.get("reconstruction_module_conv_filters")[0],channels_seg=self.segmentation_module_output_channels-1,kernel_size=self.attention_module_kernel_size,padding=self.attention_module_padding)for _ in range(self.rs_cascades)
+            [SASG(channels_rec=cfg_dict.get("reconstruction_module_conv_filters")[0],channels_seg=self.attention_module_segmentation_input,kernel_size=self.attention_module_kernel_size,padding=self.attention_module_padding)for _ in range(self.rs_cascades)
             ]
         )
 
@@ -196,13 +198,26 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                     pred_segmentation_soft = torch.softmax(pred_segmentation, dim=2)
                 else:
                     pred_segmentation_soft = torch.softmax(pred_segmentation, dim=1)
-                if self.attention_module == "SemanticGuidanceModule":
+                if self.attention_module == "SemanticGuidanceModule" and self.attention_module_remove_background:
                     hidden_states = [pred_segmentation_soft[:,1:] for _ in self.reconstruction_module_recurrent_filters]
-                else:
+                elif self.attention_module == "SemanticGuidanceModule" and not self.attention_module_remove_background:
+                    hidden_states = [pred_segmentation_soft[:,1:] for _ in self.reconstruction_module_recurrent_filters]
+                elif self.attention_module_remove_background:
                     hidden_states = [
                         torch.cat(
                             [torch.abs(init_reconstruction_pred.unsqueeze(
                                 self.coil_dim)) * torch.sum(pred_segmentation_soft[..., 1:, :, :],dim=1,keepdim=True)]
+                            * f ,
+                            dim=self.coil_dim,
+                        )
+                        for f in self.reconstruction_module_recurrent_filters
+                        if f != 0
+                    ]
+                else:
+                    hidden_states = [
+                        torch.cat(
+                            [torch.abs(init_reconstruction_pred.unsqueeze(
+                                self.coil_dim)) * torch.sum(pred_segmentation_soft,dim=1,keepdim=True)]
                             * f ,
                             dim=self.coil_dim,
                         )
