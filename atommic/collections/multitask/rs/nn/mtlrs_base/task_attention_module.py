@@ -8,12 +8,12 @@ import torch
 import torch.nn as nn
 
 class TaskAttentionalModule(nn.Module):
-    def __init__(self, in_channels):
+    def __init__(self, in_channels,kernel_size,padding):
         super().__init__()
-        self.balance_conv1 = nn.Conv2d(int(in_channels * 2), int(in_channels), kernel_size=1)
-        self.balance_conv2 = nn.Conv2d(int(in_channels), int(in_channels), kernel_size=1)
-        self.residual_block =ResidualBlock(int(in_channels),int(in_channels),stride=1)
-        self.fc = nn.Conv2d(int(in_channels * 2), in_channels, kernel_size=1)
+        self.balance_conv1 = nn.Conv2d(int(in_channels * 2), int(in_channels), kernel_size=kernel_size,padding=padding)
+        self.balance_conv2 = nn.Conv2d(int(in_channels), int(in_channels), kernel_size=kernel_size,padding=padding)
+        self.residual_block =ResidualBlock(int(in_channels),int(in_channels))
+        self.fc = nn.Conv2d(int(in_channels * 2), in_channels,kernel_size=kernel_size,padding=padding)
 
     def forward(self, reconstruction_features, segmentation_features):
         # Balance unit
@@ -24,36 +24,49 @@ class TaskAttentionalModule(nn.Module):
         res_block = torch.sigmoid(self.residual_block(balanced_output))
         # Generate gated features
         gated_rec_features = (1 + res_block) * reconstruction_features
-        gated_segmentation_features = (1 + res_block) * segmentation_features
 
         # Concatenate and apply convolutional layer
         #concatenated_features = torch.cat((gated_depth_features, gated_segmentation_features), dim=1)
         # output = self.fc(concatenated_features)
         return gated_rec_features
+        out = self.res_block(x)
+        if (self.input_channels != self.output_channels) or (self.stride !=1 ):
+            x = self.conv4(out)
+        
+        out +=x
 
+        return out
+    
 
 class ResidualBlock(nn.Module):
-    def __init__(self, input_channels, output_channels,stride =1):
+    def __init__(self, input_channels, output_channels, stride=1):
         super().__init__()
-        self.stride = stride
-
         self.input_channels = input_channels
         self.output_channels = output_channels
-        self.res_block =nn.Sequential(nn.BatchNorm2d(input_channels),
-                        nn.ReLU(inplace=True),
-                        nn.Conv2d(input_channels, int(output_channels/4),kernel_size= 1),
-                        nn.BatchNorm2d(int(output_channels / 4)),
-                        nn.ReLU(inplace=True),
-                        nn.Conv2d(int(output_channels / 4), int(output_channels / 8), kernel_size= 1),
-                        nn.BatchNorm2d(int(output_channels / 8)),
-                        nn.ReLU(inplace=True),
-                        nn.Conv2d(int(output_channels / 8), int(output_channels/4), kernel_size= 1),
-                        nn.BatchNorm2d(int(output_channels / 4)),
-                        nn.ReLU(inplace=True),
-                        nn.Conv2d(int(output_channels / 4), int(output_channels), kernel_size= 1))
-
-
+        self.stride = stride
+        self.bn1 = nn.BatchNorm2d(input_channels)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv1 = nn.Conv2d(input_channels, int(output_channels/4),  1,1, bias = False)
+        self.bn2 = nn.BatchNorm2d(int(output_channels/4))
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(int(output_channels/4), int(output_channels/4), 3, stride, padding = 1, bias = False)
+        self.bn3 = nn.BatchNorm2d(int(output_channels/4))
+        self.relu = nn.ReLU(inplace=True)
+        self.conv3 = nn.Conv2d(int(output_channels/4), output_channels, 1, 1, bias = False)
+        self.conv4 = nn.Conv2d(input_channels, output_channels , 1, stride, bias = False)
+        
     def forward(self, x):
-        out = self.res_block(x)
-
+        residual = x
+        out = self.bn1(x)
+        out1 = self.relu(out)
+        out = self.conv1(out1)
+        out = self.bn2(out)
+        out = self.relu(out)
+        out = self.conv2(out)
+        out = self.bn3(out)
+        out = self.relu(out)
+        out = self.conv3(out)
+        if (self.input_channels != self.output_channels) or (self.stride !=1 ):
+            residual = self.conv4(out1)
+        out += residual
         return out

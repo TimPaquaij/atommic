@@ -119,12 +119,12 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
             self.task_adaption_type ="multi_task_learning_softmax"
         if self.attention_module == "TaskAttentionModule":
             self.attention_module_block = torch.nn.ModuleList(
-            [TaskAttentionalModule(in_channels=cfg_dict.get("reconstruction_module_conv_filters")[0]) for _ in range(self.rs_cascades)
+            [TaskAttentionalModule(in_channels=cfg_dict.get("reconstruction_module_conv_filters")[0],kernel_size=self.attention_module_kernel_size,padding=self.attention_module_padding) for _ in range(self.rs_cascades)
             ]
         )
         if self.attention_module == "PropagationModule":
             self.attention_module_block = torch.nn.ModuleList(
-            [FeaturePropagationModule(num_tasks=2,per_task_channels=cfg_dict.get("reconstruction_module_conv_filters")[0])for _ in range(self.rs_cascades)
+            [FeaturePropagationModule(num_tasks=2,per_task_channels=cfg_dict.get("reconstruction_module_conv_filters")[0],channels_seg=self.segmentation_module_output_channels-1,kernel_size=self.attention_module_kernel_size,padding=self.attention_module_padding) for _ in range(self.rs_cascades)
             ]
         )
         if self.attention_module == "SemanticGuidanceModule":

@@ -5,7 +5,7 @@ mode: train
 model:
   model_name: MTLRS
   joint_reconstruction_segmentation_module_cascades: 1
-  task_adaption_type: multi_task_learning_softmax
+  task_adaption_type: multi_task_learning
   use_reconstruction_module: true
   reconstruction_module_recurrent_layer: IndRNN
   reconstruction_module_conv_filters:
@@ -56,9 +56,9 @@ model:
   segmentation_module_dropout: 0.0
   segmentation_loss:
     dice: 1.0
-  attention_module: SemanticGuidanceModule
-  attention_module_kernel_size: 1
-  attention_module_padding: 0
+  attention_module: TaskAttentionModule
+  attention_module_kernel_size: 3
+  attention_module_padding: 1
 
   dice_loss_include_background: true  # always set to true if the background is removed
   dice_loss_to_onehot_y: false
