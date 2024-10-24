@@ -24,18 +24,11 @@ class TaskAttentionalModule(nn.Module):
         res_block = torch.sigmoid(self.residual_block(balanced_output))
         # Generate gated features
         gated_rec_features = (1 + res_block) * reconstruction_features
-
+        gated_segmentation_features = (1 + res_block) * segmentation_features
         # Concatenate and apply convolutional layer
-        #concatenated_features = torch.cat((gated_depth_features, gated_segmentation_features), dim=1)
-        # output = self.fc(concatenated_features)
-        return gated_rec_features
-        out = self.res_block(x)
-        if (self.input_channels != self.output_channels) or (self.stride !=1 ):
-            x = self.conv4(out)
-        
-        out +=x
-
-        return out
+        concatenated_features = torch.cat((gated_rec_features, gated_segmentation_features), dim=1)
+        output = self.fc(concatenated_features)
+        return output
     
 
 class ResidualBlock(nn.Module):
