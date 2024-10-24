@@ -57,8 +57,8 @@ model:
   segmentation_loss:
     dice: 1.0
   attention_module: SemanticGuidanceModule
-  attention_module_kernel_size: 3
-  attention_module_padding: 1
+  attention_module_kernel_size: 1
+  attention_module_padding: 0
 
   dice_loss_include_background: true  # always set to true if the background is removed
   dice_loss_to_onehot_y: false

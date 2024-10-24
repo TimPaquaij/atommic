@@ -199,16 +199,16 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
             
             if self.task_adaption_type == "multi_task_learning_softmax":
                 if self.consecutive_slices > 1:
-                    pred_segmentation = torch.softmax(pred_segmentation, dim=2)
+                    pred_segmentation_soft = torch.softmax(pred_segmentation, dim=2)
                 else:
-                    pred_segmentation = torch.softmax(pred_segmentation, dim=1)
+                    pred_segmentation_soft = torch.softmax(pred_segmentation, dim=1)
                 if self.attention_module == "SemanticGuidanceModule":
-                    hidden_states = [pred_segmentation[:,1:] for _ in self.reconstruction_module_recurrent_filters]
+                    hidden_states = [pred_segmentation_soft[:,1:] for _ in self.reconstruction_module_recurrent_filters]
                 else:
                     hidden_states = [
                         torch.cat(
                             [torch.abs(init_reconstruction_pred.unsqueeze(
-                                self.coil_dim)) * torch.sum(pred_segmentation[..., 1:, :, :],dim=1,keepdim=True)]
+                                self.coil_dim)) * torch.sum(pred_segmentation_soft[..., 1:, :, :],dim=1,keepdim=True)]
                             * f ,
                             dim=self.coil_dim,
                         )
