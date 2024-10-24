@@ -170,7 +170,6 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
             Tuple containing the predicted reconstruction and segmentation.
         """
         pred_reconstructions = []
-        pred_segmentations = []
         for c,cascade in enumerate(self.rs_module):
             pred_reconstruction, pred_segmentation, hx = cascade(
                 y=y,
@@ -182,7 +181,6 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                 sigma=sigma,
             )
             pred_reconstructions.append(pred_reconstruction)
-            pred_segmentations.append(pred_segmentation)
             init_reconstruction_pred = pred_reconstruction[-1][-1]
 
             if self.task_adaption_type == "multi_task_learning":
@@ -204,7 +202,6 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                     pred_segmentation = torch.softmax(pred_segmentation, dim=2)
                 else:
                     pred_segmentation = torch.softmax(pred_segmentation, dim=1)
-                    #print(pred_segmentation.shape)
                 if self.attention_module == "SemanticGuidanceModule":
                     hidden_states = [pred_segmentation[:,1:] for _ in self.reconstruction_module_recurrent_filters]
                 else:
@@ -238,7 +235,7 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
 
             init_reconstruction_pred = torch.view_as_real(init_reconstruction_pred)
 
-        return pred_reconstructions, pred_segmentations
+        return pred_reconstructions, pred_segmentation
 
     def process_reconstruction_loss(  # noqa: MC0001
         self,
@@ -339,12 +336,12 @@ class MTLRS(BaseMRIReconstructionSegmentationModel):
                 cascades_weights = torch.logspace(-1, 0, steps=len(rs_cascade_pred)).to(target.device)
                 cascades_loss = []
                 for cascade_pred in rs_cascade_pred:
-                    time_steps_weights = torch.logspace(-1, 0, steps=self.time_steps).to(target.device)
+                    time_steps_weights = torch.logspace(-1, 0, steps=self.reconstruction_module_time_steps).to(target.device)
                     time_steps_loss = [
                         compute_reconstruction_loss(target, time_step_pred, sensitivity_maps)
                         for time_step_pred in cascade_pred
                     ]
-                    cascade_loss = sum(x * w for x, w in zip(time_steps_loss, time_steps_weights)) / self.time_steps
+                    cascade_loss = sum(x * w for x, w in zip(time_steps_loss, time_steps_weights)) / self.reconstruction_module_time_steps
                     cascades_loss.append(cascade_loss)
                 rs_cascade_loss = sum(x * w for x, w in zip(cascades_loss, cascades_weights)) / len(rs_cascade_pred)
                 rs_cascades_loss.append(rs_cascade_loss)

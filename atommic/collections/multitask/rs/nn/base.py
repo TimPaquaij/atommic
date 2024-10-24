@@ -640,8 +640,8 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             + self.total_reconstruction_loss_weight * reconstruction_loss
         )
 
-        if self.accumulate_predictions:
-            loss = sum(list(loss))
+        # if self.accumulate_predictions:  #remove accumulation needs to happen in process_reconstruction_loss
+        #     loss = sum(list(loss))
 
         return loss
 
