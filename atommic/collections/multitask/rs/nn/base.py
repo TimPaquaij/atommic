@@ -558,7 +558,7 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
                 # In case of the dice loss, the loss is a tuple of the form (dice, dice loss)
                 loss = loss[1]
             losses[name] = loss
-        return self.total_segmentation_loss(**losses) * self.total_segmentation_loss_weight
+        return self.total_segmentation_loss(**losses)  #Removed since weight is already applied in the combined loss function
 
     def __compute_loss__(
         self,
@@ -640,8 +640,8 @@ class BaseMRIReconstructionSegmentationModel(atommic_common.nn.base.BaseMRIModel
             + self.total_reconstruction_loss_weight * reconstruction_loss
         )
 
-        if self.accumulate_predictions:
-            loss = sum(list(loss))
+        # if self.accumulate_predictions:  #TODO: Remove accumulation better to apply in segmentation_loss and reconstruction_loss seperetly
+        #     loss = sum(list(loss))
 
         return loss
 

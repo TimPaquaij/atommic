@@ -225,8 +225,7 @@ class MRIDataset(Dataset):
         if num_cols and not utils.is_none(num_cols):
             self.examples = [ex for ex in self.examples if ex[2]["encoding_size"][1] in num_cols]
 
-        self.indices_to_log = np.random.choice(
-            len(self.examples), int(log_images_rate * len(self.examples)), replace=False  # type: ignore
+        self.indices_to_log = np.random.choice([example[1] for example in self.examples], int(log_images_rate * len(self.examples)), replace=False 
         )
 
     def _retrieve_metadata(self, fname: Union[str, Path]) -> Tuple[Dict, int]:
