@@ -236,9 +236,8 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             predictions = predictions[-1]
 
         # Add dummy dimensions to target and predictions for logging.
-        target = target.cpu().numpy()
-        predictions = predictions.cpu().numpy()
-        print(target.shape, predictions.shape)
+        target = target.detach().cpu()
+        predictions = predictions.detach().cpu()
 
         # Iterate over the batch and log the target and predictions.
         for _batch_idx_ in range(target.shape[0]):
@@ -248,7 +247,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             # Log target and predictions, if log_image is True for this slice.
             if attrs["log_image"][_batch_idx_]:
 
-                key = f"{fname[_batch_idx_]}-Acc={layout}"  # type: ignore
+                key = f"{fname[_batch_idx_]}-Acc={layout[_batch_idx_]}"  # type: ignore
                 self.log_image(f"{key}/target", output_target)
                 self.log_image(f"{key}/reconstruction", output_predictions)
                 self.log_image(f"{key}/error", torch.abs(output_target - output_predictions))
@@ -325,13 +324,13 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
 
     def inference_step(
         self,
-        measured_ecg,
+        measured_ecg: Union[List[torch.Tensor], torch.Tensor],
         mask: Union[List[torch.Tensor], torch.Tensor],
         target: torch.Tensor,
-        fname: str,
-        id: int,
-        layout: str,
-        attrs: Dict,
+        fname: Union[List[str], str],
+        id: Union[List[int], int],
+        layout: Union[List[str], str],
+        attrs: Union[List[Dict], Dict],
     ):
         """Performs an inference step, i.e., computes the predictions of the model.
 
@@ -391,6 +390,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
 
         # Forward pass
         predictions = self.forward(measured_ecg, mask)
+        print(fname)
 
         # Get acceleration factor from acceleration list, if multiple accelerations are used. Or if batch size > 1.
         return {
@@ -525,7 +525,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             sample["masked_waveform"],
             sample["mask"],
             sample["waveform"],
-            f"{str(sample['pseudoid'])}_{str(sample['testid'])}",  # type: ignore
+            sample["fname"],  # type: ignore
             sample["id"],  # type: ignore
             sample["layout"],
             sample["attrs"],  # type: ignore

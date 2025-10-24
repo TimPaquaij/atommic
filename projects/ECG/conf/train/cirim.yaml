@@ -8,7 +8,7 @@ model:
   conv_filters:
     - 64
     - 64
-    - 12
+    - 1
   conv_kernels:
     - 5
     - 3
@@ -39,7 +39,7 @@ model:
     - false
   depth: 2
   time_steps: 8
-  conv_dim: 1
+  conv_dim: 2
   num_cascades: 8
   no_dc: true
   keep_prediction: true

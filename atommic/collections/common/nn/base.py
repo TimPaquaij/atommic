@@ -17,7 +17,11 @@ from atommic.collections.common.parts.fft import ifft2
 from atommic.collections.reconstruction.nn.unet_base.unet_block import NormUnet
 from atommic.core.classes import modelPT
 from atommic.utils import model_utils
-from ecgxai.utils.
+import io
+from PIL import Image
+import numpy as np
+
+from ecgxai.utils.plot import plot_12lead_ecg
 
 wandb.require("service")
 
@@ -153,19 +157,25 @@ class BaseMRIModel(modelPT.ModelPT, ABC):
         """
         if image.dim() > 3:
             image = image[0, 0, :, :].unsqueeze(0)
-        elif image.shape[0] != 1:
-            image = image.unsqueeze(0)
-
+        elif image.shape[0] == 12:
+            fig, _ = plot_12lead_ecg(image.numpy(), layoutid="12x1")
+            # Convert Matplotlib figure to a PIL Image
+            buf = io.BytesIO()
+            fig.savefig(buf, format='png')
+            buf.seek(0)
+            image = Image.open(buf).convert("RGB").copy()  # <- fully load into memory
+            fig.clf()
+            buf.close()
         if ".h5" in name:
             name = name.replace(".h5", "")
 
         if "wandb" in self.logger.__module__.lower():
-            if image.is_cuda:
-                image = image.detach().cpu()
-            self.logger.experiment.log({name: wandb.Image(image.numpy())})
+            self.logger.experiment.log({name: wandb.Image(image)})
 
         if "tensorboard" in self.logger.__module__.lower():
-            self.logger.experiment.add_image(name, image, global_step=self.global_step)
+            if isinstance(image, Image.Image):
+                image_np = np.array(image).transpose(2, 0, 1)  # HWC -> CHW
+                self.logger.experiment.add_image(name, image_np, global_step=self.global_step)
 
     def on_validation_epoch_end(self):
         """Called at the end of validation epoch to aggregate outputs."""

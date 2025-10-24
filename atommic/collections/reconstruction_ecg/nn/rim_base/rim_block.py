@@ -82,7 +82,7 @@ class RIMBlock(torch.nn.Module):
         """
         super().__init__()
 
-        self.input_size = 12
+        self.input_size = 1
         self.time_steps = time_steps
 
         self.layers = torch.nn.ModuleList()
@@ -177,16 +177,16 @@ class RIMBlock(torch.nn.Module):
         """
         if hx is None or (not isinstance(hx, list) and hx.dim() < 3):
             hx = [
-                prediction.new_zeros((prediction.size(0), f, prediction.size()[-1]))
+                prediction.new_zeros((prediction.size(0), f, *prediction.size()[1:]))
                 for f in self.recurrent_filters
                 if f != 0
             ]
         predictions = []
         for _ in range(self.time_steps):
             log_likelihood_gradient_prediction = rim_utils.log_likelihood_gradient_ecg(
-                prediction,
-                measured_ecg,
-                mask,
+                prediction.unsqueeze(1),
+                measured_ecg.unsqueeze(1),
+                mask.unsqueeze(1),
                 sigma,
             ).contiguous()
 
@@ -195,7 +195,8 @@ class RIMBlock(torch.nn.Module):
                 log_likelihood_gradient_prediction = hx[h]
 
             log_likelihood_gradient_prediction = self.final_layer(log_likelihood_gradient_prediction)
-            prediction = prediction + log_likelihood_gradient_prediction
+            prediction = prediction.unsqueeze(1) + log_likelihood_gradient_prediction
+            prediction = prediction.squeeze(1)
             predictions.append(prediction)
 
         return predictions, hx
