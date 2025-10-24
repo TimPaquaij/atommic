@@ -32,6 +32,7 @@ from atommic.collections.reconstruction.nn.varnet import VarNet
 from atommic.collections.reconstruction.nn.vsnet import VSNet
 from atommic.collections.reconstruction.nn.xpdnet import XPDNet
 from atommic.collections.reconstruction.nn.zf import ZF
+from atommic.collections.reconstruction_ecg.nn.cirim import CIRIMECG
 from atommic.collections.segmentation.nn.attentionunet import SegmentationAttentionUNet
 from atommic.collections.segmentation.nn.dynunet import SegmentationDYNUNet
 from atommic.collections.segmentation.nn.lambdaunet import SegmentationLambdaUNet
@@ -89,6 +90,8 @@ def main(cfg: DictConfig):  # noqa: MC0001
         model = CascadeNet(cfg.model, trainer=trainer)
     elif model_name == "CIRIM":
         model = CIRIM(cfg.model, trainer=trainer)
+    elif model_name == "CIRIMECG":
+        model = CIRIMECG(cfg.model, trainer=trainer)
     elif model_name == "CRNNET":
         model = CRNNet(cfg.model, trainer=trainer)
     elif model_name == "DUNET":
