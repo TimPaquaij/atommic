@@ -49,7 +49,9 @@ class MaskFunc:
     (0.08, 4)
     """
 
-    def __init__(self, center_fractions: Sequence[float], accelerations: Sequence[int]):
+    def __init__(
+        self, center_fractions: Optional[Sequence[float]] = None, accelerations: Optional[Sequence[int]] = None
+    ):
         """Inits :class:`MaskFunc`.
 
         Parameters
@@ -96,9 +98,18 @@ class MaskFunc:
         Tuple[float, int]
             A tuple of the center fraction and the acceleration factor.
         """
-        choice = self.rng.randint(0, len(self.accelerations))
-        center_fraction = self.center_fractions[choice]
-        acceleration = self.accelerations[choice]
+
+        if self.accelerations:
+            choice = self.rng.randint(0, len(self.accelerations))
+            acceleration = self.accelerations[choice]
+            if self.center_fractions:
+                center_fraction = self.center_fractions[choice]
+            else:
+                center_fraction = self.center_fractions
+        else:
+            center_fraction = self.center_fractions
+            acceleration = self.accelerations
+
         return center_fraction, acceleration
 
 
@@ -861,8 +872,78 @@ class Random1DMaskFunc(MaskFunc):
         return mask, acceleration
 
 
+class LayoutMaskFunc(MaskFunc):
+    r"""Random1DMaskFunc creates a sub-sampling mask of a given shape.
+
+    The mask selects a subset of columns from the input k-space data. If the k-space data has N columns, the mask
+    picks out:
+
+        1. N_low_freqs = (N * center_fraction) columns in the center corresponding to low-frequencies.
+
+        2. The other columns are selected uniformly at random with a probability equal to:
+        prob = (N / acceleration - N_low_freqs) /  (N - N_low_freqs). This ensures that the expected number of columns
+        selected is equal to (N / acceleration).
+
+    It is possible to use multiple center_fractions and accelerations, in which case one possible (center_fraction,
+    acceleration) is chosen uniformly at random each time the Random1DMaskFunc object is called.
+
+    For example, if accelerations = [4, 8] and center_fractions = [0.08, 0.04], then there is a 50% probability that
+    4-fold acceleration with 8% center fraction is selected and a 50% probability that 8-fold acceleration with 4%
+    center fraction is selected.
+    """
+
+    def __call__(
+        self,
+        shape: Sequence[int],
+        seed: Optional[Union[int, Tuple[int, ...]]] = None,
+        **kwargs,
+    ) -> Tuple[torch.Tensor, int]:
+        """Calls :class:`Random1DMaskFunc`.
+
+        Parameters
+        ----------
+        shape : Sequence[int]
+            The shape of the mask to be created. The shape should have at least 3 dimensions. Same as the shape of the
+            input k-space data.
+        seed : int or tuple of ints, optional
+            Seed for the random number generator. Default is ``None``.
+        partial_fourier_percentage : float, optional
+            Percentage of the low-frequency columns to be retained. Default is ``0.0``.
+
+        Returns
+        -------
+        Tuple[torch.Tensor, int]
+            A tuple of the generated mask and the acceleration factor.
+
+        Raises
+        ------
+        ValueError
+            If the `shape` parameter has less than 3 dimensions.
+        """
+        if len(shape) < 2:
+            raise ValueError("Shape should have 2 or more dimensions")
+
+        with temp_seed(self.rng, seed):
+            _, acceleration = self.choose_acceleration()
+            mask = torch.zeros(size=(shape[0], shape[1]))
+            if "6x2":
+                mask[: int(shape[0] / 2), : int(shape[1] / 2) + 1] = 1
+                mask[int(shape[0] / 2) :, int(shape[1] / 2) + 1 :] = 1
+            if "3x4":
+                mask[: int(shape[0] / 4), : int(shape[1] / 4) + 1] = 1
+                mask[int(shape[0] / 4) : int(shape[0] / 2), int(shape[1] / 4) + 1 : int(shape[1] / 2) + 1] = 1
+                mask[
+                    int(shape[0] / 2) : int(3 * shape[0] / 4), int((shape[1] / 2)) + 1 : int(3 * shape[1] / 4) + 1
+                ] = 1
+                mask[int(3 * shape[0] / 4) :, int(3 * shape[1] / 4) + 1 :] = 1
+
+        return mask, acceleration
+
+
 def create_masker(
-    mask_type_str: str, center_fractions: Union[Sequence[float], float], accelerations: Union[Sequence[int], int]
+    mask_type_str: str,
+    center_fractions: Optional[Union[Sequence[float], float]] = None,
+    accelerations: Optional[Union[Sequence[int], int]] = None,
 ) -> MaskFunc:
     """Creates a MaskFunc object based on the specified mask type.
 
@@ -916,4 +997,6 @@ def create_masker(
         return Gaussian2DMaskFunc(center_fractions, accelerations)
     if mask_type_str == "poisson2d":
         return Poisson2DMaskFunc(center_fractions, accelerations)
+    if mask_type_str == "layouts":
+        return LayoutMaskFunc(center_fractions=center_fractions, accelerations=accelerations)
     raise NotImplementedError(f"{mask_type_str} not supported")

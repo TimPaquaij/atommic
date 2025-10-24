@@ -230,36 +230,48 @@ class BaseMRIReconstructionModel(BaseMRIModel, ABC):
             target = unnormalize(
                 target,
                 {
-                    "min": attrs["prediction_min"][batch_idx]
-                    if "prediction_min" in attrs
-                    else attrs[f"prediction_min_{r}"][batch_idx],
-                    "max": attrs["prediction_max"][batch_idx]
-                    if "prediction_max" in attrs
-                    else attrs[f"prediction_max_{r}"][batch_idx],
-                    "mean": attrs["prediction_mean"][batch_idx]
-                    if "prediction_mean" in attrs
-                    else attrs[f"prediction_mean_{r}"][batch_idx],
-                    "std": attrs["prediction_std"][batch_idx]
-                    if "prediction_std" in attrs
-                    else attrs[f"prediction_std_{r}"][batch_idx],
+                    "min": (
+                        attrs["prediction_min"][batch_idx]
+                        if "prediction_min" in attrs
+                        else attrs[f"prediction_min_{r}"][batch_idx]
+                    ),
+                    "max": (
+                        attrs["prediction_max"][batch_idx]
+                        if "prediction_max" in attrs
+                        else attrs[f"prediction_max_{r}"][batch_idx]
+                    ),
+                    "mean": (
+                        attrs["prediction_mean"][batch_idx]
+                        if "prediction_mean" in attrs
+                        else attrs[f"prediction_mean_{r}"][batch_idx]
+                    ),
+                    "std": (
+                        attrs["prediction_std"][batch_idx]
+                        if "prediction_std" in attrs
+                        else attrs[f"prediction_std_{r}"][batch_idx]
+                    ),
                 },
                 self.normalization_type,
             )
             prediction = unnormalize(
                 prediction,
                 {
-                    "min": attrs["noise_prediction_min"][batch_idx]
-                    if "noise_prediction_min" in attrs
-                    else attrs[f"noise_prediction_min_{r}"][batch_idx],
-                    "max": attrs["noise_prediction_max"][batch_idx]
-                    if "noise_prediction_max" in attrs
-                    else attrs[f"noise_prediction_max_{r}"][batch_idx],
-                    attrs["noise_prediction_mean"][batch_idx]
-                    if "noise_prediction_mean" in attrs
-                    else "mean": attrs[f"noise_prediction_mean_{r}"][batch_idx],
-                    attrs["noise_prediction_std"][batch_idx]
-                    if "noise_prediction_std" in attrs
-                    else "std": attrs[f"noise_prediction_std_{r}"][batch_idx],
+                    "min": (
+                        attrs["noise_prediction_min"][batch_idx]
+                        if "noise_prediction_min" in attrs
+                        else attrs[f"noise_prediction_min_{r}"][batch_idx]
+                    ),
+                    "max": (
+                        attrs["noise_prediction_max"][batch_idx]
+                        if "noise_prediction_max" in attrs
+                        else attrs[f"noise_prediction_max_{r}"][batch_idx]
+                    ),
+                    attrs["noise_prediction_mean"][batch_idx] if "noise_prediction_mean" in attrs else "mean": attrs[
+                        f"noise_prediction_mean_{r}"
+                    ][batch_idx],
+                    attrs["noise_prediction_std"][batch_idx] if "noise_prediction_std" in attrs else "std": attrs[
+                        f"noise_prediction_std_{r}"
+                    ][batch_idx],
                 },
                 self.normalization_type,
             )

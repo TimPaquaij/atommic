@@ -45,7 +45,6 @@ class CIRIMECG(BaseECGReconstructionModel):
 
         # make time-steps size divisible by 8 for fast fp16 training
         self.time_steps = 8 * math.ceil(cfg_dict.get("time_steps") / 8)
-        self.no_dc = cfg_dict.get("no_dc")
         self.reconstruction_module = torch.nn.ModuleList(
             [
                 RIMBlock(
@@ -61,13 +60,6 @@ class CIRIMECG(BaseECGReconstructionModel):
                     depth=cfg_dict.get("depth"),
                     time_steps=self.time_steps,
                     conv_dim=cfg_dict.get("conv_dim"),
-                    no_dc=self.no_dc,
-                    fft_centered=self.fft_centered,
-                    fft_normalization=self.fft_normalization,
-                    spatial_dims=self.spatial_dims,
-                    coil_dim=self.coil_dim,
-                    dimensionality=cfg_dict.get("dimensionality"),
-                    coil_combination_method=self.coil_combination_method,
                 )
                 for _ in range(cfg_dict.get("num_cascades"))
             ]
@@ -100,9 +92,10 @@ class CIRIMECG(BaseECGReconstructionModel):
         List of torch.Tensor
             List of the intermediate predictions for each cascade. Shape [batch_size, n_x, n_y].
         """
-        prediction = measured_ecg.copy()
+        prediction = measured_ecg.clone()
         hx = None
         cascades_predictions = []
+        print(prediction.shape)
         for i, cascade in enumerate(self.reconstruction_module):
             # Forward pass through the cascades
             prediction, hx = cascade(

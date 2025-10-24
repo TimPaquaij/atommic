@@ -28,4 +28,4 @@ def log_likelihood_gradient_ecg(
     gradient = residual / (sigma**2)
 
     # Return prediction + gradient for iterative methods
-    return torch.cat((prediction, gradient), dim=-1)
+    return gradient

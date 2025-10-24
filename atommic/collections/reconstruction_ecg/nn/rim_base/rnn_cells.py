@@ -384,8 +384,11 @@ class IndRNNCellBase(nn.Module):
             dilation=dilation,
             bias=bias,
         )
-
-        if self.conv_dim == 2:
+        if self.conv_dim == 1:
+            self.hh = nn.Parameter(
+                nn.init.normal_(torch.empty(1, hidden_size, 1), std=1.0 / (hidden_size * (1 + kernel_size**2)))
+            )
+        elif self.conv_dim == 2:
             self.hh = nn.Parameter(
                 nn.init.normal_(torch.empty(1, hidden_size, 1, 1), std=1.0 / (hidden_size * (1 + kernel_size**2)))
             )

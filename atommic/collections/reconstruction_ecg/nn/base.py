@@ -7,13 +7,14 @@ from abc import ABC
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Tuple, Union
-
+import pandas as pd
 import h5py
 import numpy as np
 import torch
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import Trainer
 from torch.nn import L1Loss, MSELoss
+from torchvision.transforms import Compose
 from torch.utils.data import DataLoader
 from atommic.collections.common.data.subsample import create_masker
 from atommic.collections.common.losses import VALID_RECONSTRUCTION_LOSSES, AggregatorLoss, SinkhornDistance
@@ -29,7 +30,7 @@ from atommic.collections.common.parts.utils import (
     unnormalize,
 )
 from ecgxai.utils.dataset import UniversalECGDataset
-from ecgxai.utils.transforms import ToTensor, ApplyGain, To12Lead, Resample, PolyFilter, ButterFilter
+from ecgxai.utils.transforms import ToTensor, ApplyGain, To12Lead, Resample, PolyFilter, ButterFilter, Masker
 from atommic.collections.reconstruction_ecg.losses.na import NoiseAwareLoss
 from atommic.collections.reconstruction_ecg.losses.ssim import SSIMLoss
 from atommic.collections.reconstruction_ecg.metrics.reconstruction_metrics import mse, nmse, psnr, ssim
@@ -169,13 +170,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
 
         return compute_reconstruction_loss(target, prediction)
 
-    def __compute_loss__(
-        self,
-        target: torch.Tensor,
-        predictions: Union[list, torch.Tensor],
-        attrs: Union[Dict, torch.Tensor],
-        r: Union[int, torch.Tensor],
-    ) -> torch.Tensor:
+    def __compute_loss__(self, target: torch.Tensor, predictions: Union[list, torch.Tensor]) -> torch.Tensor:
         """Computes the reconstruction loss.
 
         Parameters
@@ -205,9 +200,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         weight = 1.0
         losses = {}
         for name, loss_func in self.reconstruction_losses.items():
-            losses[name] = (
-                self.process_reconstruction_loss(target, predictions, attrs, r, loss_func=loss_func) * weight
-            )
+            losses[name] = self.process_reconstruction_loss(target, predictions, loss_func) * weight
         return self.total_reconstruction_loss(**losses) * self.total_reconstruction_loss_weight
 
     def __compute_and_log_metrics_and_outputs__(
@@ -215,10 +208,9 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         target: torch.Tensor,
         predictions: Union[List[List[torch.Tensor]], List[torch.Tensor], torch.Tensor],
         attrs: Union[Dict, torch.Tensor],
-        r: Union[int, torch.Tensor],
         fname: Union[str, torch.Tensor],
         slice_idx: Union[int, torch.Tensor],
-        acceleration: Union[float, torch.Tensor],
+        layout: Union[float, torch.Tensor],
     ):
         """Computes the metrics and logs the outputs.
 
@@ -243,46 +235,25 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         while isinstance(predictions, list):
             predictions = predictions[-1]
 
-
         # Add dummy dimensions to target and predictions for logging.
-        target = target.unsqueeze(1)
-        predictions = predictions.unsqueeze(1)
+        target = target.cpu().numpy()
+        predictions = predictions.cpu().numpy()
+        print(target.shape, predictions.shape)
 
         # Iterate over the batch and log the target and predictions.
         for _batch_idx_ in range(target.shape[0]):
             output_target = target[_batch_idx_]
             output_predictions = predictions[_batch_idx_]
 
-            # Normalize target and predictions to [0, 1] for logging.
-            if torch.is_complex(output_target) and output_target.shape[-1] != 2:
-                output_target = torch.view_as_real(output_target)
-            if output_target.shape[-1] == 2:
-                output_target = torch.view_as_complex(output_target)
-            output_target = torch.abs(output_target / torch.max(torch.abs(output_target))).detach().cpu()
-
-            if torch.is_complex(output_predictions) and output_predictions.shape[-1] != 2:
-                output_predictions = torch.view_as_real(output_predictions)
-            if output_predictions.shape[-1] == 2:
-                output_predictions = torch.view_as_complex(output_predictions)
-            output_predictions = (
-                torch.abs(output_predictions / torch.max(torch.abs(output_predictions))).detach().cpu()
-            )
-
             # Log target and predictions, if log_image is True for this slice.
             if attrs["log_image"][_batch_idx_]:
-                # if consecutive slices, select the middle slice
-                if self.consecutive_slices > 1:
-                    output_target = output_target[self.consecutive_slices // 2]
-                    output_predictions = output_predictions[self.consecutive_slices // 2]
 
-                key = f"{fname[_batch_idx_]}_slice_{int(slice_idx[_batch_idx_])}-Acc={acceleration}x"  # type: ignore
+                key = f"{fname[_batch_idx_]}-Acc={layout}"  # type: ignore
                 self.log_image(f"{key}/target", output_target)
                 self.log_image(f"{key}/reconstruction", output_predictions)
                 self.log_image(f"{key}/error", torch.abs(output_target - output_predictions))
 
             # Compute metrics and log them.
-            output_target = output_target.numpy()
-            output_predictions = output_predictions.numpy()
             self.mse_vals[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(  # type: ignore
                 mse(output_target, output_predictions)
             ).view(1)
@@ -358,8 +329,8 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         mask: Union[List[torch.Tensor], torch.Tensor],
         target: torch.Tensor,
         fname: str,
-        slice_idx: int,
-        acceleration: float,
+        id: int,
+        layout: str,
         attrs: Dict,
     ):
         """Performs an inference step, i.e., computes the predictions of the model.
@@ -417,30 +388,18 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                 'r' : int
                     Random index used for selected acceleration.
         """
-        # Process inputs to randomly select one acceleration factor, in case multiple accelerations are used.
-        measured_ecg, mask, target, r = self.__process_inputs__(measured_ecg, mask, target)
 
         # Forward pass
-        predictions = self.forward(measured_ecg, mask, attrs["noise"])
+        predictions = self.forward(measured_ecg, mask)
 
         # Get acceleration factor from acceleration list, if multiple accelerations are used. Or if batch size > 1.
-        if isinstance(acceleration, list):
-            if acceleration[0].shape[0] > 1:
-                acceleration[0] = acceleration[0][0]
-            acceleration = np.round(acceleration[r].item())
-        else:
-            if acceleration.shape[0] > 1:  # type: ignore
-                acceleration = acceleration[0]  # type: ignore
-            acceleration = np.round(acceleration.item())  # type: ignore
-
         return {
             "fname": fname,
-            "slice_idx": slice_idx,
-            "acceleration": acceleration,
+            "id": id,
+            "layout": layout,
             "predictions": predictions,
             "target": target,
             "attrs": attrs,
-            "r": r,
         }
 
     def training_step(self, batch: Dict[float, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
@@ -561,44 +520,31 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         batch_idx : int
             Batch index.
         """
-        measured_ecg, mask, target, fname, slice_idx, acceleration, attrs = batch
-
+        sample = batch
         outputs = self.inference_step(
-            measured_ecg,
-            mask,
-            target,
-            fname,  # type: ignore
-            slice_idx,  # type: ignore
-            acceleration,
-            attrs,  # type: ignore
+            sample["masked_waveform"],
+            sample["mask"],
+            sample["waveform"],
+            f"{str(sample['pseudoid'])}_{str(sample['testid'])}",  # type: ignore
+            sample["id"],  # type: ignore
+            sample["layout"],
+            sample["attrs"],  # type: ignore
         )
-
-        fname = outputs["fname"]
-        slice_idx = outputs["slice_idx"]
-        acceleration = outputs["acceleration"]
         target = outputs["target"]
         predictions = outputs["predictions"]
-        attrs = outputs["attrs"]
-        r = outputs["r"]
 
         # Compute loss
-        val_loss = self.__compute_loss__(
-            target,
-            predictions,
-            attrs,
-            r,
-        )
+        val_loss = self.__compute_loss__(target, predictions)
         self.validation_step_outputs.append({"val_loss": val_loss})
 
         # Compute metrics and log them and log outputs.
         self.__compute_and_log_metrics_and_outputs__(
             target,
             predictions,
-            attrs,
-            r,
-            fname,
-            slice_idx,
-            acceleration,
+            outputs["attrs"],
+            outputs["fname"],
+            outputs["id"],
+            outputs["layout"],
         )
 
     def test_step(self, batch: Dict[float, torch.Tensor], batch_idx: int):
@@ -820,34 +766,36 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         mask_func = None
         mask_center_scale = 0.02
 
-        if is_none(mask_root) and not is_none(mask_type):
-            accelerations = mask_args.get("accelerations", [1])
-            accelerations = list(accelerations)
-            if len(accelerations) == 1:
-                accelerations = accelerations * 2
-            center_fractions = mask_args.get("center_fractions", [1])
-            center_fractions = list(center_fractions)
-            if len(center_fractions) == 1:
-                center_fractions = center_fractions * 2
-            mask_center_scale = mask_args.get("center_scale", 0.02)
-
-            mask_func = [create_masker(mask_type, center_fractions, accelerations)]
+        accelerations = mask_args.get("accelerations", [1])
+        mask_func = [create_masker(mask_type_str=mask_type, accelerations=accelerations)]
 
         dataset_format = cfg.get("dataset_format", None)
-        if "UniversalECGDataset":
+        if dataset_format == "UniversalECGDataset":
             dataloader = UniversalECGDataset
-        transforms = [ApplyGain(),To12Lead(),ToTensor()]
+
+        transform = cfg.get("transforms", None)
+        transforms = []
+        if transform:
+            for key, value in transform.items():
+                if key.lower() == "applygain":
+                    transforms.append(ApplyGain())
+                if key.lower() == "resample":
+                    transforms.append(Resample(value[0]))
+                if key.lower() == "totensor":
+                    transforms.append(ToTensor())
+            transforms.append(To12Lead())
+            transforms.append(Masker(mask_func))
 
         # Get dataset.
         dataset = dataloader(
-            datasset_function = cfg.get("dadataset_function"),
-            waveform_dir = cfg.get("waveform_dir")
-            dataset = cfg.get("waveform_dir"),
-            transform= transforms,
-            labels=cfg.get("labels")
-            secondary_waveform_dir = cfg.get("secondary_waveform_dir")
-            additional_dataset_function = cfg.get("additional_dataset_function")
-            ),
+            dataset_function=cfg.get("dataset_function"),
+            waveform_dir=cfg.get("waveform_dir"),
+            dataset=pd.read_csv((cfg.get("dataset"))),
+            transform=Compose(transforms),
+            labels=cfg.get("labels", None),
+            secondary_waveform_dir=cfg.get("secondary_waveform_dir", ""),
+            additional_dataset_function=cfg.get("additional_dataset_function", None),
+        )
         if cfg.shuffle:
             sampler = torch.utils.data.RandomSampler(dataset)
         else:

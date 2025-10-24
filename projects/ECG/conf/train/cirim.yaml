@@ -8,7 +8,7 @@ model:
   conv_filters:
     - 64
     - 64
-    - 2
+    - 12
   conv_kernels:
     - 5
     - 3
@@ -39,13 +39,14 @@ model:
     - false
   depth: 2
   time_steps: 8
-  conv_dim: 2
+  conv_dim: 1
   num_cascades: 8
   no_dc: true
   keep_prediction: true
   accumulate_predictions: true
   dimensionality: 2
-  reconstruction_loss: l1
+  reconstruction_loss: 
+    l1: 1
   normalization_type: max
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
@@ -64,22 +65,51 @@ model:
   estimate_coil_sensitivity_maps_with_nn: false
   consecutive_slices: 1
 
-  dataset:
-    data_path: .csv
+  train_ds:
+    dataset_format: UniversalECGDataset
+    dataset_function: umcu
+    waveform_dir: /home/jovyan/work/raw_data/umcu_rhythm
+    dataset: /home/jovyan/work/training/ECGDigitization/dataset/ECGnet_digitization_train_dataset.csv
+    transforms:
+      applygain: true
+      resample:
+        - 500
+      totensor: true
     mask_args:
-      type: poisson2d  # the mask will be loaded from the dataset, but we need to specify the type here
+      type: layouts  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
-        - 4  # 4, 6, 8, 10, 12, 16
-        - 6  # 4, 6, 8, 10, 12, 16
-        - 8  # 4, 6, 8, 10, 12, 16
-        - 10  # 4, 6, 8, 10, 12, 16
-        - 12  # 4, 6, 8, 10, 12, 16
-        - 16  # 4, 6, 8, 10, 12, 16
+        - "3x4"
+        - "6x2"  
+        - "3x4_1"
       shift_mask: false
       use_seed: false
     use_seed: false
-    batch_size: 1
+    batch_size: 10
     shuffle: true
+    num_workers: 8
+    pin_memory: false
+    drop_last: false
+
+  validation_ds:
+    dataset_format: UniversalECGDataset
+    dataset_function: umcu
+    waveform_dir: /home/jovyan/work/raw_data/umcu_rhythm
+    dataset: /home/jovyan/work/training/ECGDigitization/dataset/ECGnet_digitization_val_dataset.csv
+    transforms:
+      applygain: true
+      resample:
+        - 500
+      totensor: true
+    mask_args:
+      type: layouts  # the mask will be loaded from the dataset, but we need to specify the type here
+      accelerations:
+        - "3x4"
+        - "6x2"
+      shift_mask: false
+      use_seed: false
+    use_seed: false
+    batch_size: 10
+    shuffle: False
     num_workers: 8
     pin_memory: false
     drop_last: false
@@ -111,10 +141,10 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: output_dir/atommic/reconstruction/trained_models/SKM-TEA_poisson2d_4x_6x_8x_10x_12x_16x/CIRIM/
+  exp_dir: Results/CIRIMECG/
   ema:
     enable: false
   create_tensorboard_logger: true
   create_wandb_logger: false
   wandb_logger_kwargs:
-    project: atommic.reconstruction.trained_models.SKM-TEA_poisson2d_4x_6x_8x_10x_12x_16x
+    project: atommic.reconstruction.ECG

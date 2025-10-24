@@ -7,7 +7,7 @@ import torch
 
 from atommic.collections.common.parts.fft import fft2, ifft2
 from atommic.collections.common.parts.utils import coil_combination_method, complex_mul
-from atommic.collections.reconstruction.nn.rim_base import conv_layers, rim_utils, rnn_cells
+from atommic.collections.reconstruction_ecg.nn.rim_base import conv_layers, rim_utils, rnn_cells
 
 
 class RIMBlock(torch.nn.Module):
@@ -34,14 +34,6 @@ class RIMBlock(torch.nn.Module):
         depth: int = 2,
         time_steps: int = 8,
         conv_dim: int = 2,
-        no_dc: bool = True,
-        fft_centered: bool = False,
-        fft_normalization: str = "backward",
-        spatial_dims: Optional[Tuple[int, int]] = None,
-        coil_dim: int = 1,
-        dimensionality: int = 2,
-        consecutive_slices: int = 1,
-        coil_combination_method: str = "SENSE",
     ):
         """Inits :class:`RIMBlock`.
 
@@ -90,7 +82,7 @@ class RIMBlock(torch.nn.Module):
         """
         super().__init__()
 
-        self.input_size = depth * 2
+        self.input_size = 12
         self.time_steps = time_steps
 
         self.layers = torch.nn.ModuleList()
@@ -148,21 +140,6 @@ class RIMBlock(torch.nn.Module):
 
         self.recurrent_filters = recurrent_filters
 
-        self.fft_centered = fft_centered
-        self.fft_normalization = fft_normalization
-        self.spatial_dims = spatial_dims if spatial_dims is not None else [-2, -1]
-        self.coil_dim = coil_dim
-
-        self.no_dc = no_dc
-
-        if not self.no_dc:
-            self.dc_weight = torch.nn.Parameter(torch.ones(1))
-            self.zero = torch.zeros(1, 1, 1, 1, 1)
-
-        self.dimensionality = dimensionality
-        self.consecutive_slices = consecutive_slices
-        self.coil_combination_method = coil_combination_method
-
     def forward(
         self,
         prediction: torch.Tensor,
@@ -200,13 +177,13 @@ class RIMBlock(torch.nn.Module):
         """
         if hx is None or (not isinstance(hx, list) and hx.dim() < 3):
             hx = [
-                prediction.new_zeros((prediction.size(0), f, *prediction.size()[2:-1]))
+                prediction.new_zeros((prediction.size(0), f, prediction.size()[-1]))
                 for f in self.recurrent_filters
                 if f != 0
             ]
         predictions = []
         for _ in range(self.time_steps):
-            log_likelihood_gradient_prediction = rim_utils.log_likelihood_gradient(
+            log_likelihood_gradient_prediction = rim_utils.log_likelihood_gradient_ecg(
                 prediction,
                 measured_ecg,
                 mask,
@@ -218,16 +195,7 @@ class RIMBlock(torch.nn.Module):
                 log_likelihood_gradient_prediction = hx[h]
 
             log_likelihood_gradient_prediction = self.final_layer(log_likelihood_gradient_prediction)
-
-            if self.dimensionality == 2:
-                log_likelihood_gradient_prediction = log_likelihood_gradient_prediction.permute(0, 2, 3, 1)
-            elif self.dimensionality == 3:
-                log_likelihood_gradient_prediction = log_likelihood_gradient_prediction.permute(1, 2, 3, 0)
-                for h in range(len(hx)):  # pylint: disable=consider-using-enumerate
-                    hx[h] = hx[h].permute(1, 0, 2, 3)
-
             prediction = prediction + log_likelihood_gradient_prediction
             predictions.append(prediction)
 
-        if self.no_dc:
-            return predictions, hx
+        return predictions, hx
