@@ -5,11 +5,11 @@ mode: train
 model:
   model_name: CIRIMECG
   recurrent_layer: IndRNN
-  input_channels: 2 # liklihood and prediction]
+  input_channels: 24 # liklihood and prediction
   conv_filters:
-    - 32
     - 64
-    - 1
+    - 64
+    - 12
   conv_kernels:
     - 5
     - 3
@@ -23,7 +23,7 @@ model:
     - true
     - false
   recurrent_filters:
-    - 32
+    - 64
     - 64
     - 0
   recurrent_kernels:
@@ -40,7 +40,7 @@ model:
     - false
   depth: 2
   time_steps: 8
-  conv_dim: 2
+  conv_dim: 1
   num_cascades: 3
   no_dc: true
   keep_prediction: true
@@ -134,7 +134,7 @@ model:
 trainer:
   strategy: auto
   accelerator: gpu
-  devices: [0]
+  devices: [1]
   num_nodes: 1
   max_epochs: 50
   precision: 32
