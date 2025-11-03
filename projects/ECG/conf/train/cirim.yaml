@@ -5,7 +5,7 @@ mode: train
 model:
   model_name: CIRIMECG
   recurrent_layer: IndRNN
-  input_channels: 2 # liklihood and prediction]
+  input_channels: 2 # liklihood and prediction since 2D conv a spatial dim is added
   conv_filters:
     - 32
     - 64
@@ -77,6 +77,8 @@ model:
         - 500
       totensor: true
       to12lead: true
+    normalization:
+        type: zscore
     mask_args:
       type: layouts  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
@@ -103,6 +105,8 @@ model:
         - 500
       totensor: true
       to12lead: true
+      normalization:
+        type: zscore
     mask_args:
       type: layouts  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:

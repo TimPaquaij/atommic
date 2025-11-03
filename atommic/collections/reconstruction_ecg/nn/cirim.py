@@ -116,6 +116,7 @@ class CIRIMECG(BaseECGReconstructionModel):
         prediction: Union[List[List[torch.Tensor]], List[torch.Tensor], torch.Tensor],
         mask: torch.Tensor,
         loss_func: torch.nn.Module,
+        attrs: Dict,
     ) -> torch.Tensor:
         """Processes the reconstruction loss for the CIRIM model. It differs from the base class in that it can handle
         multiple cascades and time steps.
@@ -147,7 +148,11 @@ class CIRIMECG(BaseECGReconstructionModel):
             Otherwise, returns the loss of the last intermediate loss.
         """
 
-        def compute_reconstruction_loss(t, p):
+        def compute_reconstruction_loss(t, p, attrs):
+            if self.unnormalize_loss_inputs:
+                # we do the unnormalization here to avoid explicitly iterating through list of predictions, which
+                # might be a list of lists.
+                t, p = self.__unnormalize_for_loss_or_log__(t, p, attrs)
 
             if "ssim" in str(loss_func).lower():
                 return loss_func(
@@ -176,6 +181,6 @@ class CIRIMECG(BaseECGReconstructionModel):
         else:
             # keep the last prediction of the last cascade
             prediction = prediction[-1][-1]
-            loss = compute_reconstruction_loss(target, prediction)
+            loss = compute_reconstruction_loss(target, prediction, attrs)
 
         return loss

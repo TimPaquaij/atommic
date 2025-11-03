@@ -5,7 +5,7 @@ mode: train
 model:
   model_name: CIRIMECG
   recurrent_layer: IndRNN
-  input_channels: 24 # liklihood and prediction
+  input_channels: 24 # liklihood and prediction 1D so leads are features
   conv_filters:
     - 64
     - 64
@@ -49,8 +49,8 @@ model:
   reconstruction_loss:
     l1: 1
   normalization_type: zscore  # none, zscore, minmax
-  unnormalize_loss_inputs: false
-  unnormalize_log_outputs: false
+  unnormalize_loss_inputs: true
+  unnormalize_log_outputs: true
   kspace_reconstruction_loss: false
   total_reconstruction_loss_weight: 100
   complex_valued_type: stacked  # stacked, complex_abs, complex_sqrt_abs
@@ -77,6 +77,8 @@ model:
         - 500
       totensor: true
       to12lead: true
+      normalization:
+        - zscore
     mask_args:
       type: layouts  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
@@ -84,6 +86,7 @@ model:
         - "3x4"
       shift_mask: false
       use_seed: false
+    normalization_type: zscore
     use_seed: false
     dataset_number_of_examples: 100000
     batch_size: 25
@@ -110,6 +113,7 @@ model:
         - "3x4"
       shift_mask: false
       use_seed: false
+    normalization_type: zscore
     use_seed: false
     dataset_number_of_examples: 100
     batch_size: 10

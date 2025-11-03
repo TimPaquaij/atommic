@@ -1090,6 +1090,57 @@ def unnormalize(x: torch.Tensor, attrs: Dict, normalization_type: str = "max") -
     return x
 
 
+def unnormalize_ECG(
+    x: torch.Tensor,
+    attrs: Dict[str, torch.Tensor],
+    normalization_type: str = "zscore",
+    eps: float = 1e-8,
+) -> torch.Tensor:
+    """
+    Unnormalize ECG waveform data using stored per-lead statistics.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Normalized ECG data of shape (batch, leads, samples).
+    attrs : dict
+        Per-lead statistics of shape (batch, leads) for keys
+        ['min', 'max', 'mean', 'std', 'median'].
+    normalization_type : str
+        One of ['zscore', 'minmax', 'mean', 'max', 'robust', None].
+    eps : float
+        Small constant to avoid division by zero.
+
+    Returns
+    -------
+    torch.Tensor
+        Unnormalized ECG waveform of shape (batch, leads, samples).
+    """
+    # Add broadcast dimensions: (batch, leads, 1)
+    expand = lambda t: t.to(x.device).unsqueeze(-1)
+
+    if normalization_type == "zscore":
+        x_unnorm = x * (expand(attrs["std"])) + expand(attrs["mean"])
+    elif normalization_type == "minmax":
+        x_unnorm = x * (expand(attrs["max"] - attrs["min"]) + eps) + expand(attrs["min"])
+    elif normalization_type == "mean":
+        x_unnorm = x * (expand(attrs["mean"]) + eps)
+    elif normalization_type == "max":
+        x_unnorm = x * (expand(attrs["max"]) + eps)
+    elif normalization_type == "robust":
+        if "mad" in attrs:
+            mad = expand(attrs["mad"])
+        else:
+            # Approximate MAD using std if not stored
+            mad = expand(attrs.get("std", torch.zeros_like(attrs["median"])))
+        x_unnorm = x * (mad + eps) + expand(attrs["median"])
+    elif normalization_type is None:
+        x_unnorm = x
+    else:
+        raise ValueError(f"Unsupported normalization type: {normalization_type}")
+
+    return x_unnorm
+
 def zero_nan_inf(x):
     """If x is nan or inf, return 0."""
     if torch.isnan(x).any() or torch.isinf(x).any():

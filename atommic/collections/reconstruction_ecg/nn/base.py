@@ -28,6 +28,7 @@ from atommic.collections.common.parts.utils import (
     is_none,
     parse_list_and_keep_last,
     unnormalize,
+    unnormalize_ECG,
 )
 from ecgxai.utils.dataset import UniversalECGDataset
 from ecgxai.utils.transforms import ToTensor, ApplyGain, To12Lead, Resample, PolyFilter, ButterFilter, Masker, ECGNormalizer
@@ -126,6 +127,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         prediction: Union[List[List[torch.Tensor]], List[torch.Tensor], torch.Tensor],
         mask: torch.Tensor,
         loss_func: torch.nn.Module,
+        attrs: Dict,
     ) -> torch.Tensor:
         """Processes the reconstruction loss.
 
@@ -154,7 +156,11 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             Otherwise, returns the loss of the last intermediate loss.
         """
 
-        def compute_reconstruction_loss(t, p):
+        def compute_reconstruction_loss(t, p, attrs):
+            if self.unnormalize_loss_inputs:
+                # we do the unnormalization here to avoid explicitly iterating through list of predictions, which
+                # might be a list of lists.
+                t, p = self.__unnormalize_for_loss_or_log__(t, p, attrs)
             if "ssim" in str(loss_func).lower():
                 p = torch.abs(p / torch.max(torch.abs(p)))
                 t = torch.abs(t / torch.max(torch.abs(t)))
@@ -167,9 +173,9 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
 
             return loss_func(t, p)
 
-        return compute_reconstruction_loss(target*mask, prediction*mask)
+        return compute_reconstruction_loss(target, prediction, attrs)
 
-    def __compute_loss__(self, target: torch.Tensor, predictions: Union[list, torch.Tensor], mask: torch.Tensor) -> torch.Tensor:
+    def __compute_loss__(self, target: torch.Tensor, predictions: Union[list, torch.Tensor], mask: torch.Tensor, attrs: dict) -> torch.Tensor:
         """Computes the reconstruction loss.
 
         Parameters
@@ -199,7 +205,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         weight = 1.0
         losses = {}
         for name, loss_func in self.reconstruction_losses.items():
-            losses[name] = self.process_reconstruction_loss(target, predictions,mask, loss_func) * weight
+            losses[name] = self.process_reconstruction_loss(target, predictions, mask, loss_func, attrs) * weight
         return self.total_reconstruction_loss(**losses) * self.total_reconstruction_loss_weight
 
     def __compute_and_log_metrics_and_outputs__(
@@ -245,6 +251,12 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             output_target = target[_batch_idx_]
             output_predictions = predictions[_batch_idx_]
 
+            if self.unnormalize_log_outputs:
+                # Unnormalize target and predictions with pre normalization values. This is only for logging purposes.
+                # For the loss computation, the self.unnormalize_loss_inputs flag is used.
+                output_target, output_predictions = self.__unnormalize_for_loss_or_log__(
+                    output_target, output_predictions, attrs, _batch_idx_)
+
             # Log target and predictions, if log_image is True for this slice.
             if attrs["log_image"][_batch_idx_]:
                 key = f"{fname[_batch_idx_]}-Acc={layout[_batch_idx_]}"  # type: ignore
@@ -272,6 +284,80 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             self.psnr_vals[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(  # type: ignore
                 psnr(output_target, output_predictions, maxval=max_value)
             ).view(1)
+
+    def __unnormalize_for_loss_or_log__(
+        self,
+        target: torch.Tensor,
+        prediction: torch.Tensor,
+        attrs: Dict,
+        batch_idx: int = 1,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Unnormalizes the data for computing the loss or logging.
+
+        Parameters
+        ----------
+        target : torch.Tensor
+            Target data of shape [batch_size, n_x, n_y, 2].
+        prediction : torch.Tensor
+            Prediction data of shape [batch_size, n_x, n_y, 2].
+        sensitivity_maps : torch.Tensor or None
+            Sensitivity maps of shape [batch_size, n_coils, n_x, n_y, 2] or None.
+        attrs : Dict
+            Attributes of the data with pre normalization values.
+        r : int
+            The selected acceleration factor.
+        batch_idx : int
+            Batch index. Default is ``1``.
+
+        Returns
+        -------
+        target : torch.Tensor
+            Unnormalized target data.
+        prediction : torch.Tensor
+            Unnormalized prediction data.
+        sensitivity_maps : torch.Tensor
+            Unnormalized sensitivity maps.
+        """
+        min_val = attrs["target_min"]
+        max_val = attrs["target_max"] 
+        mean_val = attrs["target_mean"] 
+        std_val = attrs["target_std"]
+        median_val = attrs["target_median"]
+        if isinstance(min_val, list):
+            min_val = min_val[batch_idx]
+        if isinstance(max_val, list):
+            max_val = max_val[batch_idx]
+        if isinstance(mean_val, list):
+            mean_val = mean_val[batch_idx]
+        if isinstance(std_val, list):
+            std_val = std_val[batch_idx]
+        if isinstance(median_val, list):
+            std_val = std_val[median_val]
+        target = unnormalize_ECG(
+            target, {"min": min_val, "max": max_val, "mean": mean_val, "std": std_val, "median": median_val}, self.normalization_type
+        )
+
+        min_val = attrs["prediction_min"] 
+        max_val = attrs["prediction_max"] 
+        mean_val = attrs["prediction_mean"]
+        std_val = attrs["prediction_std"]
+        median_val = attrs["prediction_median"]
+        if isinstance(min_val, list):
+            min_val = min_val[batch_idx]
+        if isinstance(max_val, list):
+            max_val = max_val[batch_idx]
+        if isinstance(mean_val, list):
+            mean_val = mean_val[batch_idx]
+        if isinstance(std_val, list):
+            std_val = std_val[batch_idx]
+        if isinstance(median_val, list):
+            std_val = std_val[median_val]
+
+        prediction = unnormalize_ECG(
+            prediction, {"min": min_val, "max": max_val, "mean": mean_val, "std": std_val, "median": median_val}, self.normalization_type
+        )
+
+        return target, prediction
 
     @staticmethod
     def __process_inputs__(
@@ -454,7 +540,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         predictions = outputs["predictions"]
 
         # Compute loss
-        train_loss = self.__compute_loss__(target, predictions, 1-sample["mask"])
+        train_loss = self.__compute_loss__(target, predictions, 1-sample["mask"],sample["attrs"])
 
         # Log loss for the chosen acceleration factor and the learning rate in the selected logger.
         logs = {
@@ -528,7 +614,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         predictions = outputs["predictions"]
 
         # Compute loss
-        val_loss = self.__compute_loss__(target, predictions, 1-sample["mask"])
+        val_loss = self.__compute_loss__(target, predictions, 1-sample["mask"], sample["attrs"])
         self.validation_step_outputs.append({"val_loss": val_loss})
 
         # Compute metrics and log them and log outputs.
@@ -764,13 +850,17 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                     transforms.append(Resample(value[0]))
                 if key.lower() == "totensor":
                     transforms.append(ToTensor())
-                if key.lower() == "normalization":
-                    transforms.append(ECGNormalizer(value[0]))
                 if key.lower() == "to12lead":
                     transforms.append(To12Lead())
             accelerations = mask_args.get("accelerations", [1])
             mask_func = [create_masker(mask_type_str=mask_type, accelerations=accelerations)]
             transforms.append(Masker(mask_func))
+            if cfg.get("normalization_type", None):
+                transforms.append(
+                    ECGNormalizer(
+                        normalization_type=cfg.get("normalization_type"),
+                    )
+                )
 
         # Get dataset.
         dataset = dataloader(
