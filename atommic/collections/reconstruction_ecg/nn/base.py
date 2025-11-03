@@ -30,7 +30,7 @@ from atommic.collections.common.parts.utils import (
     unnormalize,
 )
 from ecgxai.utils.dataset import UniversalECGDataset
-from ecgxai.utils.transforms import ToTensor, ApplyGain, To12Lead, Resample, PolyFilter, ButterFilter, Masker
+from ecgxai.utils.transforms import ToTensor, ApplyGain, To12Lead, Resample, PolyFilter, ButterFilter, Masker, ECGNormalizer
 from atommic.collections.reconstruction_ecg.losses.na import NoiseAwareLoss
 from atommic.collections.reconstruction_ecg.losses.ssim import SSIMLoss
 from atommic.collections.reconstruction_ecg.metrics.reconstruction_metrics import mse, nmse, psnr, ssim
@@ -77,8 +77,6 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         for name in VALID_RECONSTRUCTION_LOSSES:
             if name in reconstruction_losses_:
                 if name == "ssim":
-                    if self.ssdu:
-                        raise ValueError("SSIM loss is not supported for SSDU.")
                     self.reconstruction_losses[name] = SSIMLoss()
                 elif name == "mse":
                     self.reconstruction_losses[name] = MSELoss()
@@ -126,6 +124,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         self,
         target: torch.Tensor,
         prediction: Union[List[List[torch.Tensor]], List[torch.Tensor], torch.Tensor],
+        mask: torch.Tensor,
         loss_func: torch.nn.Module,
     ) -> torch.Tensor:
         """Processes the reconstruction loss.
@@ -168,9 +167,9 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
 
             return loss_func(t, p)
 
-        return compute_reconstruction_loss(target, prediction)
+        return compute_reconstruction_loss(target*mask, prediction*mask)
 
-    def __compute_loss__(self, target: torch.Tensor, predictions: Union[list, torch.Tensor]) -> torch.Tensor:
+    def __compute_loss__(self, target: torch.Tensor, predictions: Union[list, torch.Tensor], mask: torch.Tensor) -> torch.Tensor:
         """Computes the reconstruction loss.
 
         Parameters
@@ -200,7 +199,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         weight = 1.0
         losses = {}
         for name, loss_func in self.reconstruction_losses.items():
-            losses[name] = self.process_reconstruction_loss(target, predictions, loss_func) * weight
+            losses[name] = self.process_reconstruction_loss(target, predictions,mask, loss_func) * weight
         return self.total_reconstruction_loss(**losses) * self.total_reconstruction_loss_weight
 
     def __compute_and_log_metrics_and_outputs__(
@@ -236,6 +235,8 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             predictions = predictions[-1]
 
         # Add dummy dimensions to target and predictions for logging.
+        target = target.unsqueeze(1)
+        predictions = predictions.unsqueeze(1)
         target = target.detach().cpu()
         predictions = predictions.detach().cpu()
 
@@ -246,13 +247,14 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
 
             # Log target and predictions, if log_image is True for this slice.
             if attrs["log_image"][_batch_idx_]:
-
                 key = f"{fname[_batch_idx_]}-Acc={layout[_batch_idx_]}"  # type: ignore
-                self.log_image(f"{key}/target", output_target)
-                self.log_image(f"{key}/reconstruction", output_predictions)
-                self.log_image(f"{key}/error", torch.abs(output_target - output_predictions))
+                self.log_image(f"{key}/target", output_target[0])
+                self.log_image(f"{key}/reconstruction", output_predictions[0])
+                self.log_image(f"{key}/error", torch.abs(output_target[0] - output_predictions[0]))
 
             # Compute metrics and log them.
+            output_target = output_target.numpy()
+            output_predictions = output_predictions.numpy()
             self.mse_vals[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(  # type: ignore
                 mse(output_target, output_predictions)
             ).view(1)
@@ -263,7 +265,6 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             max_value = max(np.max(output_target), np.max(output_predictions)) - min(
                 np.min(output_target), np.min(output_predictions)
             )
-            max_value = max(max_value, attrs['max']) if 'max' in attrs else max_value
 
             self.ssim_vals[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(  # type: ignore
                 ssim(output_target, output_predictions, maxval=max_value)
@@ -390,7 +391,6 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
 
         # Forward pass
         predictions = self.forward(measured_ecg, mask)
-        print(fname)
 
         # Get acceleration factor from acceleration list, if multiple accelerations are used. Or if batch size > 1.
         return {
@@ -440,31 +440,25 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         Dict[str, torch.Tensor]
             Dictionary of loss and log.
         """
-        measured_ecg, mask, target, fname, slice_idx, acceleration, attrs = batch
-
+        sample = batch
         outputs = self.inference_step(
-            measured_ecg,
-            mask,
-            target,
-            fname,  # type: ignore
-            slice_idx,  # type: ignore
-            acceleration,
-            attrs,  # type: ignore
+            sample["masked_waveform"],
+            sample["mask"],
+            sample["waveform"],
+            sample["fname"],  # type: ignore
+            sample["data_idx"],  # type: ignore
+            sample["layout"],
+            sample["attrs"],  # type: ignore
         )
-
         target = outputs["target"]
+        predictions = outputs["predictions"]
 
         # Compute loss
-        train_loss = self.__compute_loss__(
-            target,
-            outputs["predictions"],
-            outputs["attrs"],
-            outputs["r"],
-        )
+        train_loss = self.__compute_loss__(target, predictions, 1-sample["mask"])
 
         # Log loss for the chosen acceleration factor and the learning rate in the selected logger.
         logs = {
-            f'train_loss_{outputs["acceleration"]}x': train_loss.item(),
+            f'train_loss': train_loss.item(),
             "lr": self._optimizer.param_groups[0]["lr"],  # type: ignore
         }
 
@@ -526,7 +520,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             sample["mask"],
             sample["waveform"],
             sample["fname"],  # type: ignore
-            sample["id"],  # type: ignore
+            sample["data_idx"],  # type: ignore
             sample["layout"],
             sample["attrs"],  # type: ignore
         )
@@ -534,7 +528,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         predictions = outputs["predictions"]
 
         # Compute loss
-        val_loss = self.__compute_loss__(target, predictions)
+        val_loss = self.__compute_loss__(target, predictions, 1-sample["mask"])
         self.validation_step_outputs.append({"val_loss": val_loss})
 
         # Compute metrics and log them and log outputs.
@@ -580,35 +574,28 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         batch_idx : int
             Batch index.
         """
-        measured_ecg, mask, target, fname, slice_idx, acceleration, attrs = batch
-
+        sample = batch
         outputs = self.inference_step(
-            measured_ecg,
-            mask,
-            target,
-            fname,  # type: ignore
-            slice_idx,  # type: ignore
-            acceleration,
-            attrs,  # type: ignore
+            sample["masked_waveform"],
+            sample["mask"],
+            sample["waveform"],
+            sample["fname"],  # type: ignore
+            sample["data_idx"],  # type: ignore
+            sample["layout"],
+            sample["attrs"],  # type: ignore
         )
 
-        fname = outputs["fname"]
-        slice_idx = outputs["slice_idx"]
-        acceleration = outputs["acceleration"]
         target = outputs["target"]
         predictions = outputs["predictions"]
-        attrs = outputs["attrs"]
-        r = outputs["r"]
 
         # Compute metrics and log them and log outputs.
         self.__compute_and_log_metrics_and_outputs__(
             target,
             predictions,
-            attrs,
-            r,
-            fname,
-            slice_idx,
-            acceleration,
+            outputs["attrs"],
+            outputs["fname"],
+            outputs["id"],
+            outputs["layout"],
         )
 
         if self.accumulate_predictions:
@@ -758,16 +745,10 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             Dataloader.
         """
         # Get mask parameters.
-        mask_root = cfg.get("mask_path", None)
         mask_args = cfg.get("mask_args", None)
-        shift_mask = mask_args.get("shift_mask", False)
         mask_type = mask_args.get("type", None)
 
         mask_func = None
-        mask_center_scale = 0.02
-
-        accelerations = mask_args.get("accelerations", [1])
-        mask_func = [create_masker(mask_type_str=mask_type, accelerations=accelerations)]
 
         dataset_format = cfg.get("dataset_format", None)
         if dataset_format == "UniversalECGDataset":
@@ -783,14 +764,19 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                     transforms.append(Resample(value[0]))
                 if key.lower() == "totensor":
                     transforms.append(ToTensor())
-            transforms.append(To12Lead())
+                if key.lower() == "normalization":
+                    transforms.append(ECGNormalizer(value[0]))
+                if key.lower() == "to12lead":
+                    transforms.append(To12Lead())
+            accelerations = mask_args.get("accelerations", [1])
+            mask_func = [create_masker(mask_type_str=mask_type, accelerations=accelerations)]
             transforms.append(Masker(mask_func))
 
         # Get dataset.
         dataset = dataloader(
             dataset_function=cfg.get("dataset_function"),
             waveform_dir=cfg.get("waveform_dir"),
-            dataset=pd.read_csv((cfg.get("dataset"))),
+            dataset=pd.read_csv((cfg.get("dataset")))[:cfg.get("dataset_number_of_examples", 10)],
             transform=Compose(transforms),
             labels=cfg.get("labels", None),
             secondary_waveform_dir=cfg.get("secondary_waveform_dir", ""),

@@ -50,7 +50,7 @@ class MaskFunc:
     """
 
     def __init__(
-        self, center_fractions: Optional[Sequence[float]] = None, accelerations: Optional[Sequence[int]] = None
+        self, center_fractions: Optional[Sequence[float]] = None, accelerations: Optional[Sequence[int]] = None,
     ):
         """Inits :class:`MaskFunc`.
 
@@ -925,18 +925,26 @@ class LayoutMaskFunc(MaskFunc):
 
         with temp_seed(self.rng, seed):
             _, acceleration = self.choose_acceleration()
-            mask = torch.zeros(size=(shape[0], shape[1]))
-            if "6x2":
-                mask[: int(shape[0] / 2), : int(shape[1] / 2) + 1] = 1
-                mask[int(shape[0] / 2) :, int(shape[1] / 2) + 1 :] = 1
-            if "3x4":
-                mask[: int(shape[0] / 4), : int(shape[1] / 4) + 1] = 1
-                mask[int(shape[0] / 4) : int(shape[0] / 2), int(shape[1] / 4) + 1 : int(shape[1] / 2) + 1] = 1
-                mask[
-                    int(shape[0] / 2) : int(3 * shape[0] / 4), int((shape[1] / 2)) + 1 : int(3 * shape[1] / 4) + 1
-                ] = 1
-                mask[int(3 * shape[0] / 4) :, int(3 * shape[1] / 4) + 1 :] = 1
-
+            mask = torch.zeros(size=(shape[0], shape[1]), dtype= torch.float32)
+            if shape[0] == 12:
+                if acceleration == "6x2":
+                    mask[:6, : int(shape[1] / 2) + 1] = 1
+                    mask[6 :, int(shape[1] / 2) + 1 :] = 1
+                if acceleration =="3x4":
+                    mask[: 3, : int(shape[1] / 4) + 1] = 1
+                    mask[3: 6, int(shape[1] / 4) + 1 : int(shape[1] / 2) + 1] = 1
+                    mask[
+                        6: 9, int((shape[1] / 2)) + 1 : int(3 * shape[1] / 4) + 1
+                    ] = 1
+                    mask[9:, int(3 * shape[1] / 4) + 1 :] = 1
+            if shape[0] == 8:
+                if acceleration == "6x2":
+                    mask[:2, : int(shape[1] / 2) + 1] = 1
+                    mask[2:, int(shape[1] / 2) + 1 :] = 1
+                if acceleration =="3x4":
+                    mask[:2, : int(shape[1] / 4) + 1] = 1
+                    mask[2: 5, int((shape[1] / 2)) + 1 : int(3 * shape[1] / 4) + 1] = 1
+                    mask[5:, int(3 * shape[1] / 4) + 1 :] = 1
         return mask, acceleration
 
 

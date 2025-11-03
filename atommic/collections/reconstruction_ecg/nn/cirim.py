@@ -48,6 +48,7 @@ class CIRIMECG(BaseECGReconstructionModel):
         self.reconstruction_module = torch.nn.ModuleList(
             [
                 RIMBlock(
+                    input_channels=cfg_dict.get("input_channels"),
                     recurrent_layer=cfg_dict.get("recurrent_layer"),
                     conv_filters=cfg_dict.get("conv_filters"),
                     conv_kernels=cfg_dict.get("conv_kernels"),
@@ -95,7 +96,6 @@ class CIRIMECG(BaseECGReconstructionModel):
         prediction = measured_ecg.clone()
         hx = None
         cascades_predictions = []
-        print(prediction.shape)
         for i, cascade in enumerate(self.reconstruction_module):
             # Forward pass through the cascades
             prediction, hx = cascade(
@@ -114,6 +114,7 @@ class CIRIMECG(BaseECGReconstructionModel):
         self,
         target: torch.Tensor,
         prediction: Union[List[List[torch.Tensor]], List[torch.Tensor], torch.Tensor],
+        mask: torch.Tensor,
         loss_func: torch.nn.Module,
     ) -> torch.Tensor:
         """Processes the reconstruction loss for the CIRIM model. It differs from the base class in that it can handle

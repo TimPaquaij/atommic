@@ -22,6 +22,7 @@ class RIMBlock(torch.nn.Module):
 
     def __init__(
         self,
+        input_channels = None,
         recurrent_layer=None,
         conv_filters=None,
         conv_kernels=None,
@@ -81,9 +82,12 @@ class RIMBlock(torch.nn.Module):
             Coil combination method. Default is ``"SENSE"``.
         """
         super().__init__()
-
-        self.input_size = 1
+        if input_channels:
+            self.input_size = input_channels
+        else:
+            self.input_size = depth * 2
         self.time_steps = time_steps
+        self.conv_dim = conv_dim
 
         self.layers = torch.nn.ModuleList()
         for (
@@ -175,18 +179,23 @@ class RIMBlock(torch.nn.Module):
         Tuple[Any, Union[list, torch.Tensor, None]]
             Reconstructed image and hidden states.
         """
+        if self.conv_dim == 2:
+            prediction = prediction.unsqueeze(1)  # [batch, 1, leads, time] 2D conv
+            mask = mask.unsqueeze(1)  # [batch, 1, leads, time] 2D conv
+            measured_ecg = measured_ecg.unsqueeze(1)  # [batch, 1, leads, time] 2D conv
+
         if hx is None or (not isinstance(hx, list) and hx.dim() < 3):
             hx = [
-                prediction.new_zeros((prediction.size(0), f, *prediction.size()[1:]))
+                prediction.new_zeros((prediction.size(0), f, *prediction.size()[2:]))
                 for f in self.recurrent_filters
                 if f != 0
             ]
         predictions = []
         for _ in range(self.time_steps):
             log_likelihood_gradient_prediction = rim_utils.log_likelihood_gradient_ecg(
-                prediction.unsqueeze(1),
-                measured_ecg.unsqueeze(1),
-                mask.unsqueeze(1),
+                prediction,
+                measured_ecg,
+                mask,
                 sigma,
             ).contiguous()
 
@@ -195,8 +204,10 @@ class RIMBlock(torch.nn.Module):
                 log_likelihood_gradient_prediction = hx[h]
 
             log_likelihood_gradient_prediction = self.final_layer(log_likelihood_gradient_prediction)
-            prediction = prediction.unsqueeze(1) + log_likelihood_gradient_prediction
-            prediction = prediction.squeeze(1)
-            predictions.append(prediction)
+            prediction = prediction + log_likelihood_gradient_prediction
+            if self.conv_dim == 2:
+                predictions.append(prediction.squeeze(1))
+            else:
+                predictions.append(prediction)
 
         return predictions, hx

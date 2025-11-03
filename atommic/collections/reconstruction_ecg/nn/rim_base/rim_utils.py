@@ -1,9 +1,8 @@
 # coding=utf-8
 __author__ = "Dimitris Karkalousos"
 
-from typing import Sequence
-
 import torch
+import torch.nn.functional as F
 
 
 def log_likelihood_gradient_ecg(
@@ -16,16 +15,12 @@ def log_likelihood_gradient_ecg(
     Compute the gradient of the log-likelihood for ECG lead reconstruction.
     Missing leads are excluded using the mask.
     """
-    # Ensure noise scalar
     if isinstance(sigma, torch.Tensor):
         sigma = sigma.item()
-    sigma = max(sigma, 1e-6)
+    sigma = max(sigma, 1.0)
 
-    # Compute residual only for observed leads
-    residual = mask * (prediction - measured_ecg)
+    # Observed gradient (data consistency)
+    gradients = (prediction - measured_ecg) * mask / sigma
 
-    # Gradient of log-likelihood under Gaussian noise
-    gradient = residual / (sigma**2)
-
-    # Return prediction + gradient for iterative methods
-    return gradient
+    # Total gradient
+    return torch.cat([prediction,gradients], dim=1)

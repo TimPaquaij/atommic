@@ -5,6 +5,8 @@ import argparse
 
 import pytorch_lightning as pl
 import torch
+torch.set_float32_matmul_precision('high')
+torch.autograd.set_detect_anomaly(True)
 from omegaconf import DictConfig, OmegaConf
 
 from atommic.collections.multitask.rs.nn.idslr import IDSLR

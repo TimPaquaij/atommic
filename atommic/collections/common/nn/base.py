@@ -20,6 +20,7 @@ from atommic.utils import model_utils
 import io
 from PIL import Image
 import numpy as np
+import matplotlib.pyplot as plt
 
 from ecgxai.utils.plot import plot_12lead_ecg
 
@@ -157,14 +158,14 @@ class BaseMRIModel(modelPT.ModelPT, ABC):
         """
         if image.dim() > 3:
             image = image[0, 0, :, :].unsqueeze(0)
-        elif image.shape[0] == 12:
+        elif image.shape[0] == 12 or image.shape[0] == 8:
             fig, _ = plot_12lead_ecg(image.numpy(), layoutid="12x1")
             # Convert Matplotlib figure to a PIL Image
             buf = io.BytesIO()
             fig.savefig(buf, format='png')
             buf.seek(0)
             image = Image.open(buf).convert("RGB").copy()  # <- fully load into memory
-            fig.clf()
+            plt.close(fig)
             buf.close()
         if ".h5" in name:
             name = name.replace(".h5", "")

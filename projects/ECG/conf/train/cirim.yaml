@@ -5,10 +5,11 @@ mode: train
 model:
   model_name: CIRIMECG
   recurrent_layer: IndRNN
+  input_channels: 16
   conv_filters:
+    - 32
     - 64
-    - 64
-    - 1
+    - 8
   conv_kernels:
     - 5
     - 3
@@ -22,7 +23,7 @@ model:
     - true
     - false
   recurrent_filters:
-    - 64
+    - 32
     - 64
     - 0
   recurrent_kernels:
@@ -39,19 +40,19 @@ model:
     - false
   depth: 2
   time_steps: 8
-  conv_dim: 2
-  num_cascades: 8
+  conv_dim: 1
+  num_cascades: 3
   no_dc: true
   keep_prediction: true
-  accumulate_predictions: true
+  accumulate_predictions: false
   dimensionality: 2
-  reconstruction_loss: 
+  reconstruction_loss:
     l1: 1
-  normalization_type: max
+  normalization_type: zscore  # none, zscore, minmax
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
   kspace_reconstruction_loss: false
-  total_reconstruction_loss_weight: 1.0
+  total_reconstruction_loss_weight: 100
   complex_valued_type: stacked  # stacked, complex_abs, complex_sqrt_abs
   coil_combination_method: SENSE
   ssdu: false
@@ -75,18 +76,19 @@ model:
       resample:
         - 500
       totensor: true
+      to12leads: false
+      to8leads: true
     mask_args:
       type: layouts  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
-        - "3x4"
-        - "6x2"  
-        - "3x4_1"
+        - "6x2"
       shift_mask: false
       use_seed: false
     use_seed: false
-    batch_size: 10
+    dataset_number_of_examples: 100000
+    batch_size: 25
     shuffle: true
-    num_workers: 8
+    num_workers: 3
     pin_memory: false
     drop_last: false
 
@@ -100,27 +102,29 @@ model:
       resample:
         - 500
       totensor: true
+      to12leads: false
+      to8leads: true
     mask_args:
       type: layouts  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
-        - "3x4"
         - "6x2"
       shift_mask: false
       use_seed: false
     use_seed: false
+    dataset_number_of_examples: 100
     batch_size: 10
     shuffle: False
-    num_workers: 8
+    num_workers: 10
     pin_memory: false
     drop_last: false
 
   optim:
-    name: adam
-    lr: 1e-4
+    name: adamw
+    lr: 1e-3
     betas:
       - 0.9
       - 0.999
-    weight_decay: 0.0
+    weight_decay: 1e-4
     sched:
       name: InverseSquareRootAnnealing
       min_lr: 0.0
@@ -128,15 +132,15 @@ model:
       warmup_ratio: 0.1
 
 trainer:
-  strategy: ddp_find_unused_parameters_false
+  strategy: auto
   accelerator: gpu
-  devices: 1
+  devices: [1]
   num_nodes: 1
   max_epochs: 50
-  precision: 16-mixed
+  precision: 32
   enable_checkpointing: false
   logger: false
-  log_every_n_steps: 50
+  log_every_n_steps: 1000
   check_val_every_n_epoch: -1
   max_steps: -1
 
