@@ -77,8 +77,8 @@ model:
         - 500
       totensor: true
       to12lead: true
-    normalization:
-        type: zscore
+    # normalization:
+    #     type: zscore
     mask_args:
       type: layouts  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
@@ -88,7 +88,7 @@ model:
       use_seed: false
     use_seed: false
     dataset_number_of_examples: 100000
-    batch_size: 10
+    batch_size: 25
     shuffle: true
     num_workers: 3
     pin_memory: false
@@ -105,8 +105,8 @@ model:
         - 500
       totensor: true
       to12lead: true
-      normalization:
-        type: zscore
+      # normalization:
+      #   type: zscore
     mask_args:
       type: layouts  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
@@ -138,7 +138,7 @@ model:
 trainer:
   strategy: auto
   accelerator: gpu
-  devices: [1]
+  devices: [0]
   num_nodes: 1
   max_epochs: 50
   precision: 32
