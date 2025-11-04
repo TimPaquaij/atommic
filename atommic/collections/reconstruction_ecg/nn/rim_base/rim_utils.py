@@ -6,9 +6,9 @@ import torch.nn.functional as F
 
 
 def log_likelihood_gradient_ecg(
-    prediction: torch.Tensor,  # [batch, leads]
-    measured_ecg: torch.Tensor,  # [batch, leads]
-    mask: torch.Tensor,  # [batch, leads], 1 for observed leads
+    prediction: torch.Tensor,  # [batch, leads, time] or [batch, 1, leads, time] for 2D conv
+    measured_ecg: torch.Tensor,  # [batch, leads, time] or [batch, 1, leads, time] for 2D conv
+    mask: torch.Tensor,  # [batch, leads, time] or [batch, 1, leads, time] for 2D conv
     sigma: float,
 ) -> torch.Tensor:
     """
@@ -20,7 +20,12 @@ def log_likelihood_gradient_ecg(
     sigma = max(sigma, 1.0)
 
     # Observed gradient (data consistency)
-    gradients = (prediction - measured_ecg) * mask / sigma
+    mask_gradients = (prediction - measured_ecg) * mask / sigma
+    pred_gradients = torch.zeros_like(prediction)
+    pred_gradients[..., 2, :] = prediction[..., 2,:] - (prediction[...,1, :] - prediction[...,0, :])
+    pred_gradients[..., 3, :] = prediction[...,3,:] - (-(prediction[...,0, :] + prediction[...,1, :]) / 2)
+    pred_gradients[..., 4, :] = prediction[...,4,:] - (prediction[...,0, :] - (prediction[...,1, :]/2))
+    pred_gradients[..., 5, :] = prediction[...,5,:] - (prediction[...,1, :] - (prediction[...,0, :]/2))
 
     # Total gradient
-    return torch.cat([prediction,gradients], dim=1)
+    return torch.cat([prediction,mask_gradients,pred_gradients], dim=1)

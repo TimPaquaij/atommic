@@ -173,7 +173,7 @@ class CIRIMECG(BaseECGReconstructionModel):
             for cascade_pred in prediction:
                 time_steps_weights = torch.logspace(-1, 0, steps=self.time_steps).to(target.device)
                 time_steps_loss = [
-                    compute_reconstruction_loss(target, time_step_pred) for time_step_pred in cascade_pred
+                    compute_reconstruction_loss(target, time_step_pred, attrs) for time_step_pred in cascade_pred
                 ]
                 cascade_loss = sum(x * w for x, w in zip(time_steps_loss, time_steps_weights)) / self.time_steps
                 cascades_loss.append(cascade_loss)

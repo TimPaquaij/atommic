@@ -44,27 +44,27 @@ model:
   num_cascades: 3
   no_dc: true
   keep_prediction: true
-  accumulate_predictions: false
+  accumulate_predictions: true
   dimensionality: 2
   reconstruction_loss:
     l1: 1
   normalization_type: zscore  # none, zscore, minmax
-  unnormalize_loss_inputs: false
-  unnormalize_log_outputs: false
-  kspace_reconstruction_loss: false
+  unnormalize_loss_inputs: false #Search if this can be removed
+  unnormalize_log_outputs: false #Search if this can be removed
+  kspace_reconstruction_loss: false #Search if this can be removed
   total_reconstruction_loss_weight: 100
   complex_valued_type: stacked  # stacked, complex_abs, complex_sqrt_abs
-  coil_combination_method: SENSE
-  ssdu: false
-  n2r: false
-  fft_centered: true
-  fft_normalization: ortho
-  spatial_dims:
-    - -2
-    - -1
-  coil_dim: 1
-  estimate_coil_sensitivity_maps_with_nn: false
-  consecutive_slices: 1
+  coil_combination_method: SENSE #Search if this can be removed
+  ssdu: false #Search if this can be removed
+  n2r: false #Search if this can be removed
+  fft_centered: true #Search if this can be removed
+  fft_normalization: ortho #Search if this can be removed
+  spatial_dims: #Search if this can be removed
+    - -2 #Search if this can be removed
+    - -1 #Search if this can be removed
+  coil_dim: 1 #Search if this can be removed
+  estimate_coil_sensitivity_maps_with_nn: false #Search if this can be removed
+  consecutive_slices: 1 #Search if this can be removed
 
   train_ds:
     dataset_format: UniversalECGDataset
@@ -88,7 +88,7 @@ model:
       use_seed: false
     use_seed: false
     dataset_number_of_examples: 100000
-    batch_size: 25
+    batch_size: 10
     shuffle: true
     num_workers: 3
     pin_memory: false
@@ -138,7 +138,7 @@ model:
 trainer:
   strategy: auto
   accelerator: gpu
-  devices: [0]
+  devices: [1]
   num_nodes: 1
   max_epochs: 50
   precision: 32
