@@ -82,8 +82,7 @@ model:
     mask_args:
       type: layouts  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
-        - "6x2"
-        - "3x4"
+        - "random"
       shift_mask: false
       use_seed: false
     use_seed: false
@@ -110,11 +109,10 @@ model:
     mask_args:
       type: layouts  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
-        - "6x2"
-        - "3x4"
+        - "random"
       shift_mask: false
-      use_seed: false
-    use_seed: false
+      use_seed: true
+    use_seed: true
     dataset_number_of_examples: 100
     batch_size: 10
     shuffle: False

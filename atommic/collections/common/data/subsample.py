@@ -891,6 +891,31 @@ class LayoutMaskFunc(MaskFunc):
     4-fold acceleration with 8% center fraction is selected and a 50% probability that 8-fold acceleration with 4%
     center fraction is selected.
     """
+    def random_mask(self, shape: tuple[int, int], min_block: int) -> torch.Tensor:
+        n_leads, n_samples = shape
+        # Randomize how much of the total space we’ll mask: between 30–50 %
+        target_fraction = self.rng.uniform(0.1, 0.5)
+        total_allowed = int(n_leads * n_samples * target_fraction)
+
+        mask = torch.zeros((n_leads, n_samples), dtype=torch.float32)
+        total_masked = 0
+        fully_masked_leads = 0
+
+        while total_masked < total_allowed:
+            lead = self.rng.randint(0, n_leads - 1)
+            block_len = self.rng.randint(min_block, n_samples // 4)
+            start = self.rng.randint(0, max(0, n_samples - block_len))
+
+            if (mask[lead] == 0).sum() <= block_len and fully_masked_leads >= 1:
+                continue
+
+            mask[lead, start:start + block_len] = 1
+            total_masked = int(mask.sum().item())
+
+            if mask[lead].sum() == n_samples:
+                fully_masked_leads += 1
+
+        return mask
 
     def __call__(
         self,
@@ -930,13 +955,17 @@ class LayoutMaskFunc(MaskFunc):
                 if acceleration == "6x2":
                     mask[:6, : int(shape[1] / 2) + 1] = 1
                     mask[6 :, int(shape[1] / 2) + 1 :] = 1
-                if acceleration =="3x4":
+                elif acceleration =="3x4":
                     mask[: 3, : int(shape[1] / 4) + 1] = 1
                     mask[3: 6, int(shape[1] / 4) + 1 : int(shape[1] / 2) + 1] = 1
                     mask[
                         6: 9, int((shape[1] / 2)) + 1 : int(3 * shape[1] / 4) + 1
                     ] = 1
                     mask[9:, int(3 * shape[1] / 4) + 1 :] = 1
+                elif acceleration == "random":
+                    mask = self.random_mask(shape, min_block=500)
+
+
             if shape[0] == 8:
                 if acceleration == "6x2":
                     mask[:2, : int(shape[1] / 2) + 1] = 1
@@ -945,7 +974,10 @@ class LayoutMaskFunc(MaskFunc):
                     mask[:2, : int(shape[1] / 4) + 1] = 1
                     mask[2: 5, int((shape[1] / 2)) + 1 : int(3 * shape[1] / 4) + 1] = 1
                     mask[5:, int(3 * shape[1] / 4) + 1 :] = 1
+                elif acceleration == "random":
+                    mask = self.random_mask(shape, min_block=500)
         return mask, acceleration
+    
 
 
 def create_masker(

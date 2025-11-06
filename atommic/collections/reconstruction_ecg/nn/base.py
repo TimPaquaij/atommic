@@ -833,6 +833,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         # Get mask parameters.
         mask_args = cfg.get("mask_args", None)
         mask_type = mask_args.get("type", None)
+        use_seed = mask_args.get("use_seed", False)
 
         mask_func = None
 
@@ -854,7 +855,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                     transforms.append(To12Lead())
             accelerations = mask_args.get("accelerations", [1])
             mask_func = [create_masker(mask_type_str=mask_type, accelerations=accelerations)]
-            transforms.append(Masker(mask_func))
+            transforms.append(Masker(mask_func,use_seed=use_seed))
             if cfg.get("normalization_type", None):
                 transforms.append(
                     ECGNormalizer(
