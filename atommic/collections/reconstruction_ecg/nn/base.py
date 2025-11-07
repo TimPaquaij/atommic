@@ -864,6 +864,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                 )
 
         # Get dataset.
+        log_figures = cfg.get("log_figures", None)
         dataset = dataloader(
             dataset_function=cfg.get("dataset_function"),
             waveform_dir=cfg.get("waveform_dir"),
@@ -872,6 +873,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             labels=cfg.get("labels", None),
             secondary_waveform_dir=cfg.get("secondary_waveform_dir", ""),
             additional_dataset_function=cfg.get("additional_dataset_function", None),
+            log_figures=log_figures,
         )
         if cfg.shuffle:
             sampler = torch.utils.data.RandomSampler(dataset)

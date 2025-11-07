@@ -113,8 +113,9 @@ model:
       shift_mask: false
       use_seed: true
     use_seed: true
-    dataset_number_of_examples: 100
-    batch_size: 10
+    dataset_number_of_examples: 10000
+    batch_size: 25
+    log_figures: 4
     shuffle: False
     num_workers: 10
     pin_memory: false
