@@ -375,15 +375,20 @@ class IndRNNCellBase(nn.Module):
         self.bias = bias
         self.conv_dim = conv_dim
         self.conv_class = self.determine_conv_class(conv_dim)
+        self.padding = [
+            torch.nn.ReplicationPad1d(torch.div(dilation * (kernel_size - 1), 2, rounding_mode="trunc").item()),
+            torch.nn.ReplicationPad2d(torch.div(dilation * (kernel_size - 1), 2, rounding_mode="trunc").item()),
+            torch.nn.ReplicationPad3d(torch.div(dilation * (kernel_size - 1), 2, rounding_mode="trunc").item()),
+        ][conv_dim - 1]
 
         self.ih = self.conv_class(
             input_size,
             hidden_size,
             kernel_size,
-            padding=torch.div(dilation * (kernel_size - 1), 2, rounding_mode="trunc").item(),
+            padding=0,
             dilation=dilation,
-            bias=bias,
-        )
+            bias=bias)
+        
         if self.conv_dim == 1:
             self.hh = nn.Parameter(
                 nn.init.normal_(torch.empty(1, hidden_size, 1), std=1.0 / (hidden_size * (1 + kernel_size**2)))
@@ -497,4 +502,4 @@ class IndRNNCell(IndRNNCellBase):
             _input = _input.unsqueeze(0)
             hx = hx.permute(1, 0, 2, 3).unsqueeze(0)
 
-        return nn.ReLU()(self.ih(_input) + self.hh * hx)
+        return nn.ReLU()(self.ih(self.padding(_input)) + self.hh * hx)

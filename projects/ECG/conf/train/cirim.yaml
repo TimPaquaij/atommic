@@ -38,11 +38,11 @@ model:
     - true
     - true
     - false
-  depth: 2
   time_steps: 8
   conv_dim: 2
   num_cascades: 3
   no_dc: true
+  depth: 2
   keep_prediction: true
   accumulate_predictions: true
   dimensionality: 2

@@ -915,7 +915,7 @@ class LayoutMaskFunc(MaskFunc):
             if mask[lead].sum() == n_samples:
                 fully_masked_leads += 1
 
-        return mask
+        return 1-mask
 
     def __call__(
         self,
