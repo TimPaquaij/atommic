@@ -108,7 +108,7 @@ model:
       use_seed: true
     normalization_type: null  # none, zscore, minmax
     use_seed: true
-    dataset_number_of_examples: 100
+    dataset_number_of_examples: 10000
     batch_size: 25
     log_figures: 4
     shuffle: False
