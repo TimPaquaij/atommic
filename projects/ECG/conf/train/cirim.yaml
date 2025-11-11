@@ -7,7 +7,7 @@ model:
   recurrent_layer: IndRNN
   input_channels: 3 # liklihood and prediction since 2D conv a spatial dim is added
   conv_filters:
-    - 32
+    - 64
     - 64
     - 1
   conv_kernels:
@@ -23,7 +23,7 @@ model:
     - true
     - false
   recurrent_filters:
-    - 32
+    - 64
     - 64
     - 0
   recurrent_kernels:
@@ -48,23 +48,10 @@ model:
   dimensionality: 2
   reconstruction_loss:
     l1: 1
-  normalization_type: zscore  # none, zscore, minmax
-  unnormalize_loss_inputs: false #Search if this can be removed
-  unnormalize_log_outputs: false #Search if this can be removed
-  kspace_reconstruction_loss: false #Search if this can be removed
+  normalization_type: null  # null, zscore, minmax
+  unnormalize_loss_inputs: false 
+  unnormalize_log_outputs: false
   total_reconstruction_loss_weight: 100
-  complex_valued_type: stacked  # stacked, complex_abs, complex_sqrt_abs
-  coil_combination_method: SENSE #Search if this can be removed
-  ssdu: false #Search if this can be removed
-  n2r: false #Search if this can be removed
-  fft_centered: true #Search if this can be removed
-  fft_normalization: ortho #Search if this can be removed
-  spatial_dims: #Search if this can be removed
-    - -2 #Search if this can be removed
-    - -1 #Search if this can be removed
-  coil_dim: 1 #Search if this can be removed
-  estimate_coil_sensitivity_maps_with_nn: false #Search if this can be removed
-  consecutive_slices: 1 #Search if this can be removed
 
   train_ds:
     dataset_format: UniversalECGDataset
@@ -77,17 +64,21 @@ model:
         - 500
       totensor: true
       to12lead: true
-    # normalization:
-    #     type: zscore
     mask_args:
       type: layouts  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
         - "random"
-      shift_mask: false
+        - "3x4"
+        - "3x4_1"
+        - "6x2"
+      low_ratio : 0.1
+      high_ratio : 0.5
+      min_block : 500
       use_seed: false
+    normalization_type: null
     use_seed: false
     dataset_number_of_examples: 100000
-    batch_size: 25
+    batch_size: 12
     shuffle: true
     num_workers: 3
     pin_memory: false
@@ -104,16 +95,20 @@ model:
         - 500
       totensor: true
       to12lead: true
-      # normalization:
-      #   type: zscore
     mask_args:
       type: layouts  # the mask will be loaded from the dataset, but we need to specify the type here
       accelerations:
         - "random"
-      shift_mask: false
+        - "3x4"
+        - "3x4_1"
+        - "6x2"
+      low_ratio : 0.1
+      high_ratio : 0.5
+      min_block : 500
       use_seed: true
+    normalization_type: null  # none, zscore, minmax
     use_seed: true
-    dataset_number_of_examples: 10000
+    dataset_number_of_examples: 100
     batch_size: 25
     log_figures: 4
     shuffle: False

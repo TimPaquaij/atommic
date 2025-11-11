@@ -50,7 +50,7 @@ class MaskFunc:
     """
 
     def __init__(
-        self, center_fractions: Optional[Sequence[float]] = None, accelerations: Optional[Sequence[int]] = None,
+        self, center_fractions: Optional[Sequence[float]] = None, accelerations: Optional[Sequence[int]] = None, low_ratio: Optional[float] =None, high_ratio: Optional[float] = None, min_block:  Optional[int] = None
     ):
         """Inits :class:`MaskFunc`.
 
@@ -68,6 +68,9 @@ class MaskFunc:
         self.center_fractions = center_fractions
         self.accelerations = accelerations
         self.rng = np.random.RandomState()
+        self.low_ratio = low_ratio
+        self.high_ratio = high_ratio
+        self.min_block = min_block
 
     def __call__(
         self,
@@ -891,10 +894,10 @@ class LayoutMaskFunc(MaskFunc):
     4-fold acceleration with 8% center fraction is selected and a 50% probability that 8-fold acceleration with 4%
     center fraction is selected.
     """
-    def random_mask(self, shape: tuple[int, int], min_block: int) -> torch.Tensor:
+    def random_mask(self, shape: tuple[int, int], min_block: int, high_ratio: float = 0.5, low_ratio : float = 0.1 ) -> torch.Tensor:
         n_leads, n_samples = shape
         # Randomize how much of the total space we’ll mask: between 30–50 %
-        target_fraction = self.rng.uniform(0.1, 0.5)
+        target_fraction = self.rng.uniform(low_ratio, high_ratio)
         total_allowed = int(n_leads * n_samples * target_fraction)
 
         mask = torch.zeros((n_leads, n_samples), dtype=torch.float32)
@@ -962,20 +965,37 @@ class LayoutMaskFunc(MaskFunc):
                         6: 9, int((shape[1] / 2)) + 1 : int(3 * shape[1] / 4) + 1
                     ] = 1
                     mask[9:, int(3 * shape[1] / 4) + 1 :] = 1
+                elif acceleration =="3x4_1":
+                    mask[: 3, : int(shape[1] / 4) + 1] = 1
+                    mask[3: 6, int(shape[1] / 4) + 1 : int(shape[1] / 2) + 1] = 1
+                    mask[
+                        6: 9, int((shape[1] / 2)) + 1 : int(3 * shape[1] / 4) + 1
+                    ] = 1
+                    mask[9:, int(3 * shape[1] / 4) + 1 :] = 1
+                    possible_rhythm_leads = [1, 6, 10]  # Lead indices: II, V1, V5
+                    rhythm_lead = self.rng.choice(possible_rhythm_leads)
+                    mask[rhythm_lead, :] = 1
                 elif acceleration == "random":
-                    mask = self.random_mask(shape, min_block=500)
+                    mask = self.random_mask(shape, min_block=self.min_block, low_ratio=self.low_ratio, high_ratio=self.high_ratio)
 
 
             if shape[0] == 8:
                 if acceleration == "6x2":
                     mask[:2, : int(shape[1] / 2) + 1] = 1
                     mask[2:, int(shape[1] / 2) + 1 :] = 1
-                if acceleration =="3x4":
+                elif acceleration =="3x4":
                     mask[:2, : int(shape[1] / 4) + 1] = 1
                     mask[2: 5, int((shape[1] / 2)) + 1 : int(3 * shape[1] / 4) + 1] = 1
                     mask[5:, int(3 * shape[1] / 4) + 1 :] = 1
+                elif acceleration =="3x4":
+                    mask[:2, : int(shape[1] / 4) + 1] = 1
+                    mask[2: 5, int((shape[1] / 2)) + 1 : int(3 * shape[1] / 4) + 1] = 1
+                    mask[5:, int(3 * shape[1] / 4) + 1 :] = 1
+                    possible_rhythm_leads = [1, 3, 7]  # Lead indices: II, V1, V5
+                    rhythm_lead = self.rng.choice(possible_rhythm_leads)
+                    mask[rhythm_lead, :] = 1
                 elif acceleration == "random":
-                    mask = self.random_mask(shape, min_block=500)
+                    mask = self.random_mask(shape, min_block=self.min_block)
         return mask, acceleration
     
 
@@ -984,6 +1004,9 @@ def create_masker(
     mask_type_str: str,
     center_fractions: Optional[Union[Sequence[float], float]] = None,
     accelerations: Optional[Union[Sequence[int], int]] = None,
+    low_ratio: Optional[float] =None, 
+    high_ratio: Optional[float] = None, 
+    min_block:  Optional[int] = None,
 ) -> MaskFunc:
     """Creates a MaskFunc object based on the specified mask type.
 
@@ -1038,5 +1061,5 @@ def create_masker(
     if mask_type_str == "poisson2d":
         return Poisson2DMaskFunc(center_fractions, accelerations)
     if mask_type_str == "layouts":
-        return LayoutMaskFunc(center_fractions=center_fractions, accelerations=accelerations)
+        return LayoutMaskFunc(accelerations=accelerations, low_ratio=low_ratio, high_ratio=high_ratio, min_block=min_block)
     raise NotImplementedError(f"{mask_type_str} not supported")

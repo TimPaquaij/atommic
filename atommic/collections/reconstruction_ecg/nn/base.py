@@ -834,8 +834,16 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         mask_args = cfg.get("mask_args", None)
         mask_type = mask_args.get("type", None)
         use_seed = mask_args.get("use_seed", False)
-
         mask_func = None
+        
+        accelerations = mask_args.get("accelerations", [1])
+        if "random" in accelerations:
+            low_ratio = mask_args.get("low_ratio", 0.1)
+            high_ratio = mask_args.get("high_ratio", 0.5)
+            min_block = mask_args.get("min_block", 500)
+            mask_func = [create_masker(mask_type_str=mask_type, accelerations=accelerations, low_ratio=low_ratio, high_ratio=high_ratio, min_block=min_block)]
+        else:
+            mask_func = [create_masker(mask_type_str=mask_type, accelerations=accelerations)]
 
         dataset_format = cfg.get("dataset_format", None)
         if dataset_format == "UniversalECGDataset":
@@ -853,15 +861,13 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                     transforms.append(ToTensor())
                 if key.lower() == "to12lead":
                     transforms.append(To12Lead())
-            accelerations = mask_args.get("accelerations", [1])
-            mask_func = [create_masker(mask_type_str=mask_type, accelerations=accelerations)]
             transforms.append(Masker(mask_func,use_seed=use_seed))
-            if cfg.get("normalization_type", None):
-                transforms.append(
-                    ECGNormalizer(
-                        normalization_type=cfg.get("normalization_type"),
-                    )
+        if cfg.get("normalization_type", None):
+            transforms.append(
+                ECGNormalizer(
+                    normalization_type=cfg.get("normalization_type"),
                 )
+            )
 
         # Get dataset.
         log_figures = cfg.get("log_figures", None)
