@@ -7,8 +7,109 @@ import numpy as np
 import torch
 from omegaconf import ListConfig
 
-__all__ = ["fft2", "ifft2", "fftshift", "ifftshift"]
+__all__ = ["fft1","ifft1","fft2", "ifft2", "fftshift", "ifftshift"]
 
+def ifft1(
+    x: torch.Tensor,
+    centered: bool = False,
+    normalization: str = "ortho",
+    time_dim: int = -1,
+) -> torch.Tensor:
+    r"""Apply 1-dimensional Inverse Fast Fourier Transform along the time axis.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Input data. Expected shape: [batch, leads, time].
+    centered : bool
+        Whether to center the IFFT (shift zero-frequency component to the center). Default is False.
+    normalization : str
+        Normalization mode: {"forward", "backward", "ortho"} (see torch.fft.ifft docs).
+    time_dim : int
+        Dimension along which to apply the IFFT (default: -1).
+
+    Returns
+    -------
+    torch.Tensor
+        The 1D IFFT of the input with the same shape.
+    """
+
+    # Optionally shift frequency domain to center
+    if x.shape[-1] == 2:
+        x = torch.view_as_complex(x.contiguous())  # ensure stride-1
+
+    if centered:
+        x = torch.fft.ifftshift(x, dim=time_dim)
+
+    x = torch.fft.ifft(
+        x,
+        dim=time_dim,
+        norm=normalization if normalization.lower() != "none" else None,
+    )
+
+    if centered:
+        x = torch.fft.fftshift(x, dim=time_dim)
+
+    return x.real
+
+def fft1(
+    x: torch.Tensor,
+    centered: bool = False,
+    normalization: str = "ortho",
+    time_dim: int = -1,
+) -> torch.Tensor:
+    r"""Apply 1-dimensional Fast Fourier Transform along the time axis.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Complex valued input data. Expected shape [..., time, 2] if last dimension encodes complex values.
+    centered : bool
+        Whether to center the FFT (zero-frequency in center). Default is False.
+    normalization : str
+        Normalization mode. For the forward transform (fft1()), options:
+            * ``forward`` - normalize by 1/n
+            * ``backward`` - no normalization
+            * ``ortho`` - normalize by 1/sqrt(n)
+    time_dim : int
+        Dimension along which to apply the FFT (default = -2).
+
+    Returns
+    -------
+    torch.Tensor
+        The 1D FFT of the input, as a real tensor with last dimension = 2.
+
+    Notes
+    -----
+    The PyTorch `torch.fft.fft` function operates on complex tensors.
+    If the input is real with a final dimension of size 2, it will be
+    converted to a complex tensor using `torch.view_as_complex` and
+    converted back to real with `torch.view_as_real`.
+
+    Example
+    -------
+    >>> import torch
+    >>> data = torch.randn(2, 12, 5000, 2)
+    >>> fft_data = fft1(data, centered=True, normalization="ortho")
+    >>> fft_data.shape
+    torch.Size([2, 12, 5000, 2])
+    """
+    if x.shape[-1] == 2:
+        x = torch.view_as_complex(x.contiguous())
+
+    if centered:
+        x = torch.fft.ifftshift(x, dim=time_dim)
+
+    x = torch.fft.fft(
+        x,
+        dim=time_dim,
+        norm=normalization if normalization.lower() != "none" else None,
+    )
+
+    if centered:
+        x = torch.fft.fftshift(x, dim=time_dim)
+
+    return torch.view_as_real(x.resolve_conj())
 
 def fft2(
     x: torch.Tensor,

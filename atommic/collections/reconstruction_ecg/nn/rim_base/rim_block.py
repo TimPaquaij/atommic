@@ -5,8 +5,7 @@ from typing import Any, Optional, Tuple, Union
 
 import torch
 
-from atommic.collections.common.parts.fft import fft2, ifft2
-from atommic.collections.common.parts.utils import coil_combination_method, complex_mul
+from atommic.collections.common.parts.fft import fft1, ifft1
 from atommic.collections.reconstruction_ecg.nn.rim_base import conv_layers, rim_utils, rnn_cells
 
 
@@ -35,6 +34,7 @@ class RIMBlock(torch.nn.Module):
         depth: int = 2,
         time_steps: int = 8,
         conv_dim: int = 2,
+        update_in_frequency: bool = False,
     ):
         """Inits :class:`RIMBlock`.
 
@@ -82,13 +82,15 @@ class RIMBlock(torch.nn.Module):
             Coil combination method. Default is ``"SENSE"``.
         """
         super().__init__()
+        self.update_in_frequency =update_in_frequency
         if input_channels:
             self.input_size = input_channels
+            if self.update_in_frequency:
+                self.input_size = self.input_size*2
         else:
             self.input_size = depth * 2
         self.time_steps = time_steps
         self.conv_dim = conv_dim
-
         self.layers = torch.nn.ModuleList()
         for (
             (conv_features, conv_k_size, conv_dilation, l_conv_bias, nonlinear),
@@ -197,14 +199,22 @@ class RIMBlock(torch.nn.Module):
                 measured_ecg,
                 mask,
                 sigma,
+                self.update_in_frequency,
             ).contiguous()
 
             for h, convrnn in enumerate(self.layers):
                 hx[h] = convrnn(log_likelihood_gradient_prediction, hx[h])
                 log_likelihood_gradient_prediction = hx[h]
 
-            log_likelihood_gradient_prediction = self.final_layer(log_likelihood_gradient_prediction)
-            prediction = prediction + log_likelihood_gradient_prediction
+            log_likelihood_gradient_prediction_freq = self.final_layer(log_likelihood_gradient_prediction)
+            if self.update_in_frequency:
+                prediction_freq = fft1(prediction,time_dim=-1)
+                log_likelihood_gradient_prediction_freq = log_likelihood_gradient_prediction_freq.permute(0,2,3,1).unsqueeze(1)
+                prediction_freq = prediction_freq + log_likelihood_gradient_prediction_freq
+                prediction = ifft1(prediction_freq,time_dim=-1)
+            else:
+                prediction = prediction + log_likelihood_gradient_prediction
+
             if self.conv_dim == 2:
                 predictions.append(prediction.squeeze(1))
             else:
