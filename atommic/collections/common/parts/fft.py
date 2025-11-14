@@ -36,7 +36,7 @@ def ifft1(
 
     # Optionally shift frequency domain to center
     if x.shape[-1] == 2:
-        x = torch.view_as_complex(x.contiguous())  # ensure stride-1
+        x = torch.view_as_complex(x)  # ensure stride-1
 
     if centered:
         x = torch.fft.ifftshift(x, dim=time_dim)
@@ -49,8 +49,10 @@ def ifft1(
 
     if centered:
         x = torch.fft.fftshift(x, dim=time_dim)
+    
+    x = torch.view_as_real(x)
 
-    return x.real
+    return x
 
 def fft1(
     x: torch.Tensor,
@@ -95,7 +97,7 @@ def fft1(
     torch.Size([2, 12, 5000, 2])
     """
     if x.shape[-1] == 2:
-        x = torch.view_as_complex(x.contiguous())
+        x = torch.view_as_complex(x)
 
     if centered:
         x = torch.fft.ifftshift(x, dim=time_dim)
@@ -109,7 +111,9 @@ def fft1(
     if centered:
         x = torch.fft.fftshift(x, dim=time_dim)
 
-    return torch.view_as_real(x.resolve_conj())
+    x = torch.view_as_real(x)
+
+    return x
 
 def fft2(
     x: torch.Tensor,

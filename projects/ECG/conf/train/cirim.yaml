@@ -5,11 +5,11 @@ mode: train
 model:
   model_name: CIRIMECG
   recurrent_layer: IndRNN
-  input_channels: 3 # liklihood and prediction since 2D conv a spatial dim is added
+  input_channels: 3
   conv_filters:
     - 64
     - 64
-    - 2
+    - 1
   conv_kernels:
     - 5
     - 3
@@ -40,7 +40,7 @@ model:
     - false
   time_steps: 8
   conv_dim: 2
-  num_cascades: 1
+  num_cascades: 3
   no_dc: true
   depth: 2
   keep_prediction: true
@@ -48,17 +48,17 @@ model:
   dimensionality: 2
   reconstruction_loss:
     l1: 1
-  normalization_type: null  # null, zscore, minmax
-  unnormalize_loss_inputs: false 
+  normalization_type: null
+  unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
   total_reconstruction_loss_weight: 100
-  update_in_frequency: true
+  update_in_frequency: false
 
   train_ds:
     dataset_format: UniversalECGDataset
     dataset_function: umcu
     waveform_dir: /home/jovyan/work/raw_data/umcu_rhythm
-    dataset: /home/jovyan/work/training/ECGDigitization/dataset/ECGnet_digitization_train_dataset.csv
+    dataset: /home/jovyan/work/training/ECGDigitization/dataset/ECGnet_synthesis_train_dataset.csv
     transforms:
       applygain: true
       resample:
@@ -66,53 +66,53 @@ model:
       totensor: true
       to12lead: true
     mask_args:
-      type: layouts  # the mask will be loaded from the dataset, but we need to specify the type here
+      type: layouts
       accelerations:
-        - "random"
-        # - "3x4"
-        # - "3x4_1"
-        # - "6x2"
-      low_ratio : 0.1
-      high_ratio : 0.5
-      min_block : 500
+        - random
+        - 3x4
+        - 3x4_1
+        - 6x2
+      low_ratio: 0.1
+      high_ratio: 0.5
+      min_block: 500
       use_seed: false
     normalization_type: null
     use_seed: false
     dataset_number_of_examples: 100000
-    batch_size: 5
+    batch_size: 12
     shuffle: true
     num_workers: 3
     pin_memory: false
     drop_last: false
-
+  
   validation_ds:
     dataset_format: UniversalECGDataset
     dataset_function: umcu
     waveform_dir: /home/jovyan/work/raw_data/umcu_rhythm
-    dataset: /home/jovyan/work/training/ECGDigitization/dataset/ECGnet_digitization_val_dataset.csv
+    dataset: /home/jovyan/work/training/ECGDigitization/dataset/ECGnet_synthesis_validation_dataset.csv
     transforms:
       applygain: true
       resample:
-        - 500
+      - 500
       totensor: true
       to12lead: true
     mask_args:
-      type: layouts  # the mask will be loaded from the dataset, but we need to specify the type here
+      type: layouts
       accelerations:
-        - "random"
-        # - "3x4"
-        # - "3x4_1"
-        # - "6x2"
-      low_ratio : 0.1
-      high_ratio : 0.5
-      min_block : 500
+      - random
+      - 3x4
+      - 3x4_1
+      - 6x2
+      low_ratio: 0.1
+      high_ratio: 0.5
+      min_block: 500
       use_seed: true
-    normalization_type: null  # none, zscore, minmax
+    normalization_type: null
     use_seed: true
-    dataset_number_of_examples: 10000
-    batch_size: 5
+    dataset_number_of_examples: -1
+    batch_size: 25
     log_figures: 4
-    shuffle: False
+    shuffle: false
     num_workers: 10
     pin_memory: false
     drop_last: false

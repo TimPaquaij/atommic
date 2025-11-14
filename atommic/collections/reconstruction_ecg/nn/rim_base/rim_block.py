@@ -181,17 +181,19 @@ class RIMBlock(torch.nn.Module):
         Tuple[Any, Union[list, torch.Tensor, None]]
             Reconstructed image and hidden states.
         """
-        if self.conv_dim == 2:
-            prediction = prediction.unsqueeze(1)  # [batch, 1, leads, time] 2D conv
-            mask = mask.unsqueeze(1)  # [batch, 1, leads, time] 2D conv
-            measured_ecg = measured_ecg.unsqueeze(1)  # [batch, 1, leads, time] 2D conv
+        if self.conv_dim == 2 and not self.update_in_frequency:
+            mask = mask.unsqueeze(-1)  # [batch, leads, time, 1] 2D conv
+            measured_ecg = measured_ecg.unsqueeze(-1)  # [batch, leads, time, 1] 2D conv
+            if prediction.dim() == 3:
+                prediction = prediction.unsqueeze(-1)  # [batch, leads, time, 1] 2D conv
 
         if hx is None or (not isinstance(hx, list) and hx.dim() < 3):
             hx = [
-                prediction.new_zeros((prediction.size(0), f, *prediction.size()[2:]))
+                prediction.new_zeros((prediction.size(0), f, *prediction.size()[1:]))
                 for f in self.recurrent_filters
                 if f != 0
             ]
+            print(hx[0].shape)
         predictions = []
         for _ in range(self.time_steps):
             log_likelihood_gradient_prediction = rim_utils.log_likelihood_gradient_ecg(
@@ -208,15 +210,18 @@ class RIMBlock(torch.nn.Module):
 
             log_likelihood_gradient_prediction_freq = self.final_layer(log_likelihood_gradient_prediction)
             if self.update_in_frequency:
-                prediction_freq = fft1(prediction,time_dim=-1)
-                log_likelihood_gradient_prediction_freq = log_likelihood_gradient_prediction_freq.permute(0,2,3,1).unsqueeze(1)
-                prediction_freq = prediction_freq + log_likelihood_gradient_prediction_freq
-                prediction = ifft1(prediction_freq,time_dim=-1)
+                if prediction.dim() == 3:
+                    prediction_freq = fft1(prediction,time_dim=-1)
+                else:
+                    prediction_freq = prediction
+                log_likelihood_gradient_prediction_freq = log_likelihood_gradient_prediction_freq.permute(0,2,3,1)
+                print(prediction_freq.shape)
+                prediction = prediction_freq + log_likelihood_gradient_prediction_freq
             else:
-                prediction = prediction + log_likelihood_gradient_prediction
+                prediction = prediction + log_likelihood_gradient_prediction.permute(0,2,3,1)
 
-            if self.conv_dim == 2:
-                predictions.append(prediction.squeeze(1))
+            if self.conv_dim == 2 and not self.update_in_frequency:
+                predictions.append(prediction.squeeze(-1))
             else:
                 predictions.append(prediction)
 
