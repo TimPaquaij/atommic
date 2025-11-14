@@ -57,7 +57,7 @@ model:
     dataset_format: UniversalECGDataset
     dataset_function: umcu
     waveform_dir: /home/jovyan/work/raw_data/umcu_rhythm
-    dataset: /home/jovyan/work/training/ECGDigitization/dataset/ECGnet_synthesis_test_dataset.csv
+    dataset: /home/jovyan/work/training/ECGSynthesis/dataset/ECGnet_synthesis_test_dataset.csv
     transforms:
       applygain: true
       resample:
@@ -112,7 +112,7 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /home/jovyan/work/training/ECGSynthesis/Results/
+  exp_dir: /home/jovyan/work/training/ECGSynthesis/results/
   ema:
     enable: false
   create_tensorboard_logger: true

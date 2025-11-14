@@ -144,7 +144,7 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: Results/CIRIMECG/
+  exp_dir: /home/jovyan/work/training/ECGDigitization/models
   ema:
     enable: false
   create_tensorboard_logger: true
