@@ -182,6 +182,7 @@ class RIMBlock(torch.nn.Module):
             Reconstructed image and hidden states.
         """
         if self.conv_dim == 2 and not self.update_in_frequency:
+            end = -1
             mask = mask.unsqueeze(-1)  # [batch, leads, time, 1] 2D conv
             measured_ecg = measured_ecg.unsqueeze(-1)  # [batch, leads, time, 1] 2D conv
             if prediction.dim() == 3:
@@ -189,11 +190,10 @@ class RIMBlock(torch.nn.Module):
 
         if hx is None or (not isinstance(hx, list) and hx.dim() < 3):
             hx = [
-                prediction.new_zeros((prediction.size(0), f, *prediction.size()[1:]))
+                prediction.new_zeros((prediction.size(0), f, *prediction.size()[1:end]))
                 for f in self.recurrent_filters
                 if f != 0
             ]
-            print(hx[0].shape)
         predictions = []
         for _ in range(self.time_steps):
             log_likelihood_gradient_prediction = rim_utils.log_likelihood_gradient_ecg(
@@ -208,15 +208,13 @@ class RIMBlock(torch.nn.Module):
                 hx[h] = convrnn(log_likelihood_gradient_prediction, hx[h])
                 log_likelihood_gradient_prediction = hx[h]
 
-            log_likelihood_gradient_prediction_freq = self.final_layer(log_likelihood_gradient_prediction)
+            log_likelihood_gradient_prediction = self.final_layer(log_likelihood_gradient_prediction)
             if self.update_in_frequency:
                 if prediction.dim() == 3:
                     prediction_freq = fft1(prediction,time_dim=-1)
                 else:
                     prediction_freq = prediction
-                log_likelihood_gradient_prediction_freq = log_likelihood_gradient_prediction_freq.permute(0,2,3,1)
-                print(prediction_freq.shape)
-                prediction = prediction_freq + log_likelihood_gradient_prediction_freq
+                prediction = prediction_freq + log_likelihood_gradient_prediction.permute(0,2,3,1)
             else:
                 prediction = prediction + log_likelihood_gradient_prediction.permute(0,2,3,1)
 

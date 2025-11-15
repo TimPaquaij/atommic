@@ -47,7 +47,6 @@ def log_likelihood_gradient_ecg(
         
     else:
         gradients = torch.cat([prediction,mask_gradients,pred_gradients], dim=-1).permute(0,3,1,2)
-    print(gradients.shape)
 
     
 

@@ -34,6 +34,7 @@ from ecgxai.utils.dataset import UniversalECGDataset
 from ecgxai.utils.transforms import ToTensor, ApplyGain, To12Lead, Resample, PolyFilter, ButterFilter, Masker, ECGNormalizer
 from atommic.collections.reconstruction_ecg.losses.na import NoiseAwareLoss
 from atommic.collections.reconstruction_ecg.losses.ssim import SSIMLoss
+from atommic.collections.reconstruction_ecg.losses.ml1 import MaskL1Loss
 from atommic.collections.reconstruction_ecg.metrics.reconstruction_metrics import mse, nmse, psnr, ssim
 
 __all__ = ["BaseECGReconstructionModel"]
@@ -87,6 +88,8 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                     self.reconstruction_losses[name] = NoiseAwareLoss()
                 elif name == "l1":
                     self.reconstruction_losses[name] = L1Loss()
+                elif name =="masked_l1":
+                    self.reconstruction_losses[name] = MaskL1Loss()
         # replace losses names by 'loss_1', 'loss_2', etc. to properly iterate in the aggregator loss
         self.reconstruction_losses = {f"loss_{i+1}": v for i, v in enumerate(self.reconstruction_losses.values())}
         self.total_reconstruction_losses = len(self.reconstruction_losses)
@@ -540,7 +543,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         predictions = outputs["predictions"]
 
         # Compute loss
-        train_loss = self.__compute_loss__(target, predictions, 1-sample["mask"],sample["attrs"])
+        train_loss = self.__compute_loss__(target, predictions, sample["mask"],sample["attrs"])
 
         # Log loss for the chosen acceleration factor and the learning rate in the selected logger.
         logs = {
@@ -614,7 +617,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         predictions = outputs["predictions"]
 
         # Compute loss
-        val_loss = self.__compute_loss__(target, predictions, 1-sample["mask"], sample["attrs"])
+        val_loss = self.__compute_loss__(target, predictions, sample["mask"], sample["attrs"])
         self.validation_step_outputs.append({"val_loss": val_loss})
 
         # Compute metrics and log them and log outputs.
@@ -690,11 +693,9 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         # If "16" or "16-mixed" fp is used, ensure complex type will be supported when saving the predictions.
         if predictions.shape[-1] == 2:
             predictions = torch.view_as_complex(predictions.type(torch.float32))
-        else:
-            predictions = torch.view_as_complex(torch.view_as_real(predictions).type(torch.float32))
         predictions = predictions.detach().cpu().numpy()
 
-        self.test_step_outputs.append([fname, slice_idx, predictions])
+        self.test_step_outputs.append([sample["pseudoid"],sample["testid"],sample["layout"],sample["mask"] ,predictions])
 
     def on_validation_epoch_end(self):
         """Called at the end of validation epoch to aggregate outputs."""
@@ -792,25 +793,41 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
 
         for metric, value in metrics.items():
             self.log(f"test_metrics/{metric}", value / tot_examples, prog_bar=True, sync_dist=True)
-
-        # Save predictions.
-        reconstructions = defaultdict(list)
-        for fname, slice_num, output in self.test_step_outputs:
-            reconstructions[fname].append((slice_num, output))
-
-        for fname in reconstructions:
-            reconstructions[fname] = np.stack([out for _, out in sorted(reconstructions[fname])])
-
-        if self.consecutive_slices > 1:
-            # iterate over the slices and always keep the middle slice
-            for fname in reconstructions:
-                reconstructions[fname] = reconstructions[fname][:, self.consecutive_slices // 2]
-
         if "wandb" in self.logger.__module__.lower():
             out_dir = Path(os.path.join(self.logger.save_dir, "reconstructions"))
         else:
             out_dir = Path(os.path.join(self.logger.log_dir, "reconstructions"))
         out_dir.mkdir(exist_ok=True, parents=True)
+
+        # Save predictions.
+        reconstructions = defaultdict(list)
+        for pseudo_id, test_id, layout, mask, reconstructions in self.test_step_outputs:
+            filename = os.path.join(
+                    pseudo_id[0:2],
+                    pseudo_id[2:4],
+                    pseudo_id[4:],
+                    layout,
+                    f"{test_id}.npy")
+            file_dir = os.path.join(out_dir,filename)
+            os.makedirs(os.path.split(file_dir)[0], exist_ok=True)
+            np.save(file_dir,reconstructions)
+            if layout == "random":
+                filename = os.path.join(
+                    pseudo_id[0:2],
+                    pseudo_id[2:4],
+                    pseudo_id[4:],
+                    layout,
+                    f"{test_id}_random_mask.npy")
+                file_dir = os.path.join(out_dir,filename)
+                os.makedirs(os.path.split(file_dir)[0], exist_ok=True)
+                np.save(file_dir,mask)
+                
+
+
+
+            
+
+        
 
         for fname, recons in reconstructions.items():
             with h5py.File(out_dir / fname[0], "w") as hf:

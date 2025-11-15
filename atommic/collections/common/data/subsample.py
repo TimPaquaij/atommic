@@ -894,31 +894,68 @@ class LayoutMaskFunc(MaskFunc):
     4-fold acceleration with 8% center fraction is selected and a 50% probability that 8-fold acceleration with 4%
     center fraction is selected.
     """
-    def random_mask(self, shape: tuple[int, int], min_block: int, high_ratio: float = 0.5, low_ratio : float = 0.1 ) -> torch.Tensor:
+    def random_mask(
+        self,
+        shape: tuple[int, int],
+        min_block: int,
+        high_ratio: float = 0.5,
+        low_ratio: float = 0.3
+    ) -> torch.Tensor:
         n_leads, n_samples = shape
-        # Randomize how much of the total space we’ll mask: between 30–50 %
+
+        # target fraction of masked (0) entries
         target_fraction = self.rng.uniform(low_ratio, high_ratio)
         total_allowed = int(n_leads * n_samples * target_fraction)
 
-        mask = torch.zeros((n_leads, n_samples), dtype=torch.float32)
+        mask = torch.ones((n_leads, n_samples), dtype=torch.float32)
         total_masked = 0
         fully_masked_leads = 0
 
+        # sample blocks that set entries to zero
         while total_masked < total_allowed:
             lead = self.rng.randint(0, n_leads - 1)
             block_len = self.rng.randint(min_block, n_samples // 4)
             start = self.rng.randint(0, max(0, n_samples - block_len))
 
-            if (mask[lead] == 0).sum() <= block_len and fully_masked_leads >= 1:
+            # ensure no more than two leads become fully zero
+            if mask[lead].sum() <= block_len and fully_masked_leads >= 2:
                 continue
 
-            mask[lead, start:start + block_len] = 1
-            total_masked = int(mask.sum().item())
+            # apply block
+            mask[lead, start:start + block_len] = 0
+            total_masked = int((mask == 0).sum().item())
 
-            if mask[lead].sum() == n_samples:
+            # track fully masked leads
+            if mask[lead].sum() == 0:
                 fully_masked_leads += 1
 
-        return 1-mask
+        # --- Constraint repair pass 1: ensure ≥2 unmasked leads at every timepoint ---
+        for t in range(n_samples):
+            column = mask[:, t]
+            unmasked = int(column.sum().item())
+
+            if unmasked < 2:
+                # randomly reopen resets to guarantee at least 2 ones
+                needed = 2 - unmasked
+                candidates = torch.where(column == 0)[0]
+                chosen = self.rng.choice(candidates.tolist(), size=needed, replace=False)
+                mask[chosen, t] = 1
+
+        # --- Constraint repair pass 2: ensure ≤2 fully masked leads ---
+        fully_masked_indices = [i for i in range(n_leads) if mask[i].sum().item() == 0]
+
+        if len(fully_masked_indices) > 2:
+            excess = len(fully_masked_indices) - 2
+            leads_to_repair = self.rng.choice(
+                fully_masked_indices, size=excess, replace=False
+            )
+            for ld in leads_to_repair:
+                # reopen a random segment
+                block_len = self.rng.randint(min_block, n_samples // 4)
+                start = self.rng.randint(0, max(0, n_samples - block_len))
+                mask[ld, start:start + block_len] = 1
+
+        return mask
 
     def __call__(
         self,
@@ -972,9 +1009,13 @@ class LayoutMaskFunc(MaskFunc):
                         6: 9, int((shape[1] / 2)) + 1 : int(3 * shape[1] / 4) + 1
                     ] = 1
                     mask[9:, int(3 * shape[1] / 4) + 1 :] = 1
-                    possible_rhythm_leads = [1, 6, 10]  # Lead indices: II, V1, V5
+                    possible_rhythm_leads = 1  # Lead indices: II, V1, V5
                     rhythm_lead = self.rng.choice(possible_rhythm_leads)
                     mask[rhythm_lead, :] = 1
+                elif acceleration == "hex":
+                    mask[:6, :] = 1
+                    mask[7, :] = 1
+                    mask[10, :] = 1
                 elif acceleration == "random":
                     mask = self.random_mask(shape, min_block=self.min_block, low_ratio=self.low_ratio, high_ratio=self.high_ratio)
 
@@ -994,6 +1035,10 @@ class LayoutMaskFunc(MaskFunc):
                     possible_rhythm_leads = [1, 3, 7]  # Lead indices: II, V1, V5
                     rhythm_lead = self.rng.choice(possible_rhythm_leads)
                     mask[rhythm_lead, :] = 1
+                elif acceleration == "hex":
+                    mask[:2, :] = 1
+                    mask[3, :] = 1
+                    mask[6, :] = 1
                 elif acceleration == "random":
                     mask = self.random_mask(shape, min_block=self.min_block)
         return mask, acceleration

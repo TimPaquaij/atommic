@@ -78,7 +78,7 @@ model:
     normalization_type: null
     use_seed: true
     dataset_number_of_examples: -1
-    batch_size: 25
+    batch_size: 1
     log_figures: 4
     shuffle: false
     num_workers: 10
@@ -112,7 +112,7 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /home/jovyan/work/training/ECGSynthesis/results/
+  exp_dir: /home/jovyan/work/training/ECGSynthesis/results
   ema:
     enable: false
   create_tensorboard_logger: true

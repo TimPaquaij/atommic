@@ -2,7 +2,7 @@
 __author__ = "Dimitris Karkalousos"
 
 from atommic.collections.reconstruction.nn.ccnn import CascadeNet  # noqa: F401
-from atommic.collections.reconstruction.nn.cirim import CIRIM  # noqa: F401
+from atommic.collections.reconstruction_ecg.nn.cirim import CIRIMECG  # noqa: F401
 from atommic.collections.reconstruction.nn.crnn import CRNNet  # noqa: F401
 from atommic.collections.reconstruction.nn.dunet import DUNet  # noqa: F401
 from atommic.collections.reconstruction.nn.jointicnet import JointICNet  # noqa: F401
