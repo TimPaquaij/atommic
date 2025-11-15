@@ -47,7 +47,7 @@ model:
   accumulate_predictions: true
   dimensionality: 2
   reconstruction_loss:
-    masked_l1: 1
+    masked_huber: 1
   normalization_type: null
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
@@ -79,7 +79,7 @@ model:
       use_seed: false
     normalization_type: null
     use_seed: false
-    dataset_number_of_examples: 1000
+    dataset_number_of_examples: 10000
     batch_size: 10
     shuffle: true
     num_workers: 3
@@ -111,7 +111,7 @@ model:
       use_seed: true
     normalization_type: null
     use_seed: true
-    dataset_number_of_examples: 25
+    dataset_number_of_examples: 2500
     batch_size: 25
     log_figures: 4
     shuffle: false
@@ -141,7 +141,7 @@ trainer:
   precision: 32
   enable_checkpointing: false
   logger: false
-  log_every_n_steps: 1000
+  log_every_n_steps: 100
   check_val_every_n_epoch: -1
   max_steps: -1
 

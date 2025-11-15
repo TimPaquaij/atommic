@@ -31,10 +31,20 @@ from atommic.collections.common.parts.utils import (
     unnormalize_ECG,
 )
 from ecgxai.utils.dataset import UniversalECGDataset
-from ecgxai.utils.transforms import ToTensor, ApplyGain, To12Lead, Resample, PolyFilter, ButterFilter, Masker, ECGNormalizer
+from ecgxai.utils.transforms import (
+    ToTensor,
+    ApplyGain,
+    To12Lead,
+    Resample,
+    PolyFilter,
+    ButterFilter,
+    Masker,
+    ECGNormalizer,
+)
 from atommic.collections.reconstruction_ecg.losses.na import NoiseAwareLoss
 from atommic.collections.reconstruction_ecg.losses.ssim import SSIMLoss
 from atommic.collections.reconstruction_ecg.losses.ml1 import MaskL1Loss
+from atommic.collections.reconstruction_ecg.losses.huber import MaskHuberLoss
 from atommic.collections.reconstruction_ecg.metrics.reconstruction_metrics import mse, nmse, psnr, ssim
 
 __all__ = ["BaseECGReconstructionModel"]
@@ -88,8 +98,10 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                     self.reconstruction_losses[name] = NoiseAwareLoss()
                 elif name == "l1":
                     self.reconstruction_losses[name] = L1Loss()
-                elif name =="masked_l1":
+                elif name == "masked_l1":
                     self.reconstruction_losses[name] = MaskL1Loss()
+                elif name == "masked_huber":
+                    self.reconstruction_losses[name] = MaskHuberLoss()
         # replace losses names by 'loss_1', 'loss_2', etc. to properly iterate in the aggregator loss
         self.reconstruction_losses = {f"loss_{i+1}": v for i, v in enumerate(self.reconstruction_losses.values())}
         self.total_reconstruction_losses = len(self.reconstruction_losses)
@@ -178,7 +190,9 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
 
         return compute_reconstruction_loss(target, prediction, attrs)
 
-    def __compute_loss__(self, target: torch.Tensor, predictions: Union[list, torch.Tensor], mask: torch.Tensor, attrs: dict) -> torch.Tensor:
+    def __compute_loss__(
+        self, target: torch.Tensor, predictions: Union[list, torch.Tensor], mask: torch.Tensor, attrs: dict
+    ) -> torch.Tensor:
         """Computes the reconstruction loss.
 
         Parameters
@@ -258,7 +272,8 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                 # Unnormalize target and predictions with pre normalization values. This is only for logging purposes.
                 # For the loss computation, the self.unnormalize_loss_inputs flag is used.
                 output_target, output_predictions = self.__unnormalize_for_loss_or_log__(
-                    output_target, output_predictions, attrs, _batch_idx_)
+                    output_target, output_predictions, attrs, _batch_idx_
+                )
 
             # Log target and predictions, if log_image is True for this slice.
             if attrs["log_image"][_batch_idx_]:
@@ -322,8 +337,8 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             Unnormalized sensitivity maps.
         """
         min_val = attrs["target_min"]
-        max_val = attrs["target_max"] 
-        mean_val = attrs["target_mean"] 
+        max_val = attrs["target_max"]
+        mean_val = attrs["target_mean"]
         std_val = attrs["target_std"]
         median_val = attrs["target_median"]
         if isinstance(min_val, list):
@@ -337,11 +352,13 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         if isinstance(median_val, list):
             std_val = std_val[median_val]
         target = unnormalize_ECG(
-            target, {"min": min_val, "max": max_val, "mean": mean_val, "std": std_val, "median": median_val}, self.normalization_type
+            target,
+            {"min": min_val, "max": max_val, "mean": mean_val, "std": std_val, "median": median_val},
+            self.normalization_type,
         )
 
-        min_val = attrs["prediction_min"] 
-        max_val = attrs["prediction_max"] 
+        min_val = attrs["prediction_min"]
+        max_val = attrs["prediction_max"]
         mean_val = attrs["prediction_mean"]
         std_val = attrs["prediction_std"]
         median_val = attrs["prediction_median"]
@@ -357,7 +374,9 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             std_val = std_val[median_val]
 
         prediction = unnormalize_ECG(
-            prediction, {"min": min_val, "max": max_val, "mean": mean_val, "std": std_val, "median": median_val}, self.normalization_type
+            prediction,
+            {"min": min_val, "max": max_val, "mean": mean_val, "std": std_val, "median": median_val},
+            self.normalization_type,
         )
 
         return target, prediction
@@ -543,7 +562,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         predictions = outputs["predictions"]
 
         # Compute loss
-        train_loss = self.__compute_loss__(target, predictions, sample["mask"],sample["attrs"])
+        train_loss = self.__compute_loss__(target, predictions, sample["mask"], sample["attrs"])
 
         # Log loss for the chosen acceleration factor and the learning rate in the selected logger.
         logs = {
@@ -695,7 +714,9 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             predictions = torch.view_as_complex(predictions.type(torch.float32))
         predictions = predictions.detach().cpu().numpy()
 
-        self.test_step_outputs.append([sample["pseudoid"],sample["testid"],sample["layout"],sample["mask"] ,predictions])
+        self.test_step_outputs.append(
+            [sample["pseudoid"], sample["testid"], sample["layout"], sample["mask"], predictions]
+        )
 
     def on_validation_epoch_end(self):
         """Called at the end of validation epoch to aggregate outputs."""
@@ -802,32 +823,17 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         # Save predictions.
         reconstructions = defaultdict(list)
         for pseudo_id, test_id, layout, mask, reconstructions in self.test_step_outputs:
-            filename = os.path.join(
-                    pseudo_id[0:2],
-                    pseudo_id[2:4],
-                    pseudo_id[4:],
-                    layout,
-                    f"{test_id}.npy")
-            file_dir = os.path.join(out_dir,filename)
+            filename = os.path.join(pseudo_id[0:2], pseudo_id[2:4], pseudo_id[4:], layout, f"{test_id}.npy")
+            file_dir = os.path.join(out_dir, filename)
             os.makedirs(os.path.split(file_dir)[0], exist_ok=True)
-            np.save(file_dir,reconstructions)
+            np.save(file_dir, reconstructions)
             if layout == "random":
                 filename = os.path.join(
-                    pseudo_id[0:2],
-                    pseudo_id[2:4],
-                    pseudo_id[4:],
-                    layout,
-                    f"{test_id}_random_mask.npy")
-                file_dir = os.path.join(out_dir,filename)
+                    pseudo_id[0:2], pseudo_id[2:4], pseudo_id[4:], layout, f"{test_id}_random_mask.npy"
+                )
+                file_dir = os.path.join(out_dir, filename)
                 os.makedirs(os.path.split(file_dir)[0], exist_ok=True)
-                np.save(file_dir,mask)
-                
-
-
-
-            
-
-        
+                np.save(file_dir, mask)
 
         for fname, recons in reconstructions.items():
             with h5py.File(out_dir / fname[0], "w") as hf:
@@ -852,13 +858,21 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         mask_type = mask_args.get("type", None)
         use_seed = mask_args.get("use_seed", False)
         mask_func = None
-        
+
         accelerations = mask_args.get("accelerations", [1])
         if "random" in accelerations:
             low_ratio = mask_args.get("low_ratio", 0.1)
             high_ratio = mask_args.get("high_ratio", 0.5)
             min_block = mask_args.get("min_block", 500)
-            mask_func = [create_masker(mask_type_str=mask_type, accelerations=accelerations, low_ratio=low_ratio, high_ratio=high_ratio, min_block=min_block)]
+            mask_func = [
+                create_masker(
+                    mask_type_str=mask_type,
+                    accelerations=accelerations,
+                    low_ratio=low_ratio,
+                    high_ratio=high_ratio,
+                    min_block=min_block,
+                )
+            ]
         else:
             mask_func = [create_masker(mask_type_str=mask_type, accelerations=accelerations)]
 
@@ -878,7 +892,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                     transforms.append(ToTensor())
                 if key.lower() == "to12lead":
                     transforms.append(To12Lead())
-            transforms.append(Masker(mask_func,use_seed=use_seed))
+            transforms.append(Masker(mask_func, use_seed=use_seed))
         if cfg.get("normalization_type", None):
             transforms.append(
                 ECGNormalizer(
@@ -891,7 +905,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         dataset = dataloader(
             dataset_function=cfg.get("dataset_function"),
             waveform_dir=cfg.get("waveform_dir"),
-            dataset=pd.read_csv((cfg.get("dataset")))[:cfg.get("dataset_number_of_examples", 10)],
+            dataset=pd.read_csv((cfg.get("dataset")))[: cfg.get("dataset_number_of_examples", 10)],
             transform=Compose(transforms),
             labels=cfg.get("labels", None),
             secondary_waveform_dir=cfg.get("secondary_waveform_dir", ""),

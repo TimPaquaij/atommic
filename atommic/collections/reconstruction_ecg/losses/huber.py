@@ -1,4 +1,3 @@
-# coding=utf-8
 __author__ = "Tim Paquaij"
 
 import torch
@@ -7,14 +6,26 @@ import torch.nn.functional as F
 from atommic.core.classes.loss import Loss
 
 
-class MaskL1Loss(Loss):
+class MaskHuberLoss(Loss):
     """
-    L1 loss with masked weighting.
-    Mask entries equal to 0 are replaced by a configurable weight > 1.
+    Masked Huber loss for ECG reconstruction.
+
+    mask = 1  → visible region  → weight 1
+    mask = 0  → synthesised region → weight = missing_weight
+
+    Huber rule:
+        if |x| <= delta: 0.5 * x^2
+        else: delta * (|x| - 0.5 * delta)
     """
 
-    def __init__(self, weight: float = 2.0, reduction: str = "mean") -> None:
+    def __init__(
+        self,
+        delta: float = 0.05,
+        weight: float = 3.0,
+        reduction: str = "mean",
+    ) -> None:
         super().__init__()
+        self.delta = float(delta)
         self.weight = float(weight)
         self.reduction = reduction
 
@@ -22,7 +33,7 @@ class MaskL1Loss(Loss):
         self,
         target: torch.Tensor,
         pred: torch.Tensor,
-        mask: torch.Tensor = None,
+        mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
 
         pred = pred.to(target.dtype)
@@ -37,9 +48,15 @@ class MaskL1Loss(Loss):
                 torch.tensor(self.weight, dtype=target.dtype, device=target.device),
             )
 
-        diff = torch.abs(pred - target)
-        loss = diff * weighted_mask
+        diff = pred - target
+        abs_diff = diff.abs()
 
+        quadratic = 0.5 * diff.pow(2)
+        linear = self.delta * (abs_diff - 0.5 * self.delta)
+
+        huber = torch.where(abs_diff <= self.delta, quadratic, linear)
+
+        loss = huber * weighted_mask
         if self.reduction == "mean":
             return loss.mean()
         if self.reduction == "sum":
