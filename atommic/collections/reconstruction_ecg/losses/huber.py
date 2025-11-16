@@ -21,7 +21,7 @@ class MaskHuberLoss(Loss):
     def __init__(
         self,
         delta: float = 0.05,
-        weight: float = 3.0,
+        weight: float = 2.0,
         reduction: str = "mean",
     ) -> None:
         super().__init__()

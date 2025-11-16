@@ -61,7 +61,7 @@ class CIRIMECG(BaseECGReconstructionModel):
                     depth=cfg_dict.get("depth"),
                     time_steps=self.time_steps,
                     conv_dim=cfg_dict.get("conv_dim"),
-                    update_in_frequency = cfg_dict.get("update_in_frequency")
+                    update_in_frequency=cfg_dict.get("update_in_frequency"),
                 )
                 for _ in range(cfg_dict.get("num_cascades"))
             ]
@@ -149,7 +149,7 @@ class CIRIMECG(BaseECGReconstructionModel):
             Otherwise, returns the loss of the last intermediate loss.
         """
 
-        def compute_reconstruction_loss(t, p, m,attrs):
+        def compute_reconstruction_loss(t, p, m, attrs):
             if self.unnormalize_loss_inputs:
                 # we do the unnormalization here to avoid explicitly iterating through list of predictions, which
                 # might be a list of lists.
@@ -166,8 +166,10 @@ class CIRIMECG(BaseECGReconstructionModel):
                     .to(t.device),
                 )
             if "masked_l1":
-                loss_func(t, p, m)
+                return loss_func(t, p, m)
 
+            if "masked_huber":
+                return loss_func(t, p, m)
 
             return loss_func(t, p)
 
@@ -177,14 +179,16 @@ class CIRIMECG(BaseECGReconstructionModel):
             for cascade_pred in prediction:
                 time_steps_weights = torch.logspace(-1, 0, steps=len(cascade_pred)).to(target.device)
                 time_steps_loss = [
-                    compute_reconstruction_loss(target, time_step_pred,mask, attrs) for time_step_pred in cascade_pred
+                    compute_reconstruction_loss(target, time_step_pred, mask, attrs) for time_step_pred in cascade_pred
                 ]
-                cascade_loss = sum(x * w for x, w in zip(time_steps_loss, time_steps_weights)) / sum(time_steps_weights)
+                cascade_loss = sum(x * w for x, w in zip(time_steps_loss, time_steps_weights)) / sum(
+                    time_steps_weights
+                )
                 cascades_loss.append(cascade_loss)
             loss = sum(x * w for x, w in zip(cascades_loss, cascades_weights)) / sum(cascades_weights)
         else:
             # keep the last prediction of the last cascade
             prediction = prediction[-1][-1]
-            loss = compute_reconstruction_loss(target, prediction, mask,attrs)
+            loss = compute_reconstruction_loss(target, prediction, mask, attrs)
 
         return loss

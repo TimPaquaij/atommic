@@ -171,7 +171,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             Otherwise, returns the loss of the last intermediate loss.
         """
 
-        def compute_reconstruction_loss(t, p, attrs):
+        def compute_reconstruction_loss(t, p, m, attrs):
             if self.unnormalize_loss_inputs:
                 # we do the unnormalization here to avoid explicitly iterating through list of predictions, which
                 # might be a list of lists.
@@ -185,10 +185,15 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                     p,
                     data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(dim=0).to(t),
                 )
+            if "masked_l1":
+                return loss_func(t, p, m)
+
+            if "masked_huber":
+                return loss_func(t, p, m)
 
             return loss_func(t, p)
 
-        return compute_reconstruction_loss(target, prediction, attrs)
+        return compute_reconstruction_loss(target, prediction, mask, attrs)
 
     def __compute_loss__(
         self, target: torch.Tensor, predictions: Union[list, torch.Tensor], mask: torch.Tensor, attrs: dict
@@ -713,10 +718,17 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         if predictions.shape[-1] == 2:
             predictions = torch.view_as_complex(predictions.type(torch.float32))
         predictions = predictions.detach().cpu().numpy()
-
-        self.test_step_outputs.append(
-            [sample["pseudoid"], sample["testid"], sample["layout"], sample["mask"], predictions]
-        )
+        mask = sample["mask"].detach().cpu().numpy()
+        for i in range(predictions.shape[0]):
+            self.test_step_outputs.append(
+                [
+                    sample["pseudoid"][i],
+                    sample["testid"][i],
+                    sample["layout"][i],
+                    mask[i],
+                    predictions[i],
+                ]
+            )
 
     def on_validation_epoch_end(self):
         """Called at the end of validation epoch to aggregate outputs."""
@@ -834,10 +846,6 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                 file_dir = os.path.join(out_dir, filename)
                 os.makedirs(os.path.split(file_dir)[0], exist_ok=True)
                 np.save(file_dir, mask)
-
-        for fname, recons in reconstructions.items():
-            with h5py.File(out_dir / fname[0], "w") as hf:
-                hf.create_dataset("reconstruction", data=recons)
 
     @staticmethod
     def _setup_dataloader_from_config(cfg: DictConfig) -> DataLoader:

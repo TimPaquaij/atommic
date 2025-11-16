@@ -47,7 +47,7 @@ model:
   accumulate_predictions: true
   dimensionality: 2
   reconstruction_loss:
-    masked_huber: 1
+    masked_l1: 1
   normalization_type: null
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
@@ -79,8 +79,8 @@ model:
       use_seed: false
     normalization_type: null
     use_seed: false
-    dataset_number_of_examples: 10000
-    batch_size: 10
+    dataset_number_of_examples: -1
+    batch_size: 18
     shuffle: true
     num_workers: 3
     pin_memory: false
@@ -111,8 +111,8 @@ model:
       use_seed: true
     normalization_type: null
     use_seed: true
-    dataset_number_of_examples: 2500
-    batch_size: 25
+    dataset_number_of_examples: -1
+    batch_size: 18
     log_figures: 4
     shuffle: false
     num_workers: 10
@@ -120,12 +120,12 @@ model:
     drop_last: false
 
   optim:
-    name: adamw
-    lr: 1e-3
+    name: adam
+    lr: 1e-4
     betas:
       - 0.9
       - 0.999
-    weight_decay: 1e-4
+    weight_decay: 0.0
     sched:
       name: InverseSquareRootAnnealing
       min_lr: 0.0
@@ -135,9 +135,9 @@ model:
 trainer:
   strategy: auto
   accelerator: gpu
-  devices: [1]
+  devices: [0]
   num_nodes: 1
-  max_epochs: 50
+  max_epochs: 25
   precision: 32
   enable_checkpointing: false
   logger: false

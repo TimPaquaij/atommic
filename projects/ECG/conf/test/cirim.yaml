@@ -1,57 +1,59 @@
 pretrained: true
-checkpoint: None
+checkpoint: /home/jovyan/work/training/ECGSynthesis/models/default/2025-11-15_20-06-34/checkpoints/default--val_loss=0.3519-epoch=11.ckpt
 mode: test
 
 model:
+  
   model_name: CIRIMECG
   recurrent_layer: IndRNN
   input_channels: 3
   conv_filters:
-  - 64
-  - 64
-  - 1
+    - 64
+    - 64
+    - 1
   conv_kernels:
-  - 5
-  - 3
-  - 3
+    - 5
+    - 3
+    - 3
   conv_dilations:
-  - 1
-  - 1
-  - 1
+    - 1
+    - 1
+    - 1
   conv_bias:
-  - true
-  - true
-  - false
+    - true
+    - true
+    - false
   recurrent_filters:
-  - 64
-  - 64
-  - 0
+    - 64
+    - 64
+    - 0
   recurrent_kernels:
-  - 3
-  - 3
-  - 0
+    - 3
+    - 3
+    - 0
   recurrent_dilations:
-  - 1
-  - 1
-  - 0
+    - 1
+    - 1
+    - 0
   recurrent_bias:
-  - true
-  - true
-  - false
+    - true
+    - true
+    - false
   time_steps: 8
   conv_dim: 2
-  num_cascades: 3
+  num_cascades: 1
   no_dc: true
   depth: 2
   keep_prediction: true
   accumulate_predictions: true
   dimensionality: 2
   reconstruction_loss:
-    l1: 1
+    masked_huber: 1
   normalization_type: null
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
   total_reconstruction_loss_weight: 100
+  update_in_frequency: false
 
   test_ds:
     dataset_format: UniversalECGDataset
@@ -67,10 +69,7 @@ model:
     mask_args:
       type: layouts
       accelerations:
-      - random
-      - 3x4
-      - 3x4_1
-      - 6x2
+      - hex
       low_ratio: 0.1
       high_ratio: 0.5
       min_block: 500
@@ -78,7 +77,7 @@ model:
     normalization_type: null
     use_seed: true
     dataset_number_of_examples: -1
-    batch_size: 1
+    batch_size: 30
     log_figures: 4
     shuffle: false
     num_workers: 10
@@ -101,7 +100,7 @@ model:
 trainer:
   strategy: ddp_find_unused_parameters_false
   accelerator: gpu
-  devices: 1
+  devices: [1]
   num_nodes: 1
   max_epochs: 50
   precision: 16-mixed
