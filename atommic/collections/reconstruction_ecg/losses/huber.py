@@ -58,7 +58,7 @@ class MaskHuberLoss(Loss):
 
         loss = huber * weighted_mask
         if self.reduction == "mean":
-            return loss.sum() / weighted_mask.sum()
+            return loss.mean()
         if self.reduction == "sum":
             return loss.sum()
         if self.reduction == "none":

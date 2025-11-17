@@ -49,11 +49,11 @@ model:
   reconstruction_loss:
     masked_huber: 0.7
     masked_mse: 0.3
-  masked_weight: 2
-  normalization_type: null
+  masked_weight: 3
+  normalization_type: zscore
   unnormalize_loss_inputs: false
-  unnormalize_log_outputs: false
-  total_reconstruction_loss_weight: 100
+  unnormalize_log_outputs: true
+  total_reconstruction_loss_weight: 1
   update_in_frequency: false
   hexad_inform: false
 
@@ -80,7 +80,7 @@ model:
       high_ratio: 0.5
       min_block: 500
       use_seed: false
-    normalization_type: null
+    normalization_type: zscore
     use_seed: false
     dataset_number_of_examples: -1
     batch_size: 18
@@ -112,7 +112,7 @@ model:
       high_ratio: 0.5
       min_block: 500
       use_seed: true
-    normalization_type: null
+    normalization_type: zscore
     use_seed: true
     dataset_number_of_examples: -1
     batch_size: 18

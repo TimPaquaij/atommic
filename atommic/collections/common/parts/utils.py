@@ -1141,6 +1141,7 @@ def unnormalize_ECG(
 
     return x_unnorm
 
+
 def zero_nan_inf(x):
     """If x is nan or inf, return 0."""
     if torch.isnan(x).any() or torch.isinf(x).any():
