@@ -7,10 +7,11 @@ import torch.nn.functional as F
 from atommic.core.classes.loss import Loss
 
 
-class MaskL1Loss(Loss):
+class MaskMSELoss(Loss):
     """
-    L1 loss with masked weighting.
-    Mask entries equal to 0 are replaced by a configurable weight > 1.
+    MSE loss with masked weighting.
+    Visible region (mask=1) → weight = 1
+    Synthesised region (mask=0) → weight = `weight` (> 1)
     """
 
     def __init__(self, weight: float = 2.0, reduction: str = "mean") -> None:
@@ -27,6 +28,7 @@ class MaskL1Loss(Loss):
 
         pred = pred.to(target.dtype)
 
+        # If no mask is provided, use all weights=1
         if mask is None:
             weighted_mask = torch.ones_like(target, dtype=target.dtype, device=target.device)
         else:
@@ -37,9 +39,14 @@ class MaskL1Loss(Loss):
                 torch.tensor(self.weight, dtype=target.dtype, device=target.device),
             )
 
-        diff = torch.abs(pred - target)
-        loss = diff * weighted_mask
+        # Standard MSE per element
+        diff = pred - target
+        mse = diff * diff
 
+        # Apply mask weight
+        loss = mse * weighted_mask
+
+        # Reduction
         if self.reduction == "mean":
             return loss.sum() / weighted_mask.sum()
         if self.reduction == "sum":

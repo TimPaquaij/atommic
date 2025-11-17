@@ -62,6 +62,7 @@ class CIRIMECG(BaseECGReconstructionModel):
                     time_steps=self.time_steps,
                     conv_dim=cfg_dict.get("conv_dim"),
                     update_in_frequency=cfg_dict.get("update_in_frequency"),
+                    hexad_inform=cfg_dict.get("hexad_inform"),
                 )
                 for _ in range(cfg_dict.get("num_cascades"))
             ]

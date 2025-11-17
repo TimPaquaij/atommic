@@ -21,7 +21,7 @@ class RIMBlock(torch.nn.Module):
 
     def __init__(
         self,
-        input_channels = None,
+        input_channels=None,
         recurrent_layer=None,
         conv_filters=None,
         conv_kernels=None,
@@ -35,6 +35,7 @@ class RIMBlock(torch.nn.Module):
         time_steps: int = 8,
         conv_dim: int = 2,
         update_in_frequency: bool = False,
+        hexad_inform: bool = False,
     ):
         """Inits :class:`RIMBlock`.
 
@@ -82,11 +83,12 @@ class RIMBlock(torch.nn.Module):
             Coil combination method. Default is ``"SENSE"``.
         """
         super().__init__()
-        self.update_in_frequency =update_in_frequency
+        self.update_in_frequency = update_in_frequency
+        self.hexad_inform = hexad_inform
         if input_channels:
             self.input_size = input_channels
             if self.update_in_frequency:
-                self.input_size = self.input_size*2
+                self.input_size = self.input_size * 2
         else:
             self.input_size = depth * 2
         self.time_steps = time_steps
@@ -202,6 +204,7 @@ class RIMBlock(torch.nn.Module):
                 mask,
                 sigma,
                 self.update_in_frequency,
+                self.hexad_inform,
             ).contiguous()
 
             for h, convrnn in enumerate(self.layers):
@@ -211,12 +214,12 @@ class RIMBlock(torch.nn.Module):
             log_likelihood_gradient_prediction = self.final_layer(log_likelihood_gradient_prediction)
             if self.update_in_frequency:
                 if prediction.dim() == 3:
-                    prediction_freq = fft1(prediction,time_dim=-1)
+                    prediction_freq = fft1(prediction, time_dim=-1)
                 else:
                     prediction_freq = prediction
-                prediction = prediction_freq + log_likelihood_gradient_prediction.permute(0,2,3,1)
+                prediction = prediction_freq + log_likelihood_gradient_prediction.permute(0, 2, 3, 1)
             else:
-                prediction = prediction + log_likelihood_gradient_prediction.permute(0,2,3,1)
+                prediction = prediction + log_likelihood_gradient_prediction.permute(0, 2, 3, 1)
 
             if self.conv_dim == 2 and not self.update_in_frequency:
                 predictions.append(prediction.squeeze(-1))

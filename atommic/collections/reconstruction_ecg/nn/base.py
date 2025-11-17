@@ -45,6 +45,7 @@ from atommic.collections.reconstruction_ecg.losses.na import NoiseAwareLoss
 from atommic.collections.reconstruction_ecg.losses.ssim import SSIMLoss
 from atommic.collections.reconstruction_ecg.losses.ml1 import MaskL1Loss
 from atommic.collections.reconstruction_ecg.losses.huber import MaskHuberLoss
+from atommic.collections.reconstruction_ecg.losses.mse import MaskMSELoss
 from atommic.collections.reconstruction_ecg.metrics.reconstruction_metrics import mse, nmse, psnr, ssim
 
 __all__ = ["BaseECGReconstructionModel"]
@@ -99,9 +100,11 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                 elif name == "l1":
                     self.reconstruction_losses[name] = L1Loss()
                 elif name == "masked_l1":
-                    self.reconstruction_losses[name] = MaskL1Loss()
+                    self.reconstruction_losses[name] = MaskL1Loss(weight=cfg.get("masked_weight", 2))
                 elif name == "masked_huber":
-                    self.reconstruction_losses[name] = MaskHuberLoss()
+                    self.reconstruction_losses[name] = MaskHuberLoss(weight=cfg.get("masked_weight", 2))
+                elif name == "masked_mse":
+                    self.reconstruction_losses[name] = MaskMSELoss(weight=cfg.get("masked_weight", 2))
         # replace losses names by 'loss_1', 'loss_2', etc. to properly iterate in the aggregator loss
         self.reconstruction_losses = {f"loss_{i+1}": v for i, v in enumerate(self.reconstruction_losses.values())}
         self.total_reconstruction_losses = len(self.reconstruction_losses)
