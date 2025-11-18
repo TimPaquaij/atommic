@@ -184,15 +184,16 @@ class RIMBlock(torch.nn.Module):
             Reconstructed image and hidden states.
         """
         if self.conv_dim == 2 and not self.update_in_frequency:
-            end = -1
+            end = slice(1, -1)
             mask = mask.unsqueeze(-1)  # [batch, leads, time, 1] 2D conv
             measured_ecg = measured_ecg.unsqueeze(-1)  # [batch, leads, time, 1] 2D conv
             if prediction.dim() == 3:
                 prediction = prediction.unsqueeze(-1)  # [batch, leads, time, 1] 2D conv
-
+        else:
+            end = slice(1, None)
         if hx is None or (not isinstance(hx, list) and hx.dim() < 3):
             hx = [
-                prediction.new_zeros((prediction.size(0), f, *prediction.size()[1:end]))
+                prediction.new_zeros((prediction.size(0), f, *prediction.size()[end]))
                 for f in self.recurrent_filters
                 if f != 0
             ]

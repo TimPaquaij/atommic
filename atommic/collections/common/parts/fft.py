@@ -7,7 +7,8 @@ import numpy as np
 import torch
 from omegaconf import ListConfig
 
-__all__ = ["fft1","ifft1","fft2", "ifft2", "fftshift", "ifftshift"]
+__all__ = ["fft1", "ifft1", "fft2", "ifft2", "fftshift", "ifftshift"]
+
 
 def ifft1(
     x: torch.Tensor,
@@ -49,10 +50,11 @@ def ifft1(
 
     if centered:
         x = torch.fft.fftshift(x, dim=time_dim)
-    
+
     x = torch.view_as_real(x)
 
     return x
+
 
 def fft1(
     x: torch.Tensor,
@@ -114,6 +116,7 @@ def fft1(
     x = torch.view_as_real(x)
 
     return x
+
 
 def fft2(
     x: torch.Tensor,

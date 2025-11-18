@@ -41,6 +41,7 @@ from ecgxai.utils.transforms import (
     Masker,
     ECGNormalizer,
 )
+from atommic.collections.common.parts.fft import fft1, ifft1
 from atommic.collections.reconstruction_ecg.losses.na import NoiseAwareLoss
 from atommic.collections.reconstruction_ecg.losses.ssim import SSIMLoss
 from atommic.collections.reconstruction_ecg.losses.ml1 import MaskL1Loss
@@ -114,6 +115,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         self.unnormalize_loss_inputs = cfg_dict.get("unnormalize_loss_inputs", False)
         self.unnormalize_log_outputs = cfg_dict.get("unnormalize_log_outputs", False)
         self.normalization_type = cfg_dict.get("normalization_type", "max")
+        self.update_in_frequency = cfg_dict.get("update_in_frequency", False)
 
         # Refers to cascading or iterative reconstruction methods.
         self.accumulate_predictions = cfg_dict.get("accumulate_predictions", False)
@@ -229,6 +231,8 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         """
         weight = 1.0
         losses = {}
+        if self.update_in_frequency:
+            mask = mask.unsqueeze(-1)
         for name, loss_func in self.reconstruction_losses.items():
             losses[name] = self.process_reconstruction_loss(target, predictions, mask, loss_func, attrs) * weight
         return self.total_reconstruction_loss(**losses) * self.total_reconstruction_loss_weight
@@ -310,6 +314,13 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             self.psnr_vals[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(  # type: ignore
                 psnr(output_target, output_predictions, maxval=max_value)
             ).view(1)
+
+    def __compute_time_domain(self, target, predictions):
+        if self.accumulate_predictions:
+            predictions = parse_list_and_keep_last(predictions)
+        predictions = ifft1(predictions, time_dim=-2)[..., 0]
+        target = ifft1(target, time_dim=-2)[..., 0]
+        return target, predictions
 
     def __unnormalize_for_loss_or_log__(
         self,
@@ -568,10 +579,13 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         )
         target = outputs["target"]
         predictions = outputs["predictions"]
+        if self.update_in_frequency:
+            target = fft1(target, time_dim=-1)
 
         # Compute loss
         train_loss = self.__compute_loss__(target, predictions, sample["mask"], sample["attrs"])
-
+        if self.update_in_frequency:
+            target, predictions = self.__compute_time_domain(target, predictions)
         # Log loss for the chosen acceleration factor and the learning rate in the selected logger.
         logs = {
             f'train_loss': train_loss.item(),
@@ -642,10 +656,14 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         )
         target = outputs["target"]
         predictions = outputs["predictions"]
+        if self.update_in_frequency:
+            target = fft1(target, time_dim=-1)
 
         # Compute loss
         val_loss = self.__compute_loss__(target, predictions, sample["mask"], sample["attrs"])
         self.validation_step_outputs.append({"val_loss": val_loss})
+        if self.update_in_frequency:
+            target, predictions = self.__compute_time_domain(target, predictions)
 
         # Compute metrics and log them and log outputs.
         self.__compute_and_log_metrics_and_outputs__(
@@ -703,6 +721,8 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
 
         target = outputs["target"]
         predictions = outputs["predictions"]
+        if self.update_in_frequency:
+            target, predictions = self.__compute_time_domain(target, predictions)
 
         # Compute metrics and log them and log outputs.
         self.__compute_and_log_metrics_and_outputs__(
@@ -718,8 +738,6 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             predictions = parse_list_and_keep_last(predictions)
 
         # If "16" or "16-mixed" fp is used, ensure complex type will be supported when saving the predictions.
-        if predictions.shape[-1] == 2:
-            predictions = torch.view_as_complex(predictions.type(torch.float32))
         predictions = predictions.detach().cpu().numpy()
         mask = sample["mask"].detach().cpu().numpy()
         for i in range(predictions.shape[0]):
@@ -903,6 +921,10 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                     transforms.append(ToTensor())
                 if key.lower() == "to12lead":
                     transforms.append(To12Lead())
+                if key.lower() == "butterfilter":
+                    transforms.append(
+                        ButterFilter(lowcut=value["lowcut"], highcut=value["highcut"], order=value["order"])
+                    )
             transforms.append(Masker(mask_func, use_seed=use_seed))
         if cfg.get("normalization_type", None):
             transforms.append(

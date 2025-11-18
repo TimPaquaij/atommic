@@ -62,10 +62,14 @@ model:
     dataset: /home/jovyan/work/training/ECGSynthesis/dataset/ECGnet_synthesis_test_dataset.csv
     transforms:
       applygain: true
+      to12lead: true
       resample:
       - 500
+      butterfilter:
+        lowcut: 0.3
+        highcut: 100
+        order: 3
       totensor: true
-      to12lead: true
     mask_args:
       type: layouts
       accelerations:

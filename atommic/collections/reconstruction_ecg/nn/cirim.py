@@ -108,7 +108,7 @@ class CIRIMECG(BaseECGReconstructionModel):
                 sigma,
                 keep_prediction=False if i == 0 else self.keep_prediction,
             )
-            cascades_predictions.append([check_stacked_complex(p) for p in prediction])
+            cascades_predictions.append(prediction)
             prediction = prediction[-1]
         return cascades_predictions
 
