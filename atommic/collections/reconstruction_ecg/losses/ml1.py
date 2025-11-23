@@ -3,7 +3,7 @@ __author__ = "Tim Paquaij"
 
 import torch
 import torch.nn.functional as F
-
+from typing import Optional
 from atommic.core.classes.loss import Loss
 
 
@@ -13,10 +13,12 @@ class MaskL1Loss(Loss):
     Mask entries equal to 0 are replaced by a configurable weight > 1.
     """
 
-    def __init__(self, weight: float = 2.0, reduction: str = "mean") -> None:
+    def __init__(self, weight: float = 2.0, reduction: str = "mean", amplitude_weight: Optional[float] = None, spectral: Optional[bool] = False) -> None:
         super().__init__()
         self.weight = float(weight)
         self.reduction = reduction
+        self.amplitude_weight = amplitude_weight
+        self.spectral = spectral
 
     def forward(
         self,
@@ -26,8 +28,11 @@ class MaskL1Loss(Loss):
     ) -> torch.Tensor:
 
         pred = pred.to(target.dtype)
+        if self.spectral is True:
+            pred = torch.abs(torch.fft.rfft(pred,norm = "ortho", dim = -1))
+            target = torch.abs(torch.fft.rfft(target,norm = "ortho", dim =-1))
 
-        if mask is None:
+        if mask is None or self.spectral is True:
             weighted_mask = torch.ones_like(target, dtype=target.dtype, device=target.device)
         else:
             mask = mask.to(target.dtype)
@@ -35,6 +40,13 @@ class MaskL1Loss(Loss):
                 mask == 1,
                 torch.tensor(1.0, dtype=target.dtype, device=target.device),
                 torch.tensor(self.weight, dtype=target.dtype, device=target.device),
+            )
+        
+        if self.amplitude_weight:
+            weighted_mask = torch.where(
+                target.abs() <= 0.5,
+                weighted_mask,
+                torch.tensor(float(self.amplitude_weight), dtype=target.dtype, device=target.device),
             )
 
         diff = torch.abs(pred - target)

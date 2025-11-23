@@ -101,11 +101,27 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                 elif name == "l1":
                     self.reconstruction_losses[name] = L1Loss()
                 elif name == "masked_l1":
-                    self.reconstruction_losses[name] = MaskL1Loss(weight=cfg.get("masked_weight", 2))
+                    self.reconstruction_losses[name] = MaskL1Loss(
+                        weight=cfg.get("masked_weight", 2), amplitude_weight=cfg.get("amplitude_weight", 2)
+                    )
                 elif name == "masked_huber":
-                    self.reconstruction_losses[name] = MaskHuberLoss(weight=cfg.get("masked_weight", 2))
+                    self.reconstruction_losses[name] = MaskHuberLoss(
+                        weight=cfg.get("masked_weight", 2), amplitude_weight=cfg.get("amplitude_weight", 2)
+                    )
                 elif name == "masked_mse":
-                    self.reconstruction_losses[name] = MaskMSELoss(weight=cfg.get("masked_weight", 2))
+                    self.reconstruction_losses[name] = MaskMSELoss(
+                        weight=cfg.get("masked_weight", 2), amplitude_weight=cfg.get("amplitude_weight", 2)
+                    )
+                elif name == "spectral_mse":
+                    self.reconstruction_losses[name] = MaskMSELoss(spectral=True
+                    )
+                elif name == "spectral_huber":
+                    self.reconstruction_losses[name] = MaskHuberLoss(spectral=True
+                    )
+                elif name == "spectral_l1":
+                    self.reconstruction_losses[name] = MaskL1Loss(spectral=True
+                    )
+                
         # replace losses names by 'loss_1', 'loss_2', etc. to properly iterate in the aggregator loss
         self.reconstruction_losses = {f"loss_{i+1}": v for i, v in enumerate(self.reconstruction_losses.values())}
         self.total_reconstruction_losses = len(self.reconstruction_losses)
@@ -269,7 +285,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         while isinstance(predictions, list):
             predictions = predictions[-1]
 
-        # Add dummy dimensions to target and predictions for logging.
+        # Add dummy dimensions to target and predictions for Metrics.
         target = target.unsqueeze(1)
         predictions = predictions.unsqueeze(1)
         target = target.detach().cpu()
@@ -318,8 +334,8 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
     def __compute_time_domain(self, target, predictions):
         if self.accumulate_predictions:
             predictions = parse_list_and_keep_last(predictions)
-        predictions = ifft1(predictions, time_dim=-2)[..., 0]
-        target = ifft1(target, time_dim=-2)[..., 0]
+        predictions = ifft1(predictions, time_dim=-1)[..., 0]
+        target = ifft1(target, time_dim=-1)[..., 0]
         return target, predictions
 
     def __unnormalize_for_loss_or_log__(
@@ -721,6 +737,9 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
 
         target = outputs["target"]
         predictions = outputs["predictions"]
+        if self.update_in_frequency:
+            target = fft1(target, time_dim=-1)
+
         if self.update_in_frequency:
             target, predictions = self.__compute_time_domain(target, predictions)
 

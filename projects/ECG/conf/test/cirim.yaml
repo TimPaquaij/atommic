@@ -1,5 +1,5 @@
 pretrained: true
-checkpoint: /home/jovyan/work/training/ECGSynthesis/models/default/2025-11-16_18-28-36/checkpoints/default--val_loss=0.1534-epoch=12.ckpt
+checkpoint: /home/jovyan/work/training/ECGSynthesis/models/default/2025-11-17_19-36-00/checkpoints/default--val_loss=0.0370-epoch=13.ckpt
 mode: test
 
 model:
@@ -47,13 +47,15 @@ model:
   accumulate_predictions: true
   dimensionality: 2
   reconstruction_loss:
-    masked_huber: 1
-  masked_weight: 1
+    masked_huber: 0.7
+    masked_mse: 0.3
+  masked_weight: 3
   normalization_type: null
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
   total_reconstruction_loss_weight: 100
   update_in_frequency: false
+  hexad_inform: false
 
   test_ds:
     dataset_format: UniversalECGDataset
@@ -73,7 +75,7 @@ model:
     mask_args:
       type: layouts
       accelerations:
-      - 6x2
+      - hex
       low_ratio: 0.1
       high_ratio: 0.5
       min_block: 500
@@ -104,7 +106,7 @@ model:
 trainer:
   strategy: ddp_find_unused_parameters_false
   accelerator: gpu
-  devices: [0]
+  devices: [1]
   num_nodes: 1
   max_epochs: 50
   precision: 16-mixed
@@ -115,7 +117,7 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /home/jovyan/work/training/ECGSynthesis/results
+  exp_dir: /home/jovyan/work/training/ECGSynthesis/results/ECGCIRIM_time/hex
   ema:
     enable: false
   create_tensorboard_logger: true

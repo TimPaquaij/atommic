@@ -9,7 +9,7 @@ model:
   conv_filters:
     - 64
     - 64
-    - 2
+    - 1
   conv_kernels:
     - 5
     - 3
@@ -47,14 +47,16 @@ model:
   accumulate_predictions: true
   dimensionality: 2
   reconstruction_loss:
-    masked_huber: 0.7
-    masked_mse: 0.3
+    masked_huber: 0.3
+    masked_mse: 0.2
+    spectral_mse: 0.5
   masked_weight: 3
+  amplitude_weight: 4
   normalization_type: null
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
   total_reconstruction_loss_weight: 1
-  update_in_frequency: true
+  update_in_frequency: false
   hexad_inform: false
 
   train_ds:
@@ -87,9 +89,9 @@ model:
     normalization_type: null
     use_seed: false
     dataset_number_of_examples: -1
-    batch_size: 18
+    batch_size: 10
     shuffle: true
-    num_workers: 3
+    num_workers: 10
     pin_memory: false
     drop_last: false
   
@@ -123,7 +125,7 @@ model:
     normalization_type: null
     use_seed: true
     dataset_number_of_examples: -1
-    batch_size: 18
+    batch_size: 10
     log_figures: 4
     shuffle: false
     num_workers: 10
@@ -146,9 +148,9 @@ model:
 trainer:
   strategy: auto
   accelerator: gpu
-  devices: [0]
+  devices: [1]
   num_nodes: 1
-  max_epochs: 25
+  max_epochs: 12
   precision: 32
   enable_checkpointing: false
   logger: false
@@ -157,7 +159,7 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /home/jovyan/work/training/ECGSynthesis/models/ECGCIRIM_freq
+  exp_dir: /home/jovyan/work/training/ECGSynthesis/models/ECGCIRIM_time
   ema:
     enable: false
   create_tensorboard_logger: true

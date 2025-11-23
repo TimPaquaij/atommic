@@ -19,8 +19,6 @@ from huggingface_hub import HfApi, HfFolder, ModelFilter, hf_hub_download
 from huggingface_hub.hf_api import ModelInfo
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import Trainer
-
-from atommic import __version__
 from atommic.core.connectors.save_restore_connector import SaveRestoreConnector
 from atommic.core.neural_types.comparison import NeuralTypeComparisonResult
 from atommic.core.neural_types.neural_type import NeuralType

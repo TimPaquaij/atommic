@@ -215,7 +215,7 @@ class RIMBlock(torch.nn.Module):
             log_likelihood_gradient_prediction = self.final_layer(log_likelihood_gradient_prediction)
             if self.update_in_frequency:
                 if prediction.dim() == 3:
-                    prediction_freq = fft1(prediction, time_dim=-1)
+                    prediction_freq = fft1(prediction, time_dim=-1)  # Only happens first time in loop
                 else:
                     prediction_freq = prediction
                 prediction = prediction_freq + log_likelihood_gradient_prediction.permute(0, 2, 3, 1)

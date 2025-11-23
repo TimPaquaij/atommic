@@ -12,8 +12,8 @@ __all__ = ["fft1", "ifft1", "fft2", "ifft2", "fftshift", "ifftshift"]
 
 def ifft1(
     x: torch.Tensor,
-    centered: bool = False,
-    normalization: str = "ortho",
+    centered: bool = True,
+    normalization: str = "orto",
     time_dim: int = -1,
 ) -> torch.Tensor:
     r"""Apply 1-dimensional Inverse Fast Fourier Transform along the time axis.
@@ -51,15 +51,13 @@ def ifft1(
     if centered:
         x = torch.fft.fftshift(x, dim=time_dim)
 
-    x = torch.view_as_real(x)
-
     return x
 
 
 def fft1(
     x: torch.Tensor,
-    centered: bool = False,
-    normalization: str = "ortho",
+    centered: bool = True,
+    normalization: str = "orto",
     time_dim: int = -1,
 ) -> torch.Tensor:
     r"""Apply 1-dimensional Fast Fourier Transform along the time axis.
