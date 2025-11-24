@@ -5,6 +5,7 @@ import torch
 import torch.nn.functional as F
 from typing import Optional
 from atommic.core.classes.loss import Loss
+from atommic.collections.common.parts.fft import ifft1
 
 
 class MaskL1Loss(Loss):
@@ -13,7 +14,13 @@ class MaskL1Loss(Loss):
     Mask entries equal to 0 are replaced by a configurable weight > 1.
     """
 
-    def __init__(self, weight: float = 2.0, reduction: str = "mean", amplitude_weight: Optional[float] = None, spectral: Optional[bool] = False) -> None:
+    def __init__(
+        self,
+        weight: float = 2.0,
+        reduction: str = "mean",
+        amplitude_weight: Optional[float] = None,
+        spectral: Optional[bool] = False,
+    ) -> None:
         super().__init__()
         self.weight = float(weight)
         self.reduction = reduction
@@ -29,8 +36,13 @@ class MaskL1Loss(Loss):
 
         pred = pred.to(target.dtype)
         if self.spectral is True:
-            pred = torch.abs(torch.fft.rfft(pred,norm = "ortho", dim = -1))
-            target = torch.abs(torch.fft.rfft(target,norm = "ortho", dim =-1))
+            if self.update_in_frequency:
+                pred = ifft1(pred, time_dim=-1)[..., 0]
+                target = ifft1(target, time_dim=-1)[..., 0]
+
+            else:
+                pred = torch.abs(torch.fft.rfft(pred, norm="ortho", dim=-1))
+                target = torch.abs(torch.fft.rfft(target, norm="ortho", dim=-1))
 
         if mask is None or self.spectral is True:
             weighted_mask = torch.ones_like(target, dtype=target.dtype, device=target.device)
@@ -41,7 +53,7 @@ class MaskL1Loss(Loss):
                 torch.tensor(1.0, dtype=target.dtype, device=target.device),
                 torch.tensor(self.weight, dtype=target.dtype, device=target.device),
             )
-        
+
         if self.amplitude_weight:
             weighted_mask = torch.where(
                 target.abs() <= 0.5,

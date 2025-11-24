@@ -113,15 +113,12 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                         weight=cfg.get("masked_weight", 2), amplitude_weight=cfg.get("amplitude_weight", 2)
                     )
                 elif name == "spectral_mse":
-                    self.reconstruction_losses[name] = MaskMSELoss(spectral=True
-                    )
+                    self.reconstruction_losses[name] = MaskMSELoss(spectral=True)
                 elif name == "spectral_huber":
-                    self.reconstruction_losses[name] = MaskHuberLoss(spectral=True
-                    )
+                    self.reconstruction_losses[name] = MaskHuberLoss(spectral=True)
                 elif name == "spectral_l1":
-                    self.reconstruction_losses[name] = MaskL1Loss(spectral=True
-                    )
-                
+                    self.reconstruction_losses[name] = MaskL1Loss(spectral=True)
+
         # replace losses names by 'loss_1', 'loss_2', etc. to properly iterate in the aggregator loss
         self.reconstruction_losses = {f"loss_{i+1}": v for i, v in enumerate(self.reconstruction_losses.values())}
         self.total_reconstruction_losses = len(self.reconstruction_losses)
