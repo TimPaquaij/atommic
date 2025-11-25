@@ -66,6 +66,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             The PyTorch Lightning trainer.
         """
         cfg_dict = OmegaConf.to_container(cfg, resolve=True)
+        self.update_in_frequency = cfg_dict.get("update_in_frequency", False)
 
         self.reconstruction_losses = {}
         reconstruction_loss = cfg_dict.get("reconstruction_loss")
@@ -102,22 +103,34 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                     self.reconstruction_losses[name] = L1Loss()
                 elif name == "masked_l1":
                     self.reconstruction_losses[name] = MaskL1Loss(
-                        weight=cfg.get("masked_weight", 2), amplitude_weight=cfg.get("amplitude_weight", 2)
+                        weight=cfg.get("masked_weight", 2),
+                        amplitude_weight=cfg.get("amplitude_weight", 2),
+                        update_in_frequency=self.update_in_frequency,
                     )
                 elif name == "masked_huber":
                     self.reconstruction_losses[name] = MaskHuberLoss(
-                        weight=cfg.get("masked_weight", 2), amplitude_weight=cfg.get("amplitude_weight", 2)
+                        weight=cfg.get("masked_weight", 2),
+                        amplitude_weight=cfg.get("amplitude_weight", 2),
+                        update_in_frequency=self.update_in_frequency,
                     )
                 elif name == "masked_mse":
                     self.reconstruction_losses[name] = MaskMSELoss(
-                        weight=cfg.get("masked_weight", 2), amplitude_weight=cfg.get("amplitude_weight", 2)
+                        weight=cfg.get("masked_weight", 2),
+                        amplitude_weight=cfg.get("amplitude_weight", 2),
+                        update_in_frequency=self.update_in_frequency,
                     )
                 elif name == "spectral_mse":
-                    self.reconstruction_losses[name] = MaskMSELoss(spectral=True)
+                    self.reconstruction_losses[name] = MaskMSELoss(
+                        spectral=True, update_in_frequency=self.update_in_frequency
+                    )
                 elif name == "spectral_huber":
-                    self.reconstruction_losses[name] = MaskHuberLoss(spectral=True)
+                    self.reconstruction_losses[name] = MaskHuberLoss(
+                        spectral=True, update_in_frequency=self.update_in_frequency
+                    )
                 elif name == "spectral_l1":
-                    self.reconstruction_losses[name] = MaskL1Loss(spectral=True)
+                    self.reconstruction_losses[name] = MaskL1Loss(
+                        spectral=True, update_in_frequency=self.update_in_frequency
+                    )
 
         # replace losses names by 'loss_1', 'loss_2', etc. to properly iterate in the aggregator loss
         self.reconstruction_losses = {f"loss_{i+1}": v for i, v in enumerate(self.reconstruction_losses.values())}
@@ -128,7 +141,6 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         self.unnormalize_loss_inputs = cfg_dict.get("unnormalize_loss_inputs", False)
         self.unnormalize_log_outputs = cfg_dict.get("unnormalize_log_outputs", False)
         self.normalization_type = cfg_dict.get("normalization_type", "max")
-        self.update_in_frequency = cfg_dict.get("update_in_frequency", False)
 
         # Refers to cascading or iterative reconstruction methods.
         self.accumulate_predictions = cfg_dict.get("accumulate_predictions", False)

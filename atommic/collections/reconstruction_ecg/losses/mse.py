@@ -22,12 +22,14 @@ class MaskMSELoss(Loss):
         reduction: str = "mean",
         amplitude_weight: Optional[float] = None,
         spectral: Optional[bool] = False,
+        update_in_frequency: Optional[bool] = False,
     ) -> None:
         super().__init__()
         self.weight = float(weight)
         self.reduction = reduction
         self.amplitude_weight = amplitude_weight
         self.spectral = spectral
+        self.update_in_frequency = update_in_frequency
 
     def forward(
         self,
@@ -38,14 +40,14 @@ class MaskMSELoss(Loss):
 
         pred = pred.to(target.dtype)
 
-        if self.spectral is True:
-            if self.update_in_frequency:
-                pred = ifft1(pred, time_dim=-1)[..., 0]
-                target = ifft1(target, time_dim=-1)[..., 0]
+        if self.spectral is True and not self.update_in_frequency:
+            pred = torch.abs(torch.fft.rfft(pred, norm="ortho", dim=-1))
+            target = torch.abs(torch.fft.rfft(target, norm="ortho", dim=-1))
 
-            else:
-                pred = torch.abs(torch.fft.rfft(pred, norm="ortho", dim=-1))
-                target = torch.abs(torch.fft.rfft(target, norm="ortho", dim=-1))
+        if self.update_in_frequency and not self.spectral:
+            pred = ifft1(pred, time_dim=-1)[..., 0]
+            target = ifft1(target, time_dim=-1)[..., 0]
+            mask = mask[..., 0]
 
         if mask is None or self.spectral is True:
             weighted_mask = torch.ones_like(target, dtype=target.dtype, device=target.device)
