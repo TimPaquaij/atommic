@@ -8,33 +8,41 @@ model:
   input_channels: 3
   conv_filters:
     - 64
-    - 64
+    - 128
+    - 128
     - 1
   conv_kernels:
-    - 5
-    - 3
-    - 3
+    - [5, 9]
+    - [3, 7]
+    - [3, 7]
+    - [3, 3]
   conv_dilations:
-    - 1
-    - 1
-    - 1
+    - [1,1]
+    - [1, 2]
+    - [1, 4]
+    - [1, 1]
   conv_bias:
+    - true
     - true
     - true
     - false
   recurrent_filters:
-    - 64
+    - 128
+    - 128
     - 64
     - 0
   recurrent_kernels:
-    - 3
-    - 3
-    - 0
+    - [1,5]
+    - [1,5]
+    - [1,5]
+    - [0,0]
   recurrent_dilations:
-    - 1
-    - 1
-    - 0
+    - [1, 1]
+    - [1, 2]
+    - [1, 4]
+    - [1, 1]
   recurrent_bias:
+    - true
     - true
     - true
     - false
@@ -88,8 +96,8 @@ model:
       use_seed: false
     normalization_type: null
     use_seed: false
-    dataset_number_of_examples: -1
-    batch_size: 10
+    dataset_number_of_examples: 18
+    batch_size: 18
     shuffle: true
     num_workers: 10
     pin_memory: false
@@ -124,8 +132,8 @@ model:
       use_seed: true
     normalization_type: null
     use_seed: true
-    dataset_number_of_examples: -1
-    batch_size: 10
+    dataset_number_of_examples: 18
+    batch_size: 18
     log_figures: 4
     shuffle: false
     num_workers: 10
@@ -148,7 +156,7 @@ model:
 trainer:
   strategy: auto
   accelerator: gpu
-  devices: [1]
+  devices: [0]
   num_nodes: 1
   max_epochs: 12
   precision: 32

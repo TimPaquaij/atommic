@@ -93,11 +93,21 @@ class ConvNonlinear(nn.Module):
         else:
             raise ValueError("Please specify a proper nonlinearity")
 
-        self.padding = [
-            torch.nn.ReplicationPad1d(torch.div(dilation * (kernel_size - 1), 2, rounding_mode="trunc").item()),
-            torch.nn.ReplicationPad2d(torch.div(dilation * (kernel_size - 1), 2, rounding_mode="trunc").item()),
-            torch.nn.ReplicationPad3d(torch.div(dilation * (kernel_size - 1), 2, rounding_mode="trunc").item()),
-        ][conv_dim - 1]
+        if conv_dim == 2 and len(kernel_size) == 2:
+            k_h, k_w = kernel_size
+            d_h, d_w = dilation
+
+            pad_h = torch.div(d_h * (k_h - 1), 2, rounding_mode="trunc").item()
+            pad_w = torch.div(d_w * (k_w - 1), 2, rounding_mode="trunc").item()
+
+            self.padding = torch.nn.ReplicationPad2d((pad_w, pad_w, pad_h, pad_h))
+
+        else:
+            self.padding = [
+                torch.nn.ReplicationPad1d(torch.div(dilation * (kernel_size - 1), 2, rounding_mode="trunc").item()),
+                torch.nn.ReplicationPad2d(torch.div(dilation * (kernel_size - 1), 2, rounding_mode="trunc").item()),
+                torch.nn.ReplicationPad3d(torch.div(dilation * (kernel_size - 1), 2, rounding_mode="trunc").item()),
+            ][conv_dim - 1]
 
         self.conv_layer = self.conv_class(
             in_channels=input_size,

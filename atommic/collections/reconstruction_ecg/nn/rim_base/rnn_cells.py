@@ -375,28 +375,34 @@ class IndRNNCellBase(nn.Module):
         self.bias = bias
         self.conv_dim = conv_dim
         self.conv_class = self.determine_conv_class(conv_dim)
-        self.padding = [
-            torch.nn.ReplicationPad1d(torch.div(dilation * (kernel_size - 1), 2, rounding_mode="trunc").item()),
-            torch.nn.ReplicationPad2d(torch.div(dilation * (kernel_size - 1), 2, rounding_mode="trunc").item()),
-            torch.nn.ReplicationPad3d(torch.div(dilation * (kernel_size - 1), 2, rounding_mode="trunc").item()),
-        ][conv_dim - 1]
+        if conv_dim == 2 and len(kernel_size) == 2:
+            k_h, k_w = kernel_size
+            d_h, d_w = dilation
 
-        self.ih = self.conv_class(
-            input_size,
-            hidden_size,
-            kernel_size,
-            padding=0,
-            dilation=dilation,
-            bias=bias)
-        
+            pad_h = torch.div(d_h * (k_h - 1), 2, rounding_mode="trunc").item()
+            pad_w = torch.div(d_w * (k_w - 1), 2, rounding_mode="trunc").item()
+
+            self.padding = torch.nn.ReplicationPad2d((pad_w, pad_w, pad_h, pad_h))
+        else:
+            self.padding = [
+                torch.nn.ReplicationPad1d(torch.div(dilation * (kernel_size - 1), 2, rounding_mode="trunc").item()),
+                torch.nn.ReplicationPad2d(torch.div(dilation * (kernel_size - 1), 2, rounding_mode="trunc").item()),
+                torch.nn.ReplicationPad3d(torch.div(dilation * (kernel_size - 1), 2, rounding_mode="trunc").item()),
+            ][conv_dim - 1]
+
+        self.ih = self.conv_class(input_size, hidden_size, kernel_size, padding=0, dilation=dilation, bias=bias)
+
         if self.conv_dim == 1:
             self.hh = nn.Parameter(
                 nn.init.normal_(torch.empty(1, hidden_size, 1), std=1.0 / (hidden_size * (1 + kernel_size**2)))
             )
         elif self.conv_dim == 2:
-            self.hh = nn.Parameter(
-                nn.init.normal_(torch.empty(1, hidden_size, 1, 1), std=1.0 / (hidden_size * (1 + kernel_size**2)))
-            )
+            k_h, k_w = kernel_size
+            kernel_area = k_h * k_w
+
+            std = 1.0 / (hidden_size * (1 + kernel_area))
+
+            self.hh = nn.Parameter(nn.init.normal_(torch.empty(1, hidden_size, 1, 1), std=std))
         elif self.conv_dim == 3:
             self.hh = nn.Parameter(
                 nn.init.normal_(torch.empty(1, hidden_size, 1, 1, 1), std=1.0 / (hidden_size * (1 + kernel_size**2)))
@@ -407,8 +413,14 @@ class IndRNNCellBase(nn.Module):
     def reset_parameters(self):
         """Reset the parameters."""
         self.ih.weight.data = self.orthotogonalize_weights(self.ih.weight.data)
+        if self.conv_dim == 2 and len(self.kernel_size) == 2:
+            k_h, k_w = self.kernel_size
+            kernel_area = k_h * k_w
+            std = 1.0 / (self.hidden_size * (1 + kernel_area))
 
-        nn.init.normal_(self.ih.weight, std=1.0 / (self.hidden_size * (1 + self.kernel_size**2)))
+            nn.init.normal_(self.ih.weight, std=std)
+        else:
+            nn.init.normal_(self.ih.weight, std=1.0 / (self.hidden_size * (1 + self.kernel_size**2)))
 
         if self.bias is True:
             nn.init.zeros_(self.ih.bias)

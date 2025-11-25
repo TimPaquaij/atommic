@@ -27,6 +27,7 @@ class RIMBlock(torch.nn.Module):
         conv_kernels=None,
         conv_dilations=None,
         conv_bias=None,
+        conv_act=None,
         recurrent_filters=None,
         recurrent_kernels=None,
         recurrent_dilations=None,
@@ -101,13 +102,13 @@ class RIMBlock(torch.nn.Module):
             (conv_features, conv_k_size, conv_dilation, l_conv_bias, nonlinear),
             (rnn_features, rnn_k_size, rnn_dilation, rnn_bias, rnn_type),
         ) in zip(
-            zip(conv_filters, conv_kernels, conv_dilations, conv_bias, ["relu", "relu", None]),
+            zip(conv_filters, conv_kernels, conv_dilations, conv_bias, ["relu", "relu", "relu", None]),
             zip(
                 recurrent_filters,
                 recurrent_kernels,
                 recurrent_dilations,
                 recurrent_bias,
-                [recurrent_layer, recurrent_layer, None],
+                [recurrent_layer, recurrent_layer, recurrent_layer, None],
             ),
         ):
             conv_layer = None
@@ -195,7 +196,7 @@ class RIMBlock(torch.nn.Module):
             measured_ecg = measured_ecg.unsqueeze(-1)  # [batch, leads, time, 1] 2D conv
             if prediction.dim() == 3:
                 prediction = prediction.unsqueeze(-1)  # [batch, leads, time, 1] 2D conv
-        elif self.conv_dim == 1 and not self.update_in_frequency:
+        elif self.conv_dim == 1:
             end = slice(2, None)
         else:
             end = slice(1, None)
@@ -215,12 +216,18 @@ class RIMBlock(torch.nn.Module):
                 self.update_in_frequency,
                 self.hexad_inform,
             ).contiguous()
+            if self.conv_dim == 1 and self.update_in_frequency:
+                B, F, L, S = log_likelihood_gradient_prediction.shape
+                log_likelihood_gradient_prediction = log_likelihood_gradient_prediction.reshape(B, F * L, S)
 
             for h, convrnn in enumerate(self.layers):
                 hx[h] = convrnn(log_likelihood_gradient_prediction, hx[h])
                 log_likelihood_gradient_prediction = hx[h]
 
             log_likelihood_gradient_prediction = self.final_layer(log_likelihood_gradient_prediction)
+            if self.conv_dim == 1 and self.update_in_frequency:
+                log_likelihood_gradient_prediction = log_likelihood_gradient_prediction.reshape(B, 2, L, S)
+
             if self.update_in_frequency:
                 if prediction.dim() == 3:
                     prediction_freq = fft1(prediction, time_dim=-1)  # Only happens first time in loop
