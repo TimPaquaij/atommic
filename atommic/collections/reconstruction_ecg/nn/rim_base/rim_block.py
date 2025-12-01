@@ -102,13 +102,13 @@ class RIMBlock(torch.nn.Module):
             (conv_features, conv_k_size, conv_dilation, l_conv_bias, nonlinear),
             (rnn_features, rnn_k_size, rnn_dilation, rnn_bias, rnn_type),
         ) in zip(
-            zip(conv_filters, conv_kernels, conv_dilations, conv_bias, ["relu", "relu", "relu", "relu", None]),
+            zip(conv_filters, conv_kernels, conv_dilations, conv_bias, ["relu", "relu", "relu", None]),
             zip(
                 recurrent_filters,
                 recurrent_kernels,
                 recurrent_dilations,
                 recurrent_bias,
-                [recurrent_layer, recurrent_layer, recurrent_layer,recurrent_layer, None],
+                [recurrent_layer, recurrent_layer, recurrent_layer, None],
             ),
         ):
             conv_layer = None

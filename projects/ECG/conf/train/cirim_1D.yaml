@@ -10,49 +10,41 @@ model:
     - 64
     - 128
     - 128
-    - 64       
     - 12
   conv_kernels:
     - 9
     - 5
     - 5
-    - 3        
     - 3
   conv_dilations:
     - 1
     - 2
     - 4
-    - 1 
     - 1
   conv_bias:
     - true
     - true
     - true
-    - true      
     - false
   recurrent_filters:
     - 128
     - 128
     - 64
-    - 64        
     - 0
   recurrent_kernels:
     - 3
     - 3
     - 3
-    - 3        
     - 0
   recurrent_dilations:
     - 1
     - 2
     - 4
-    - 1         
     - 0
   recurrent_bias:
     - true
     - true
     - true
-    - true     
     - false
   time_steps: 8
   conv_dim: 1
