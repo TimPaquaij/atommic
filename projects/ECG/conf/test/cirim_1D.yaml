@@ -1,5 +1,5 @@
 pretrained: true
-checkpoint: /home/jovyan/work/training/ECGSynthesis/models/ECGCIRIM_time/default/2025-11-23_19-27-22/checkpoints/default--val_loss=0.0262-epoch=7.ckpt
+checkpoint: /home/jovyan/work/training/ECGSynthesis/models/ECGCIRIM_time_1D/default/2025-11-25_20-45-01/checkpoints/default--val_loss=0.0231-epoch=12-last.ckpt
 mode: test
 
 model:
@@ -85,7 +85,7 @@ model:
     mask_args:
       type: layouts
       accelerations:
-      - random
+        - 6x2
       low_ratio: 0.1
       high_ratio: 0.5
       min_block: 500
@@ -94,9 +94,9 @@ model:
     use_seed: true
     dataset_number_of_examples: -1
     batch_size: 30
-    log_figures: 4
+    log_figures: 0
     shuffle: false
-    num_workers: 3
+    num_workers: 8
     pin_memory: false
     drop_last: false
 
@@ -116,7 +116,7 @@ model:
 trainer:
   strategy: auto
   accelerator: gpu
-  devices: [0]
+  devices: [1]
   num_nodes: 1
   max_epochs: 50
   precision: 32
@@ -127,7 +127,7 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /home/jovyan/work/training/ECGSynthesis/results/ECGCIRIM_time_1D/random
+  exp_dir: /home/jovyan/work/training/ECGSynthesis/results/ECGCIRIM_time_1D/6x2
   ema:
     enable: false
   create_tensorboard_logger: true

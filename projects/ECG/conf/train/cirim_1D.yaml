@@ -10,41 +10,49 @@ model:
     - 64
     - 128
     - 128
+    - 64       
     - 12
   conv_kernels:
     - 9
     - 5
     - 5
+    - 3        
     - 3
   conv_dilations:
     - 1
     - 2
     - 4
+    - 1 
     - 1
   conv_bias:
     - true
     - true
     - true
+    - true      
     - false
   recurrent_filters:
     - 128
     - 128
     - 64
+    - 64        
     - 0
   recurrent_kernels:
     - 3
     - 3
     - 3
+    - 3        
     - 0
   recurrent_dilations:
     - 1
     - 2
     - 4
+    - 1         
     - 0
   recurrent_bias:
     - true
     - true
     - true
+    - true     
     - false
   time_steps: 8
   conv_dim: 1
@@ -158,7 +166,7 @@ trainer:
   accelerator: gpu
   devices: [0]
   num_nodes: 1
-  max_epochs: 12
+  max_epochs: 40
   precision: 32
   enable_checkpointing: false
   logger: false
@@ -167,10 +175,26 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /home/jovyan/work/training/ECGSynthesis/models/ECGCIRIM_time_1D
+  exp_dir: /home/jovyan/work/training/ECGSynthesis/models
+  name: ECGCIRIM_time_1D
+  create_tensorboard_logger: true
+  summary_writer_kwargs:
+    flush_secs: 30
+  create_early_stopping_callback: true
+  early_stopping_callback_params:
+    monitor: val_loss
+    patience: 5
+    mode: min
+    strict: true
+  create_checkpoint_callback: true
+  checkpoint_callback_params:
+    monitor: val_loss
+    mode: min
+    save_top_k: 3
+    save_last: true
+    filename: "{epoch}-{val_loss:.4f}"
   ema:
     enable: false
-  create_tensorboard_logger: true
   create_wandb_logger: false
   wandb_logger_kwargs:
     project: atommic.reconstruction.ECG
