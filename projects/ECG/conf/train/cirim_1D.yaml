@@ -7,13 +7,13 @@ model:
   recurrent_layer: IndRNN
   input_channels: 36
   conv_filters:
-    - 64
-    - 128
-    - 128
+    - 96
+    - 192
+    - 192
     - 12
   conv_kernels:
     - 9
-    - 5
+    - 7
     - 5
     - 3
   conv_dilations:
@@ -27,9 +27,9 @@ model:
     - true
     - false
   recurrent_filters:
-    - 128
-    - 128
-    - 64
+    - 192
+    - 192
+    - 96
     - 0
   recurrent_kernels:
     - 3
@@ -48,7 +48,7 @@ model:
     - false
   time_steps: 8
   conv_dim: 1
-  num_cascades: 1
+  num_cascades: 5
   no_dc: true
   depth: 2
   keep_prediction: true
@@ -158,7 +158,7 @@ trainer:
   accelerator: gpu
   devices: [0]
   num_nodes: 1
-  max_epochs: 40
+  max_epochs: 60
   precision: 32
   enable_checkpointing: false
   logger: false
@@ -175,9 +175,10 @@ exp_manager:
   create_early_stopping_callback: true
   early_stopping_callback_params:
     monitor: val_loss
-    patience: 5
+    patience: 10
     mode: min
     strict: true
+    min_delta: 0.0001 # minimum change to qualify as an improvement
   create_checkpoint_callback: true
   checkpoint_callback_params:
     monitor: val_loss
