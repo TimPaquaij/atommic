@@ -124,8 +124,14 @@ class CIRIMECG(BaseECGReconstructionModel):
             h_target = self.reconstruction_module[0].encoder_forward(target, mask, measured_ecg, hx = None,sigma=sigma)
             h_synt_mlp = self.mlp.forward(hx[-1])
             h_target_mlp = self.mlp.forward(h_target[-1])
-            h_mlp = torch.stack([h_target_mlp, h_synt_mlp], dim=1)
-
+            h_measured = self.reconstruction_module[0].encoder_forward(measured_ecg, mask, measured_ecg, hx = None,sigma=sigma)
+            h_mask_1 = self.mlp.forward(h_measured[-1])
+            B = mask.shape[0]
+            perm = torch.randperm(B)
+            shuffled_mask = mask[perm]
+            h_var_measured = self.reconstruction_module[0].encoder_forward(target*shuffled_mask, shuffled_mask, target*shuffled_mask, hx = None,sigma=sigma)
+            h_mask_2 = self.mlp.forward(h_var_measured[-1])
+            h_mlp = torch.stack([h_target_mlp, h_synt_mlp,h_mask_1,h_mask_2], dim=1)
             labels = torch.arange(h_mlp.shape[0], device=h_mlp.device)
             return cascades_predictions, h_mlp, labels
 
