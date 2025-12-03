@@ -150,6 +150,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
 
         # Refers to cascading or iterative reconstruction methods.
         self.accumulate_predictions = cfg_dict.get("accumulate_predictions", False)
+        self.contrastive_start_epoch = cfg_dict.get("contrastive_start_epoch", 0)
 
         # Initialize the module
         super().__init__(cfg=cfg, trainer=trainer)
@@ -623,8 +624,13 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         predictions = outputs["predictions"]
         if self.update_in_frequency:
             target = fft1(target, time_dim=-1)
+        # Determine if contrastive loss should be applied
+        use_contrastive = (
+            self.contrastive_loss
+            and self.current_epoch >= self.contrastive_start_epoch
+        )
         
-        if self.contrastive_loss:
+        if use_contrastive:
             train_loss = self.__compute_loss__(target, predictions ,sample["mask"], sample["attrs"], outputs["contrastive"])
         else:
             train_loss = self.__compute_loss__(target, predictions, sample["mask"], sample["attrs"])
@@ -703,8 +709,12 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         if self.update_in_frequency:
             target = fft1(target, time_dim=-1)
 
-        # Compute loss
-        if self.contrastive_loss:
+        use_contrastive = (
+            self.contrastive_loss
+            and self.current_epoch >= self.contrastive_start_epoch
+        )
+        
+        if use_contrastive:
             val_loss = self.__compute_loss__(target, predictions,sample["mask"], sample["attrs"], outputs["contrastive"])
         else:
             val_loss = self.__compute_loss__(target, predictions, sample["mask"], sample["attrs"])

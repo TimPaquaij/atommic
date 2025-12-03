@@ -191,6 +191,8 @@ class CIRIMECG(BaseECGReconstructionModel):
                 return loss_func(t, p, m)
             
             if "supconloss" in str(loss_func).lower():
+                if hx is None:
+                    return torch.tensor(0.0, device=t.device)
                 return loss_func(hx[0], hx[1])
             return loss_func(t, p)
 
