@@ -252,3 +252,73 @@ class RIMBlock(torch.nn.Module):
                 predictions.append(prediction)
 
         return predictions, hx
+    
+
+    def encoder_forward(
+        self,
+        target: torch.Tensor,
+        mask: torch.Tensor,
+        measured_ecg: torch.Tensor,
+        hx: torch.Tensor = None,
+        sigma: float = 1.0,
+    ) -> Tuple[Any, Union[list, torch.Tensor, None]]:
+        """Forward pass of :class:`RIMBlock`.
+
+        Parameters
+        ----------
+        y : torch.Tensor
+            Predicted k-space. Shape: ``[batch, coils, height, width, 2]``.
+        masked_kspace : torch.Tensor
+            Subsampled k-space. Shape: ``[batch, coils, height, width, 2]``.
+        sensitivity_maps : torch.Tensor
+            Coil sensitivity maps. Shape: ``[batch, coils, height, width, 2]``.
+        mask : torch.Tensor
+            Subsampling mask. Shape: ``[batch, coils, height, width, 2]``.
+        prediction : torch.Tensor, optional
+            Initial (zero-filled) prediction. Shape: ``[batch, coils, height, width, 2]``.
+        hx : torch.Tensor, optional
+            Initial prediction for the hidden state. Shape: ``[batch, coils, height, width, 2]``.
+        sigma : float, optional
+            Noise level. Default is ``1.0``.
+        keep_prediction : bool, optional
+            Whether to keep the prediction. Default is ``False``.
+
+        Returns
+        -------
+        Tuple[Any, Union[list, torch.Tensor, None]]
+            Reconstructed image and hidden states.
+        """
+        if self.conv_dim == 2 and not self.update_in_frequency:
+            end = slice(1, -1)
+            mask = mask.unsqueeze(-1)  # [batch, leads, time, 1] 2D conv
+            measured_ecg = measured_ecg.unsqueeze(-1)  # [batch, leads, time, 1] 2D conv
+            if target.dim() == 3:
+                target = target.unsqueeze(-1)  # [batch, leads, time, 1] 2D conv
+        elif self.conv_dim == 1:
+            end = slice(2, None)
+        else:
+            end = slice(1, None)
+        if hx is None or (not isinstance(hx, list) and hx.dim() < 3):
+            hx = [
+                target.new_zeros((target.size(0), f, *target.size()[end]))
+                for f in self.recurrent_filters
+                if f != 0
+            ]
+        
+        log_likelihood_gradient_prediction = rim_utils.log_likelihood_gradient_ecg(
+            target,
+            measured_ecg,
+            mask,
+            sigma,
+            self.update_in_frequency,
+            self.hexad_inform,
+        ).contiguous()
+        if self.conv_dim == 1 and self.update_in_frequency:
+            B, F, L, S = log_likelihood_gradient_prediction.shape
+            log_likelihood_gradient_prediction = log_likelihood_gradient_prediction.reshape(B, F * L, S)
+
+        for h, convrnn in enumerate(self.layers):
+            hx[h] = convrnn(log_likelihood_gradient_prediction, hx[h])
+            log_likelihood_gradient_prediction = hx[h]
+
+        return hx

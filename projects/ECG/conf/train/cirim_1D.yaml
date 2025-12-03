@@ -48,16 +48,17 @@ model:
     - false
   time_steps: 8
   conv_dim: 1
-  num_cascades: 5
+  num_cascades: 1
   no_dc: true
   depth: 2
   keep_prediction: true
   accumulate_predictions: true
   dimensionality: 2
   reconstruction_loss:
-    masked_huber: 0.3
+    masked_huber: 0.4
     masked_mse: 0.2
-    spectral_mse: 0.5
+    spectral_mse: 0.1
+    contrastive_loss: 0.3
   masked_weight: 3
   amplitude_weight: 4
   normalization_type: null
@@ -156,7 +157,7 @@ model:
 trainer:
   strategy: auto
   accelerator: gpu
-  devices: [0]
+  devices: [1]
   num_nodes: 1
   max_epochs: 60
   precision: 32

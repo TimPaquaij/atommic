@@ -12,6 +12,7 @@ VALID_RECONSTRUCTION_LOSSES = [
     "spectral_l1",
     "spectral_mse",
     "spectral_huber",
+    "contrastive_loss",
     "mse",
     "ssim",
     "noise_aware",

@@ -2,7 +2,7 @@
 __author__ = "Dimitris Karkalousos"
 
 import math
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Optional
 
 import torch
 from omegaconf import DictConfig, OmegaConf
@@ -12,6 +12,7 @@ from atommic.collections.common.parts.fft import fft2
 from atommic.collections.common.parts.utils import check_stacked_complex, expand_op
 from atommic.collections.reconstruction_ecg.nn.base import BaseECGReconstructionModel
 from atommic.collections.reconstruction_ecg.nn.rim_base.rim_block import RIMBlock
+from atommic.collections.reconstruction_ecg.nn.rim_base.rim_mlp import ProjectorMLP
 from atommic.core.classes.common import typecheck
 
 __all__ = ["CIRIMECG"]
@@ -73,6 +74,7 @@ class CIRIMECG(BaseECGReconstructionModel):
 
         # Keep estimation through the cascades if keep_prediction is True or re-estimate it if False.
         self.keep_prediction = cfg_dict.get("keep_prediction")
+        self.mlp = ProjectorMLP()
 
     # pylint: disable=arguments-differ
     @typecheck()
@@ -81,6 +83,7 @@ class CIRIMECG(BaseECGReconstructionModel):
         measured_ecg: torch.Tensor,
         mask: torch.Tensor,
         sigma: float = 1.0,
+        target: Optional[torch.Tensor] = None,
     ) -> Union[List[List[torch.Tensor]], List[torch.Tensor], torch.Tensor]:
         """Forward pass of :class:`CIRIM`.
 
@@ -101,8 +104,9 @@ class CIRIMECG(BaseECGReconstructionModel):
         prediction = measured_ecg.clone()
         hx = None
         cascades_predictions = []
+
+        # --- synthetic branch ---
         for i, cascade in enumerate(self.reconstruction_module):
-            # Forward pass through the cascades
             prediction, hx = cascade(
                 prediction,
                 mask,
@@ -113,6 +117,18 @@ class CIRIMECG(BaseECGReconstructionModel):
             )
             cascades_predictions.append(prediction)
             prediction = prediction[-1]
+
+        # --- target branch (encoder-only) ---
+        if target is not None:
+            # use only the encoder part (no DC, no unrolling)
+            h_target = self.reconstruction_module[0].encoder_forward(target, mask, measured_ecg, hx = None,sigma=sigma)
+            h_synt_mlp = self.mlp.forward(hx[-1])
+            h_target_mlp = self.mlp.forward(h_target[-1])
+            h_mlp = torch.stack([h_target_mlp, h_synt_mlp], dim=1)
+
+            labels = torch.arange(h_mlp.shape[0], device=h_mlp.device)
+            return cascades_predictions, h_mlp, labels
+
         return cascades_predictions
 
     def process_reconstruction_loss(  # noqa: MC0001
@@ -122,6 +138,7 @@ class CIRIMECG(BaseECGReconstructionModel):
         mask: torch.Tensor,
         loss_func: torch.nn.Module,
         attrs: Dict,
+        hx: Optional[List[List[torch.Tensor]]] = None,
     ) -> torch.Tensor:
         """Processes the reconstruction loss for the CIRIM model. It differs from the base class in that it can handle
         multiple cascades and time steps.
@@ -153,7 +170,7 @@ class CIRIMECG(BaseECGReconstructionModel):
             Otherwise, returns the loss of the last intermediate loss.
         """
 
-        def compute_reconstruction_loss(t, p, m, attrs):
+        def compute_reconstruction_loss(t, p,m, attrs, hx):
             if self.unnormalize_loss_inputs:
                 # we do the unnormalization here to avoid explicitly iterating through list of predictions, which
                 # might be a list of lists.
@@ -169,12 +186,12 @@ class CIRIMECG(BaseECGReconstructionModel):
                     .unsqueeze(dim=0)
                     .to(t.device),
                 )
-            if "masked_l1":
-                return loss_func(t, p, m)
 
-            if "masked_huber":
+            if "mask" in str(loss_func).lower():
                 return loss_func(t, p, m)
-
+            
+            if "supconloss" in str(loss_func).lower():
+                return loss_func(hx[0], hx[1])
             return loss_func(t, p)
 
         if self.accumulate_predictions:
@@ -183,7 +200,7 @@ class CIRIMECG(BaseECGReconstructionModel):
             for cascade_pred in prediction:
                 time_steps_weights = torch.logspace(-1, 0, steps=len(cascade_pred)).to(target.device)
                 time_steps_loss = [
-                    compute_reconstruction_loss(target, time_step_pred, mask, attrs) for time_step_pred in cascade_pred
+                    compute_reconstruction_loss(target, time_step_pred, mask, attrs, hx) for time_step_pred in cascade_pred
                 ]
                 cascade_loss = sum(x * w for x, w in zip(time_steps_loss, time_steps_weights)) / sum(
                     time_steps_weights
@@ -193,6 +210,6 @@ class CIRIMECG(BaseECGReconstructionModel):
         else:
             # keep the last prediction of the last cascade
             prediction = prediction[-1][-1]
-            loss = compute_reconstruction_loss(target, prediction, mask, attrs)
+            loss = compute_reconstruction_loss(target, prediction, mask, attrs, hx)
 
         return loss

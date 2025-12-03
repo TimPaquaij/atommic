@@ -6,7 +6,7 @@ import warnings
 from abc import ABC
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Union, Optional
 import pandas as pd
 import h5py
 import numpy as np
@@ -47,6 +47,7 @@ from atommic.collections.reconstruction_ecg.losses.ssim import SSIMLoss
 from atommic.collections.reconstruction_ecg.losses.ml1 import MaskL1Loss
 from atommic.collections.reconstruction_ecg.losses.huber import MaskHuberLoss
 from atommic.collections.reconstruction_ecg.losses.mse import MaskMSELoss
+from atommic.collections.reconstruction_ecg.losses.contrastive import SupConLoss
 from atommic.collections.reconstruction_ecg.metrics.reconstruction_metrics import mse, nmse, psnr, ssim
 
 __all__ = ["BaseECGReconstructionModel"]
@@ -89,6 +90,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             warnings.warn("Sum of reconstruction losses weights is not 1.0. Adjusting weights to sum up to 1.0.")
             total_weight = sum(reconstruction_losses_.values())
             reconstruction_losses_ = {k: v / total_weight for k, v in reconstruction_losses_.items()}
+        self.contrastive_loss = False
         for name in VALID_RECONSTRUCTION_LOSSES:
             if name in reconstruction_losses_:
                 if name == "ssim":
@@ -131,6 +133,10 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                     self.reconstruction_losses[name] = MaskL1Loss(
                         spectral=True, update_in_frequency=self.update_in_frequency
                     )
+                elif name == "contrastive_loss":
+                    self.reconstruction_losses[name] = SupConLoss(temperature=0.07, contrast_mode="all")
+                    self.contrastive_loss = True
+                
 
         # replace losses names by 'loss_1', 'loss_2', etc. to properly iterate in the aggregator loss
         self.reconstruction_losses = {f"loss_{i+1}": v for i, v in enumerate(self.reconstruction_losses.values())}
@@ -173,6 +179,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         mask: torch.Tensor,
         loss_func: torch.nn.Module,
         attrs: Dict,
+        hx: Optional[List[List[torch.Tensor]]] = None,
     ) -> torch.Tensor:
         """Processes the reconstruction loss.
 
@@ -201,7 +208,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             Otherwise, returns the loss of the last intermediate loss.
         """
 
-        def compute_reconstruction_loss(t, p, m, attrs):
+        def compute_reconstruction_loss(t, p,m, attrs, hx):
             if self.unnormalize_loss_inputs:
                 # we do the unnormalization here to avoid explicitly iterating through list of predictions, which
                 # might be a list of lists.
@@ -215,18 +222,21 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                     p,
                     data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(dim=0).to(t),
                 )
-            if "masked_l1":
+            if "masked_l1" in str(loss_func).lower():
                 return loss_func(t, p, m)
 
-            if "masked_huber":
+            if "masked_huber" in str(loss_func).lower():
                 return loss_func(t, p, m)
+            
+            if "contrastive_loss":
+                return loss_func(hx[0], hx[1])
 
             return loss_func(t, p)
 
-        return compute_reconstruction_loss(target, prediction, mask, attrs)
+        return compute_reconstruction_loss(target, prediction, mask, attrs, hx)
 
     def __compute_loss__(
-        self, target: torch.Tensor, predictions: Union[list, torch.Tensor], mask: torch.Tensor, attrs: dict
+        self, target: torch.Tensor, predictions: Union[list, torch.Tensor], mask: torch.Tensor, attrs: dict, hx: Optional[List[List[torch.Tensor]]] = None,
     ) -> torch.Tensor:
         """Computes the reconstruction loss.
 
@@ -259,7 +269,10 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         if self.update_in_frequency:
             mask = mask.unsqueeze(-1)
         for name, loss_func in self.reconstruction_losses.items():
-            losses[name] = self.process_reconstruction_loss(target, predictions, mask, loss_func, attrs) * weight
+            if self.contrastive_loss:
+                losses[name] = self.process_reconstruction_loss(target, predictions, mask, loss_func, attrs, hx) * weight
+            else:
+                losses[name] = self.process_reconstruction_loss(target, predictions, mask, loss_func, attrs) * weight
         return self.total_reconstruction_loss(**losses) * self.total_reconstruction_loss_weight
 
     def __compute_and_log_metrics_and_outputs__(
@@ -542,7 +555,10 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         """
 
         # Forward pass
-        predictions = self.forward(measured_ecg, mask)
+        if self.contrastive_loss:
+            predictions, h, labels = self.forward(measured_ecg, mask, target =target)
+        else:
+            predictions = self.forward(measured_ecg, mask)
 
         # Get acceleration factor from acceleration list, if multiple accelerations are used. Or if batch size > 1.
         return {
@@ -552,6 +568,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             "predictions": predictions,
             "target": target,
             "attrs": attrs,
+            "contrastive": [h, labels] if self.contrastive_loss else None,
         }
 
     def training_step(self, batch: Dict[float, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
@@ -606,9 +623,11 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         predictions = outputs["predictions"]
         if self.update_in_frequency:
             target = fft1(target, time_dim=-1)
-
-        # Compute loss
-        train_loss = self.__compute_loss__(target, predictions, sample["mask"], sample["attrs"])
+        
+        if self.contrastive_loss:
+            train_loss = self.__compute_loss__(target, predictions ,sample["mask"], sample["attrs"], outputs["contrastive"])
+        else:
+            train_loss = self.__compute_loss__(target, predictions, sample["mask"], sample["attrs"])
         if self.update_in_frequency:
             target, predictions = self.__compute_time_domain(target, predictions)
         # Log loss for the chosen acceleration factor and the learning rate in the selected logger.
@@ -685,7 +704,10 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             target = fft1(target, time_dim=-1)
 
         # Compute loss
-        val_loss = self.__compute_loss__(target, predictions, sample["mask"], sample["attrs"])
+        if self.contrastive_loss:
+            val_loss = self.__compute_loss__(target, predictions,sample["mask"], sample["attrs"], outputs["contrastive"])
+        else:
+            val_loss = self.__compute_loss__(target, predictions, sample["mask"], sample["attrs"])
         self.validation_step_outputs.append({"val_loss": val_loss})
         if self.update_in_frequency:
             target, predictions = self.__compute_time_domain(target, predictions)
