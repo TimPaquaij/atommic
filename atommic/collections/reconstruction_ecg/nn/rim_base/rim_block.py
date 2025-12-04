@@ -7,7 +7,7 @@ import torch
 
 from atommic.collections.common.parts.fft import fft1, ifft1
 from atommic.collections.reconstruction_ecg.nn.rim_base import conv_layers, rim_utils, rnn_cells
-
+from atommic.collections.reconstruction_ecg.nn.rim_base.rim_mlp import ProjectorMLP
 
 class RIMBlock(torch.nn.Module):
     """RIMBlock is a block of Recurrent Inference Machines (RIMs) as presented in [Lonning19]_.
@@ -154,6 +154,7 @@ class RIMBlock(torch.nn.Module):
             self.samplebase = samplebase
 
         self.recurrent_filters = recurrent_filters
+        self.mlp = ProjectorMLP()
 
     def forward(
         self,
@@ -304,21 +305,56 @@ class RIMBlock(torch.nn.Module):
                 for f in self.recurrent_filters
                 if f != 0
             ]
-        
-        log_likelihood_gradient_prediction = rim_utils.log_likelihood_gradient_ecg(
-            target,
-            measured_ecg,
-            mask,
-            sigma,
-            self.update_in_frequency,
-            self.hexad_inform,
-        ).contiguous()
-        if self.conv_dim == 1 and self.update_in_frequency:
-            B, F, L, S = log_likelihood_gradient_prediction.shape
-            log_likelihood_gradient_prediction = log_likelihood_gradient_prediction.reshape(B, F * L, S)
+        hx_list = []
+        targets = []
+        for _ in range(self.time_steps):
+            log_likelihood_gradient_prediction = rim_utils.log_likelihood_gradient_ecg(
+                target,
+                measured_ecg,
+                mask,
+                sigma,
+                self.update_in_frequency,
+                self.hexad_inform,
+            ).contiguous()
 
-        for h, convrnn in enumerate(self.layers):
-            hx[h] = convrnn(log_likelihood_gradient_prediction, hx[h])
-            log_likelihood_gradient_prediction = hx[h]
 
-        return hx
+
+            if self.conv_dim == 1 and self.update_in_frequency:
+                B, F, L, S = log_likelihood_gradient_prediction.shape
+                log_likelihood_gradient_prediction = log_likelihood_gradient_prediction.reshape(B, F * L, S)
+
+            for h, convrnn in enumerate(self.layers):
+                hx[h] = convrnn(log_likelihood_gradient_prediction, hx[h])
+                log_likelihood_gradient_prediction = hx[h]
+            
+            hx_list.append(self.mlp.forward(hx[-1]))
+
+            log_likelihood_gradient_prediction = self.final_layer(log_likelihood_gradient_prediction)
+
+            if self.conv_dim == 1 and self.update_in_frequency:
+                log_likelihood_gradient_prediction = log_likelihood_gradient_prediction.reshape(B, 2, L, S)
+
+            if self.update_in_frequency:
+                if target.dim() == 3:
+                    target_freq = fft1(target, time_dim=-1)  # Only happens first time in loop
+                else:
+                    target_freq = target
+                    freq_map = torch.fft.fftshift(
+                        torch.fft.fftfreq(log_likelihood_gradient_prediction.shape[-1], d=(1 / self.samplebase))
+                    ).to(target.device)
+                    freq_mask = (freq_map.abs() >= self.lowcut) & (freq_map.abs() <= self.highcut)
+                    log_likelihood_gradient_prediction = log_likelihood_gradient_prediction * freq_mask
+                target = target_freq + log_likelihood_gradient_prediction.permute(0, 2, 3, 1)
+            else:
+                if self.conv_dim == 1:
+                    target = target + log_likelihood_gradient_prediction
+
+                else:
+                    target = target + log_likelihood_gradient_prediction.permute(0, 2, 3, 1)
+
+            if self.conv_dim == 2 and not self.update_in_frequency:
+                targets.append(target.squeeze(-1))
+            else:
+                targets.append(target)
+
+        return hx_list, targets

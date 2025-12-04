@@ -150,7 +150,6 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
 
         # Refers to cascading or iterative reconstruction methods.
         self.accumulate_predictions = cfg_dict.get("accumulate_predictions", False)
-        self.contrastive_start_epoch = cfg_dict.get("contrastive_start_epoch", 0)
 
         # Initialize the module
         super().__init__(cfg=cfg, trainer=trainer)
@@ -180,7 +179,8 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         mask: torch.Tensor,
         loss_func: torch.nn.Module,
         attrs: Dict,
-        hx: Optional[List[List[torch.Tensor]]] = None,
+        latent_features: Optional[List[List[torch.Tensor]]] = None,
+        labels: Optional[torch.Tensor]= None,
     ) -> torch.Tensor:
         """Processes the reconstruction loss.
 
@@ -230,14 +230,14 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                 return loss_func(t, p, m)
             
             if "contrastive_loss":
-                return loss_func(hx[0], hx[1])
+                return loss_func(latent_features, labels)
 
             return loss_func(t, p)
 
-        return compute_reconstruction_loss(target, prediction, mask, attrs, hx)
+        return compute_reconstruction_loss(target, prediction, mask, attrs, latent_features, labels)
 
     def __compute_loss__(
-        self, target: torch.Tensor, predictions: Union[list, torch.Tensor], mask: torch.Tensor, attrs: dict, hx: Optional[List[List[torch.Tensor]]] = None,
+        self, target: torch.Tensor, predictions: Union[list, torch.Tensor], mask: torch.Tensor, attrs: dict, latent_features: Optional[List[List[torch.Tensor]]] = None, labels: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """Computes the reconstruction loss.
 
@@ -271,7 +271,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             mask = mask.unsqueeze(-1)
         for name, loss_func in self.reconstruction_losses.items():
             if self.contrastive_loss:
-                losses[name] = self.process_reconstruction_loss(target, predictions, mask, loss_func, attrs, hx) * weight
+                losses[name] = self.process_reconstruction_loss(target, predictions, mask, loss_func, attrs, latent_features, labels) * weight
             else:
                 losses[name] = self.process_reconstruction_loss(target, predictions, mask, loss_func, attrs) * weight
         return self.total_reconstruction_loss(**losses) * self.total_reconstruction_loss_weight
@@ -557,7 +557,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
 
         # Forward pass
         if self.contrastive_loss:
-            predictions, h, labels = self.forward(measured_ecg, mask, target =target)
+            predictions, h, labels = self.forward(measured_ecg, mask, target=target)
         else:
             predictions = self.forward(measured_ecg, mask)
 
@@ -569,7 +569,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             "predictions": predictions,
             "target": target,
             "attrs": attrs,
-            "contrastive": [h, labels] if self.contrastive_loss else None,
+            "contrastive": {"latent_features": h, "labels": labels} if self.contrastive_loss else None,
         }
 
     def training_step(self, batch: Dict[float, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
@@ -625,13 +625,9 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         if self.update_in_frequency:
             target = fft1(target, time_dim=-1)
         # Determine if contrastive loss should be applied
-        use_contrastive = (
-            self.contrastive_loss
-            and self.current_epoch >= self.contrastive_start_epoch
-        )
         
-        if use_contrastive:
-            train_loss = self.__compute_loss__(target, predictions ,sample["mask"], sample["attrs"], outputs["contrastive"])
+        if self.contrastive_loss:
+            train_loss = self.__compute_loss__(target, predictions ,sample["mask"], sample["attrs"], **outputs["contrastive"])
         else:
             train_loss = self.__compute_loss__(target, predictions, sample["mask"], sample["attrs"])
         if self.update_in_frequency:
@@ -708,14 +704,9 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         predictions = outputs["predictions"]
         if self.update_in_frequency:
             target = fft1(target, time_dim=-1)
-
-        use_contrastive = (
-            self.contrastive_loss
-            and self.current_epoch >= self.contrastive_start_epoch
-        )
         
-        if use_contrastive:
-            val_loss = self.__compute_loss__(target, predictions,sample["mask"], sample["attrs"], outputs["contrastive"])
+        if self.contrastive_loss:
+            val_loss = self.__compute_loss__(target, predictions,sample["mask"], sample["attrs"], **outputs["contrastive"])
         else:
             val_loss = self.__compute_loss__(target, predictions, sample["mask"], sample["attrs"])
         self.validation_step_outputs.append({"val_loss": val_loss})

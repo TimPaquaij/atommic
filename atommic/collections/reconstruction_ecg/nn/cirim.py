@@ -12,7 +12,6 @@ from atommic.collections.common.parts.fft import fft2
 from atommic.collections.common.parts.utils import check_stacked_complex, expand_op
 from atommic.collections.reconstruction_ecg.nn.base import BaseECGReconstructionModel
 from atommic.collections.reconstruction_ecg.nn.rim_base.rim_block import RIMBlock
-from atommic.collections.reconstruction_ecg.nn.rim_base.rim_mlp import ProjectorMLP
 from atommic.core.classes.common import typecheck
 
 __all__ = ["CIRIMECG"]
@@ -74,7 +73,6 @@ class CIRIMECG(BaseECGReconstructionModel):
 
         # Keep estimation through the cascades if keep_prediction is True or re-estimate it if False.
         self.keep_prediction = cfg_dict.get("keep_prediction")
-        self.mlp = ProjectorMLP()
 
     # pylint: disable=arguments-differ
     @typecheck()
@@ -117,23 +115,22 @@ class CIRIMECG(BaseECGReconstructionModel):
             )
             cascades_predictions.append(prediction)
             prediction = prediction[-1]
-
-        # --- target branch (encoder-only) ---
+        latent_list = []
         if target is not None:
             # use only the encoder part (no DC, no unrolling)
-            h_target = self.reconstruction_module[0].encoder_forward(target, mask, measured_ecg, hx = None,sigma=sigma)
-            h_synt_mlp = self.mlp.forward(hx[-1])
-            h_target_mlp = self.mlp.forward(h_target[-1])
-            h_measured = self.reconstruction_module[0].encoder_forward(measured_ecg, mask, measured_ecg, hx = None,sigma=sigma)
-            h_mask_1 = self.mlp.forward(h_measured[-1])
-            B = mask.shape[0]
-            perm = torch.randperm(B)
-            shuffled_mask = mask[perm]
-            h_var_measured = self.reconstruction_module[0].encoder_forward(target*shuffled_mask, shuffled_mask, target*shuffled_mask, hx = None,sigma=sigma)
-            h_mask_2 = self.mlp.forward(h_var_measured[-1])
-            h_mlp = torch.stack([h_target_mlp, h_synt_mlp,h_mask_1,h_mask_2], dim=1)
-            labels = torch.arange(h_mlp.shape[0], device=h_mlp.device)
-            return cascades_predictions, h_mlp, labels
+            target_1 =None
+            target_2 =None
+            for i, cascade in enumerate(self.reconstruction_module):
+                if target_1 is not None:
+                    target = target_1
+                h_mask_1, target_1 = cascade.encoder_forward(target*mask, mask, target*mask, hx = None,sigma=sigma)
+                if target_2 is not None:
+                    target = target_2
+                h_mask_2, target_2 = cascade.encoder_forward(target*(1-mask), mask, target*(1-mask), hx = None,sigma=sigma)
+                h_mlp = [torch.stack([h_m1, h_m2], dim=1) for h_m1, h_m2 in zip(h_mask_1, h_mask_2)]
+                latent_list.append(h_mlp)
+            labels = torch.arange(h_mlp[0].shape[0], device=h_mlp[0].device)
+            return cascades_predictions, latent_list, labels
 
         return cascades_predictions
 
@@ -144,7 +141,8 @@ class CIRIMECG(BaseECGReconstructionModel):
         mask: torch.Tensor,
         loss_func: torch.nn.Module,
         attrs: Dict,
-        hx: Optional[List[List[torch.Tensor]]] = None,
+        latent_features: Optional[List[List[torch.Tensor]]] = None,
+        labels: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """Processes the reconstruction loss for the CIRIM model. It differs from the base class in that it can handle
         multiple cascades and time steps.
@@ -176,7 +174,7 @@ class CIRIMECG(BaseECGReconstructionModel):
             Otherwise, returns the loss of the last intermediate loss.
         """
 
-        def compute_reconstruction_loss(t, p,m, attrs, hx):
+        def compute_reconstruction_loss(t, p,m, attrs, latent_features, labels):
             if self.unnormalize_loss_inputs:
                 # we do the unnormalization here to avoid explicitly iterating through list of predictions, which
                 # might be a list of lists.
@@ -197,27 +195,36 @@ class CIRIMECG(BaseECGReconstructionModel):
                 return loss_func(t, p, m)
             
             if "supconloss" in str(loss_func).lower():
-                if hx is None:
+                if latent_features is None:
                     return torch.tensor(0.0, device=t.device)
-                return loss_func(hx[0], hx[1])
+                return loss_func(latent_features, labels)
             return loss_func(t, p)
 
         if self.accumulate_predictions:
             cascades_weights = torch.logspace(-1, 0, steps=len(prediction)).to(target.device)
             cascades_loss = []
-            for cascade_pred in prediction:
+            for idx, cascade_pred in enumerate(prediction):
                 time_steps_weights = torch.logspace(-1, 0, steps=len(cascade_pred)).to(target.device)
-                time_steps_loss = [
-                    compute_reconstruction_loss(target, time_step_pred, mask, attrs, hx) for time_step_pred in cascade_pred
-                ]
-                cascade_loss = sum(x * w for x, w in zip(time_steps_loss, time_steps_weights)) / sum(
-                    time_steps_weights
-                )
-                cascades_loss.append(cascade_loss)
+                if latent_features is not None:
+                    time_steps_loss = [
+                        compute_reconstruction_loss(target, time_step_pred, mask, attrs, latent_features[idx][kdx], labels) for kdx, time_step_pred in enumerate(cascade_pred)
+                    ]
+                    cascade_loss = sum(x * w for x, w in zip(time_steps_loss, time_steps_weights)) / sum(
+                        time_steps_weights
+                    )
+                    cascades_loss.append(cascade_loss)
+                else:
+                    time_steps_loss = [
+                        compute_reconstruction_loss(target, time_step_pred, mask, attrs, latent_features, labels) for time_step_pred in cascade_pred
+                    ]
+                    cascade_loss = sum(x * w for x, w in zip(time_steps_loss, time_steps_weights)) / sum(
+                        time_steps_weights
+                    )
+                    cascades_loss.append(cascade_loss)
             loss = sum(x * w for x, w in zip(cascades_loss, cascades_weights)) / sum(cascades_weights)
         else:
             # keep the last prediction of the last cascade
             prediction = prediction[-1][-1]
-            loss = compute_reconstruction_loss(target, prediction, mask, attrs, hx)
-
+            latent_features = None if latent_features is None else latent_features[-1][-1]
+            loss = compute_reconstruction_loss(target, prediction, mask, attrs, latent_features, labels)
         return loss
