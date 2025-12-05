@@ -105,7 +105,7 @@ class CIRIMECG(BaseECGReconstructionModel):
 
         # --- synthetic branch ---
         for i, cascade in enumerate(self.reconstruction_module):
-            prediction, hx = cascade(
+            prediction, hx = cascade.forward(
                 prediction,
                 mask,
                 measured_ecg,
@@ -117,19 +117,49 @@ class CIRIMECG(BaseECGReconstructionModel):
             prediction = prediction[-1]
         latent_list = []
         if target is not None:
-            # use only the encoder part (no DC, no unrolling)
-            target_1 =None
-            target_2 =None
-            for i, cascade in enumerate(self.reconstruction_module):
-                if target_1 is not None:
-                    target = target_1
-                h_mask_1, target_1 = cascade.encoder_forward(target*mask, mask, target*mask, hx = None,sigma=sigma)
-                if target_2 is not None:
-                    target = target_2
-                h_mask_2, target_2 = cascade.encoder_forward(target*(1-mask), mask, target*(1-mask), hx = None,sigma=sigma)
-                h_mlp = [torch.stack([h_m1, h_m2], dim=1) for h_m1, h_m2 in zip(h_mask_1, h_mask_2)]
+            # Precompute masked target splits
+            target_1 = target * mask
+            target_2 = target * (1 - mask)
+
+            measured_ecg_1 = target_1
+            measured_ecg_2 = target_2
+
+            hx_1, hx_2 = None, None
+            latent_list = []
+
+            for cascade in self.reconstruction_module:
+
+                target_1, h_mask_1 = cascade.encoder_forward(
+                    target=target_1,
+                    mask=mask,
+                    measured_ecg=measured_ecg_1,
+                    hx=hx_1,
+                    sigma=sigma,
+                    keep_prediction=False,
+                )
+                hx_1 = h_mask_1[-1]
+                
+                target_2, h_mask_2 = cascade.encoder_forward(
+                    target=target_2,
+                    mask=mask,
+                    measured_ecg=measured_ecg_2,
+                    hx=hx_2,
+                    sigma=sigma,
+                    keep_prediction=False,
+                )
+                hx_2 = h_mask_2[-1]
+
+                # combine latent states from both halves into [B, 2, ...]
+                h_mlp = [
+                    torch.stack((h1, h2), dim=1)
+                    for h1, h2 in zip(h_mask_1, h_mask_2)
+                ]
                 latent_list.append(h_mlp)
-            labels = torch.arange(h_mlp[0].shape[0], device=h_mlp[0].device)
+
+            labels = torch.arange(
+                latent_list[-1][0].shape[0], device=latent_list[-1][0].device
+            )
+
             return cascades_predictions, latent_list, labels
 
         return cascades_predictions

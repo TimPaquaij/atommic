@@ -262,7 +262,8 @@ class RIMBlock(torch.nn.Module):
         measured_ecg: torch.Tensor,
         hx: torch.Tensor = None,
         sigma: float = 1.0,
-    ) -> Tuple[Any, Union[list, torch.Tensor, None]]:
+        keep_prediction: bool = False,
+    ) -> Tuple[Any, Union[list, list, None]]:
         """Forward pass of :class:`RIMBlock`.
 
         Parameters
@@ -356,5 +357,6 @@ class RIMBlock(torch.nn.Module):
                 targets.append(target.squeeze(-1))
             else:
                 targets.append(target)
-
-        return hx_list, targets
+        if keep_prediction is False:
+            targets = targets[-1]
+        return targets, hx_list

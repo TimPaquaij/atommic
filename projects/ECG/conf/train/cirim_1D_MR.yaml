@@ -48,7 +48,7 @@ model:
     - false
   time_steps: 8
   conv_dim: 1
-  num_cascades: 3
+  num_cascades: 1
   no_dc: true
   depth: 2
   keep_prediction: true
@@ -176,15 +176,15 @@ exp_manager:
   create_early_stopping_callback: true
   early_stopping_callback_params:
     monitor: val_loss
-    patience: 10
+    patience: 5
     mode: min
     strict: true
-    min_delta: 0.0001 # minimum change to qualify as an improvement
+    min_delta: 0.001 # minimum change to qualify as an improvement
   create_checkpoint_callback: true
   checkpoint_callback_params:
     monitor: val_loss
     mode: min
-    save_top_k: 3
+    save_top_k: 1
     save_last: true
     filename: "{epoch}-{val_loss:.4f}"
   ema:
@@ -192,3 +192,29 @@ exp_manager:
   create_wandb_logger: false
   wandb_logger_kwargs:
     project: atommic.reconstruction.ECG
+    
+# Required for Hydra launch of hyperparameter search via multirun
+defaults:
+  - override hydra/launcher: atommic_launcher
+
+# Hydra arguments necessary for hyperparameter optimization
+hydra:
+  # Helper arguments to ensure all hyper parameter runs are from the directory that launches the script.
+  sweep:
+    dir: "."
+    subdir: "."
+
+  # Define all the hyper parameters here
+  sweeper:
+    params:
+      # Place all the parameters you wish to search over here (corresponding to the rest of the config)
+      # NOTE: Make sure that there are no spaces between the commas that separate the config params !
+      model.conv_filters: "[32,64,64,12],[64,128,128,12],[96,192,192,12]"
+      model.recurrent_filters: "[64,64,32,0],[128,128,64,0],[192,192,96,0]"
+      model.reconstruction_loss.contrastive_loss: 0.0,0.01,0.1
+      model.num_cascades: 1,2,3
+
+  # Arguments to the process launcher
+  launcher:
+    num_gpus: -1  # Number of gpus to use. Each run works on a single GPU.
+    jobs_per_gpu: 2  # If each GPU has large memory, you can run multiple jobs on the same GPU for faster results (until OOM).
