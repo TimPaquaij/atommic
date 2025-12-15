@@ -5,12 +5,12 @@ mode: train
 model:
   model_name: CIRIMECG
   recurrent_layer: IndRNN
-  input_channels: 36
+  input_channels: 16
   conv_filters:
     - 64
     - 128
     - 128
-    - 24
+    - 16
   conv_kernels:
     - 9
     - 7
@@ -78,7 +78,7 @@ model:
     dataset: /home/jovyan/work/training/ECGSynthesis/dataset/ECGnet_synthesis_train_dataset.csv
     transforms:
       applygain: true
-      to12lead: true
+      #to12lead: true
       resample:
       - 500
       butterfilter:
@@ -114,7 +114,7 @@ model:
     dataset: /home/jovyan/work/training/ECGSynthesis/dataset/ECGnet_synthesis_validation_dataset.csv
     transforms:
       applygain: true
-      to12lead: true
+      #to12lead: true
       resample:
       - 500
       butterfilter:
@@ -162,7 +162,7 @@ trainer:
   accelerator: gpu
   devices: [0]
   num_nodes: 1
-  max_epochs: 12
+  max_epochs: 30
   precision: 32
   enable_checkpointing: false
   logger: false
@@ -182,7 +182,7 @@ exp_manager:
     patience: 5
     mode: min
     strict: true
-    min_delta: 0.0001 # minimum change to qualify as an improvement
+    min_delta: 0.0005 # minimum change to qualify as an improvement
   create_checkpoint_callback: true
   checkpoint_callback_params:
     monitor: val_loss
