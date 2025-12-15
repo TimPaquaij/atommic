@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 class ProjectorMLP(nn.Module):
-    def __init__(self, in_channels=96, hidden=512, out_dim=128):
+    def __init__(self, in_channels=64, hidden=512, out_dim=128):
         super().__init__()
         self.pool = nn.AdaptiveAvgPool1d(1)   # [batch,92,1]
         self.mlp = nn.Sequential(

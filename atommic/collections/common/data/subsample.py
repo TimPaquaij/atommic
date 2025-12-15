@@ -1005,7 +1005,7 @@ class LayoutMaskFunc(MaskFunc):
                     mask[3:6, int(shape[1] / 4) + 1 : int(shape[1] / 2) + 1] = 1
                     mask[6:9, int((shape[1] / 2)) + 1 : int(3 * shape[1] / 4) + 1] = 1
                     mask[9:, int(3 * shape[1] / 4) + 1 :] = 1
-                    possible_rhythm_leads = 1  # Lead indices: II, V1, V5
+                    possible_rhythm_leads = [1]  # Lead indices: II, V1, V5
                     rhythm_lead = self.rng.choice(possible_rhythm_leads)
                     mask[rhythm_lead, :] = 1
                 elif acceleration == "hex":
@@ -1016,7 +1016,7 @@ class LayoutMaskFunc(MaskFunc):
                     mask = self.random_mask(
                         shape, min_block=self.min_block, low_ratio=self.low_ratio, high_ratio=self.high_ratio
                     )
-
+                    
             if shape[0] == 8:
                 if acceleration == "6x2":
                     mask[:2, : int(shape[1] / 2) + 1] = 1
@@ -1025,11 +1025,11 @@ class LayoutMaskFunc(MaskFunc):
                     mask[:2, : int(shape[1] / 4) + 1] = 1
                     mask[2:5, int((shape[1] / 2)) + 1 : int(3 * shape[1] / 4) + 1] = 1
                     mask[5:, int(3 * shape[1] / 4) + 1 :] = 1
-                elif acceleration == "3x4":
+                elif acceleration == "3x4_1":
                     mask[:2, : int(shape[1] / 4) + 1] = 1
                     mask[2:5, int((shape[1] / 2)) + 1 : int(3 * shape[1] / 4) + 1] = 1
                     mask[5:, int(3 * shape[1] / 4) + 1 :] = 1
-                    possible_rhythm_leads = [1, 3, 7]  # Lead indices: II, V1, V5
+                    possible_rhythm_leads = [1]  # Lead indices: II, V1, V5
                     rhythm_lead = self.rng.choice(possible_rhythm_leads)
                     mask[rhythm_lead, :] = 1
                 elif acceleration == "hex":
