@@ -1,19 +1,18 @@
 pretrained: true
-checkpoint: /home/jovyan/work/training/ECGSynthesis/models/ECGCIRIM_time_1D/default/2025-11-25_20-45-01/checkpoints/default--val_loss=0.0231-epoch=12-last.ckpt
-mode: test
+checkpoint: /home/jovyan/work/training/ECGSynthesis/models/ECGCIRIM_time_1D/2025-12-04_15-08-04/checkpoints/epoch=60-val_loss=0.0186-last.ckpt
 
 model:
   model_name: CIRIMECG
   recurrent_layer: IndRNN
   input_channels: 36
   conv_filters:
-    - 64
-    - 128
-    - 128
+    - 96
+    - 192
+    - 192
     - 12
   conv_kernels:
     - 9
-    - 5
+    - 7
     - 5
     - 3
   conv_dilations:
@@ -27,9 +26,9 @@ model:
     - true
     - false
   recurrent_filters:
-    - 128
-    - 128
-    - 64
+    - 192
+    - 192
+    - 96
     - 0
   recurrent_kernels:
     - 3
@@ -56,8 +55,9 @@ model:
   dimensionality: 2
   reconstruction_loss:
     masked_huber: 0.3
-    masked_mse: 0.2
-    spectral_mse: 0.5
+    masked_mse: 0.5
+    spectral_mse: 0.15
+    contrastive_loss: 0.001
   masked_weight: 3
   amplitude_weight: 4
   normalization_type: null
@@ -85,7 +85,7 @@ model:
     mask_args:
       type: layouts
       accelerations:
-        - 6x2
+        - hex
       low_ratio: 0.1
       high_ratio: 0.5
       min_block: 500
@@ -116,7 +116,7 @@ model:
 trainer:
   strategy: auto
   accelerator: gpu
-  devices: [1]
+  devices: [0]
   num_nodes: 1
   max_epochs: 50
   precision: 32
@@ -127,7 +127,7 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /home/jovyan/work/training/ECGSynthesis/results/ECGCIRIM_time_1D/6x2
+  exp_dir: /home/jovyan/work/training/ECGSynthesis/results/ECGCIRIM_time_1D/hex
   ema:
     enable: false
   create_tensorboard_logger: true
