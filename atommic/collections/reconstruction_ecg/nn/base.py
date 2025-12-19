@@ -11,6 +11,7 @@ import pandas as pd
 import h5py
 import numpy as np
 import torch
+import json
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import Trainer
 from torch.nn import L1Loss, MSELoss
@@ -986,16 +987,51 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
 
         # Get dataset.
         log_figures = cfg.get("log_figures", None)
-        dataset = dataloader(
-            dataset_function=cfg.get("dataset_function"),
-            waveform_dir=cfg.get("waveform_dir"),
-            dataset=pd.read_csv((cfg.get("dataset")))[: cfg.get("dataset_number_of_examples", 10)],
-            transform=Compose(transforms),
-            labels=cfg.get("labels", None),
-            secondary_waveform_dir=cfg.get("secondary_waveform_dir", ""),
-            additional_dataset_function=cfg.get("additional_dataset_function", None),
-            log_figures=log_figures,
-        )
+        if cfg.get("params_json",None):
+            params = json.load(open(cfg.get("params_json",None), "r", encoding="utf-8"))
+            df = pd.read_csv((cfg.get("dataset")), low_memory=False)[: cfg.get("dataset_number_of_examples", 10)]
+            subset1 = df[df['Center']=='UMCU']
+            subset2 = df[df['Center']=='CZE']
+            def load_age(ds: UniversalECGDataset, row):
+                return {'age': torch.tensor(row['Age_scaled'], dtype=torch.float32)}
+
+            def load_gender(ds: UniversalECGDataset, row):
+                return {'gender': torch.tensor(row['Gender'], dtype=torch.float32)}
+            additional_dataset_fn = [load_age, load_gender]
+
+            dataset1 = dataloader(
+                dataset_function=cfg.get("dataset_function"),
+                waveform_dir=params["umcu_data_dir"],
+                dataset=subset1,
+                transform=Compose(transforms),
+                labels=params["labels"],
+                secondary_waveform_dir=cfg.get("secondary_waveform_dir", ""),
+                additional_dataset_function=additional_dataset_fn,
+                log_figures=log_figures,
+            )
+            dataset2 = dataloader(
+                dataset_function="universal",
+                waveform_dir=params["cze_data_dir"],
+                dataset=subset2,
+                transform=Compose(transforms),
+                labels=params["labels"],
+                secondary_waveform_dir=cfg.get("secondary_waveform_dir", ""),
+                additional_dataset_function=additional_dataset_fn,
+                log_figures=log_figures,
+            )
+
+            dataset = torch.utils.data.ConcatDataset([dataset1, dataset2])
+        else:
+            dataset = dataloader(
+                dataset_function=cfg.get("dataset_function"),
+                waveform_dir=cfg.get("waveform_dir"),
+                dataset=pd.read_csv((cfg.get("dataset")))[: cfg.get("dataset_number_of_examples", 10)],
+                transform=Compose(transforms),
+                labels=cfg.get("labels", None),
+                secondary_waveform_dir=cfg.get("secondary_waveform_dir", ""),
+                additional_dataset_function=cfg.get("additional_dataset_function", None),
+                log_figures=log_figures,
+            )
         if cfg.shuffle:
             sampler = torch.utils.data.RandomSampler(dataset)
         else:
