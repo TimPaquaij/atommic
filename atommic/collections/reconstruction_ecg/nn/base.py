@@ -137,7 +137,6 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                 elif name == "contrastive_loss":
                     self.reconstruction_losses[name] = SupConLoss(temperature=0.07, contrast_mode="all")
                     self.contrastive_loss = True
-                
 
         # replace losses names by 'loss_1', 'loss_2', etc. to properly iterate in the aggregator loss
         self.reconstruction_losses = {f"loss_{i+1}": v for i, v in enumerate(self.reconstruction_losses.values())}
@@ -181,7 +180,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         loss_func: torch.nn.Module,
         attrs: Dict,
         latent_features: Optional[List[List[torch.Tensor]]] = None,
-        labels: Optional[torch.Tensor]= None,
+        labels: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """Processes the reconstruction loss.
 
@@ -210,7 +209,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             Otherwise, returns the loss of the last intermediate loss.
         """
 
-        def compute_reconstruction_loss(t, p,m, attrs, hx):
+        def compute_reconstruction_loss(t, p, m, attrs, hx):
             if self.unnormalize_loss_inputs:
                 # we do the unnormalization here to avoid explicitly iterating through list of predictions, which
                 # might be a list of lists.
@@ -229,7 +228,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
 
             if "masked_huber" in str(loss_func).lower():
                 return loss_func(t, p, m)
-            
+
             if "contrastive_loss":
                 return loss_func(latent_features, labels)
 
@@ -238,7 +237,13 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         return compute_reconstruction_loss(target, prediction, mask, attrs, latent_features, labels)
 
     def __compute_loss__(
-        self, target: torch.Tensor, predictions: Union[list, torch.Tensor], mask: torch.Tensor, attrs: dict, latent_features: Optional[List[List[torch.Tensor]]] = None, labels: Optional[torch.Tensor] = None,
+        self,
+        target: torch.Tensor,
+        predictions: Union[list, torch.Tensor],
+        mask: torch.Tensor,
+        attrs: dict,
+        latent_features: Optional[List[List[torch.Tensor]]] = None,
+        labels: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """Computes the reconstruction loss.
 
@@ -272,7 +277,12 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             mask = mask.unsqueeze(-1)
         for name, loss_func in self.reconstruction_losses.items():
             if self.contrastive_loss:
-                losses[name] = self.process_reconstruction_loss(target, predictions, mask, loss_func, attrs, latent_features, labels) * weight
+                losses[name] = (
+                    self.process_reconstruction_loss(
+                        target, predictions, mask, loss_func, attrs, latent_features, labels
+                    )
+                    * weight
+                )
             else:
                 losses[name] = self.process_reconstruction_loss(target, predictions, mask, loss_func, attrs) * weight
         return self.total_reconstruction_loss(**losses) * self.total_reconstruction_loss_weight
@@ -616,7 +626,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             sample["masked_waveform"],
             sample["mask"],
             sample["waveform"],
-            sample["fname"],  # type: ignore
+            sample["filename"],  # type: ignore
             sample["data_idx"],  # type: ignore
             sample["layout"],
             sample["attrs"],  # type: ignore
@@ -626,9 +636,11 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         if self.update_in_frequency:
             target = fft1(target, time_dim=-1)
         # Determine if contrastive loss should be applied
-        
+
         if self.contrastive_loss:
-            train_loss = self.__compute_loss__(target, predictions ,sample["mask"], sample["attrs"], **outputs["contrastive"])
+            train_loss = self.__compute_loss__(
+                target, predictions, sample["mask"], sample["attrs"], **outputs["contrastive"]
+            )
         else:
             train_loss = self.__compute_loss__(target, predictions, sample["mask"], sample["attrs"])
         if self.update_in_frequency:
@@ -696,7 +708,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             sample["masked_waveform"],
             sample["mask"],
             sample["waveform"],
-            sample["fname"],  # type: ignore
+            sample["filename"],  # type: ignore
             sample["data_idx"],  # type: ignore
             sample["layout"],
             sample["attrs"],  # type: ignore
@@ -705,9 +717,11 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         predictions = outputs["predictions"]
         if self.update_in_frequency:
             target = fft1(target, time_dim=-1)
-        
+
         if self.contrastive_loss:
-            val_loss = self.__compute_loss__(target, predictions,sample["mask"], sample["attrs"], **outputs["contrastive"])
+            val_loss = self.__compute_loss__(
+                target, predictions, sample["mask"], sample["attrs"], **outputs["contrastive"]
+            )
         else:
             val_loss = self.__compute_loss__(target, predictions, sample["mask"], sample["attrs"])
         self.validation_step_outputs.append({"val_loss": val_loss})
@@ -762,7 +776,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             sample["masked_waveform"],
             sample["mask"],
             sample["waveform"],
-            sample["fname"],  # type: ignore
+            sample["filename"],  # type: ignore
             sample["data_idx"],  # type: ignore
             sample["layout"],
             sample["attrs"],  # type: ignore
@@ -908,14 +922,12 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         # Save predictions.
         reconstructions = defaultdict(list)
         for pseudo_id, test_id, layout, mask, reconstructions in self.test_step_outputs:
-            filename = os.path.join(pseudo_id[0:2], pseudo_id[2:4], pseudo_id[4:], layout, f"{test_id}.npy")
+            filename = os.path.join(pseudo_id[0:2], pseudo_id[2:4], pseudo_id[4:], f"{test_id}.npy")
             file_dir = os.path.join(out_dir, filename)
             os.makedirs(os.path.split(file_dir)[0], exist_ok=True)
             np.save(file_dir, reconstructions)
             if layout == "random":
-                filename = os.path.join(
-                    pseudo_id[0:2], pseudo_id[2:4], pseudo_id[4:], layout, f"{test_id}_random_mask.npy"
-                )
+                filename = os.path.join(pseudo_id[0:2], pseudo_id[2:4], pseudo_id[4:], f"{test_id}_random_mask.npy")
                 file_dir = os.path.join(out_dir, filename)
                 os.makedirs(os.path.split(file_dir)[0], exist_ok=True)
                 np.save(file_dir, mask)
@@ -987,16 +999,18 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
 
         # Get dataset.
         log_figures = cfg.get("log_figures", None)
-        if cfg.get("params_json",None):
-            params = json.load(open(cfg.get("params_json",None), "r", encoding="utf-8"))
+        if cfg.get("params_json", None):
+            params = json.load(open(cfg.get("params_json", None), "r", encoding="utf-8"))
             df = pd.read_csv((cfg.get("dataset")), low_memory=False)[: cfg.get("dataset_number_of_examples", 10)]
-            subset1 = df[df['Center']=='UMCU']
-            subset2 = df[df['Center']=='CZE']
+            subset1 = df[df['Center'] == 'UMCU']
+            subset2 = df[df['Center'] == 'CZE']
+
             def load_age(ds: UniversalECGDataset, row):
                 return {'age': torch.tensor(row['Age_scaled'], dtype=torch.float32)}
 
             def load_gender(ds: UniversalECGDataset, row):
                 return {'gender': torch.tensor(row['Gender'], dtype=torch.float32)}
+
             additional_dataset_fn = [load_age, load_gender]
 
             dataset1 = dataloader(
