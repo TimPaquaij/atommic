@@ -71,7 +71,7 @@ model:
     dataset_format: UniversalECGDataset
     dataset_function: umcu
     waveform_dir: /home/jovyan/work/raw_data/umcu_rhythm
-    dataset: /home/jovyan/work/training/ECGSynthesis/dataset/shd_test_dataset.csv
+    dataset: /home/jovyan/work/training/ECGSynthesis/dataset/shd_test_2024_dataset.csv
     params_json: /home/jovyan/work/training/ECGSynthesis/dataset/shd_params.json
     transforms:
       applygain: true
