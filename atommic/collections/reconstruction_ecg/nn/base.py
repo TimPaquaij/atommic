@@ -809,8 +809,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         for i in range(predictions.shape[0]):
             self.test_step_outputs.append(
                 [
-                    sample["pseudoid"][i],
-                    sample["testid"][i],
+                    sample["filename"][i],
                     sample["layout"][i],
                     mask[i],
                     predictions[i],
@@ -921,13 +920,13 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
 
         # Save predictions.
         reconstructions = defaultdict(list)
-        for pseudo_id, test_id, layout, mask, reconstructions in self.test_step_outputs:
-            filename = os.path.join(pseudo_id[0:2], pseudo_id[2:4], pseudo_id[4:], f"{test_id}.npy")
+        for filename, layout, mask, reconstructions in self.test_step_outputs:
+            filename = os.path.join(filename)
             file_dir = os.path.join(out_dir, filename)
             os.makedirs(os.path.split(file_dir)[0], exist_ok=True)
             np.save(file_dir, reconstructions)
             if layout == "random":
-                filename = os.path.join(pseudo_id[0:2], pseudo_id[2:4], pseudo_id[4:], f"{test_id}_random_mask.npy")
+                filename = os.path.join(filename.replace(".npy", ""), "_random_mask.npy")
                 file_dir = os.path.join(out_dir, filename)
                 os.makedirs(os.path.split(file_dir)[0], exist_ok=True)
                 np.save(file_dir, mask)
