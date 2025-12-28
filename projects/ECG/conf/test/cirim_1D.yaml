@@ -86,7 +86,7 @@ model:
     mask_args:
       type: layouts
       accelerations:
-        - hex
+        - 3x4_1
       low_ratio: 0.1
       high_ratio: 0.5
       min_block: 500
@@ -128,7 +128,7 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /home/jovyan/work/training/ECGSynthesis/results/ECGCIRIM_time_1D/hex
+  exp_dir: /home/jovyan/work/training/ECGSynthesis/results/ECGCIRIM_time_1D/3x4_1
   ema:
     enable: false
   create_tensorboard_logger: true
