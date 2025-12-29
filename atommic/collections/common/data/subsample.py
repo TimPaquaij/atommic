@@ -1016,7 +1016,7 @@ class LayoutMaskFunc(MaskFunc):
                     mask = self.random_mask(
                         shape, min_block=self.min_block, low_ratio=self.low_ratio, high_ratio=self.high_ratio
                     )
-                    
+
             if shape[0] == 8:
                 if acceleration == "6x2":
                     mask[:2, : int(shape[1] / 2) + 1] = 1
