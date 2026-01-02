@@ -60,13 +60,13 @@ model:
     spectral_mse: 0.4
     contrastive_loss: 0.001
   masked_weight: 3
-  amplitude_weight: 6
+  amplitude_weight: 4
   normalization_type: null
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
   total_reconstruction_loss_weight: 1
   update_in_frequency: false
-  hexad_inform: false
+  hexad_inform: true
 
   train_ds:
     dataset_format: UniversalECGDataset
@@ -93,7 +93,7 @@ model:
       use_seed: false
     normalization_type: null
     use_seed: false
-    dataset_number_of_examples: -1
+    dataset_number_of_examples: null
     batch_size: 18
     shuffle: true
     num_workers: 10
@@ -125,7 +125,7 @@ model:
       use_seed: true
     normalization_type: null
     use_seed: true
-    dataset_number_of_examples: -1
+    dataset_number_of_examples: null
     batch_size: 18
     log_figures: 4
     shuffle: false
