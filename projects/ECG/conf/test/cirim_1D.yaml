@@ -93,7 +93,7 @@ model:
       use_seed: true
     normalization_type: null
     use_seed: true
-    dataset_number_of_examples: -1
+    dataset_number_of_examples: null
     batch_size: 30
     log_figures: 0
     shuffle: false
@@ -128,7 +128,7 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /home/jovyan/work/training/ECGSynthesis/results/ECGCIRIM_time_1D/3x4_1
+  exp_dir: /home/jovyan/work/training/ECGSynthesis/results/ECGCIRIM_time_1D_3x4_1/3x4_1
   ema:
     enable: false
   create_tensorboard_logger: true

@@ -57,11 +57,9 @@ class MaskL1Loss(Loss):
             )
 
         if self.amplitude_weight:
-            weighted_mask = torch.where(
-                target.abs() <= 0.5,
-                weighted_mask,
-                torch.tensor(float(self.amplitude_weight), dtype=target.dtype, device=target.device),
-            )
+            amplitude_boost = (target.abs() - 0.5).clamp(min=0.0)
+            weighted_mask = weighted_mask + float(self.amplitude_weight) * amplitude_boost
+            weighted_mask = weighted_mask.clamp(max=self.amplitude_weight)
 
         diff = torch.abs(pred - target)
         loss = diff * weighted_mask

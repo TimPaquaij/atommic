@@ -1000,7 +1000,10 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         log_figures = cfg.get("log_figures", None)
         if cfg.get("params_json", None):
             params = json.load(open(cfg.get("params_json", None), "r", encoding="utf-8"))
-            df = pd.read_csv((cfg.get("dataset")), low_memory=False)[: cfg.get("dataset_number_of_examples", 10)]
+            df = pd.read_csv((cfg.get("dataset")), low_memory=False)
+            n = cfg.get("dataset_number_of_examples", None)
+            if n is not None and int(n) > 0:
+                df.iloc[:n]
             subset1 = df[df['Center'] == 'UMCU']
             subset2 = df[df['Center'] == 'CZE']
 
