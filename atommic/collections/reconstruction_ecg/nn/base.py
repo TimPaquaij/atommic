@@ -54,7 +54,14 @@ from atommic.collections.reconstruction_ecg.losses.STFT import (
     STFTLoss,
     MultiResolutionSTFTLoss,
 )
-from atommic.collections.reconstruction_ecg.metrics.reconstruction_metrics import mse, nmse, psnr, ssim
+from atommic.collections.reconstruction_ecg.metrics.reconstruction_metrics import (
+    mse,
+    nmse,
+    psnr,
+    ssim,
+    rpeak_timing_error_ms,
+    ncc_nan_safe_vectorized,
+)
 
 __all__ = ["BaseECGReconstructionModel"]
 
@@ -171,6 +178,8 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         self.NMSE = DistributedMetricSum()
         self.SSIM = DistributedMetricSum()
         self.PSNR = DistributedMetricSum()
+        self.RPEMS = DistributedMetricSum()
+        self.NCCc = DistributedMetricSum()
         self.TotExamples = DistributedMetricSum()
 
         # Set evaluation metrics dictionaries
@@ -178,6 +187,8 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         self.nmse_vals: Dict = defaultdict(dict)
         self.ssim_vals: Dict = defaultdict(dict)
         self.psnr_vals: Dict = defaultdict(dict)
+        self.rpems_vals: Dict = defaultdict(dict)
+        self.nccc_vals: Dict = defaultdict(dict)
 
     def process_reconstruction_loss(  # noqa: MC0001
         self,
@@ -359,6 +370,12 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             ).view(1)
             self.nmse_vals[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(  # type: ignore
                 nmse(output_target, output_predictions)
+            ).view(1)
+            self.rpems_vals[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(  # type: ignore
+                rpeak_timing_error_ms(output_target, output_predictions)
+            ).view(1)
+            self.nccc_vals[fname[_batch_idx_]][str(slice_idx[_batch_idx_].item())] = torch.tensor(  # type: ignore
+                ncc_nan_safe_vectorized(output_target, output_predictions)
             ).view(1)
 
             max_value = max(np.max(output_target), np.max(output_predictions)) - min(
@@ -838,6 +855,8 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         nmse_vals = defaultdict(dict)
         ssim_vals = defaultdict(dict)
         psnr_vals = defaultdict(dict)
+        rpems_vals = defaultdict(dict)
+        nccc_vals = defaultdict(dict)
         for k, v in self.mse_vals.items():
             mse_vals[k].update(v)
         for k, v in self.nmse_vals.items():
@@ -846,6 +865,10 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             ssim_vals[k].update(v)
         for k, v in self.psnr_vals.items():
             psnr_vals[k].update(v)
+        for k, v in self.rpems_vals.items():
+            rpems_vals[k].update(v)
+        for k, v in self.nccc_vals.items():
+            nccc_vals[k].update(v)
 
         # Parse metrics and log them.
         metrics = {
@@ -853,6 +876,8 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             "NMSE": 0,
             "SSIM": 0,
             "PSNR": 0,
+            "RPEMS": 0,
+            "NCCc": 0,
         }
         local_examples = 0
         for fname in mse_vals:
@@ -867,12 +892,20 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             metrics["PSNR"] = metrics["PSNR"] + torch.mean(
                 torch.cat([v.view(-1) for _, v in psnr_vals[fname].items()])
             )
+            metrics["RPEMS"] = metrics["RPEMS"] + torch.mean(
+                torch.cat([v.view(-1) for _, v in rpems_vals[fname].items()])
+            )
+            metrics["NCCc"] = metrics["NCCc"] + torch.mean(
+                torch.cat([v.view(-1) for _, v in nccc_vals[fname].items()])
+            )
 
         # reduce across ddp via sum
         metrics["MSE"] = self.MSE(metrics["MSE"])
         metrics["NMSE"] = self.NMSE(metrics["NMSE"])
         metrics["SSIM"] = self.SSIM(metrics["SSIM"])
         metrics["PSNR"] = self.PSNR(metrics["PSNR"])
+        metrics["RPEMS"] = self.RPEMS(metrics["RPEMS"])
+        metrics["NCCc"] = self.NCCc(metrics["NCCc"])
         tot_examples = self.TotExamples(torch.tensor(local_examples))
 
         for metric, value in metrics.items():
@@ -885,6 +918,8 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         nmse_vals = defaultdict(dict)
         ssim_vals = defaultdict(dict)
         psnr_vals = defaultdict(dict)
+        rpems_vals = defaultdict(dict)
+        nccc_vals = defaultdict(dict)
 
         for k, v in self.mse_vals.items():
             mse_vals[k].update(v)
@@ -894,14 +929,13 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             ssim_vals[k].update(v)
         for k, v in self.psnr_vals.items():
             psnr_vals[k].update(v)
+        for k, v in self.rpems_vals.items():
+            rpems_vals[k].update(v)
+        for k, v in self.nccc_vals.items():
+            nccc_vals[k].update(v)
 
         # apply means across image volumes
-        metrics = {
-            "MSE": 0,
-            "NMSE": 0,
-            "SSIM": 0,
-            "PSNR": 0,
-        }
+        metrics = {"MSE": 0, "NMSE": 0, "SSIM": 0, "PSNR": 0, "RPEMS": 0, "NCCc": 0}
         local_examples = 0
         for fname in mse_vals:
             local_examples += 1
@@ -915,12 +949,20 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             metrics["PSNR"] = metrics["PSNR"] + torch.mean(
                 torch.cat([v.view(-1) for _, v in psnr_vals[fname].items()])
             )
+            metrics["RPEMS"] = metrics["RPEMS"] + torch.mean(
+                torch.cat([v.view(-1) for _, v in rpems_vals[fname].items()])
+            )
+            metrics["NCCc"] = metrics["NCCc"] + torch.mean(
+                torch.cat([v.view(-1) for _, v in nccc_vals[fname].items()])
+            )
 
         # reduce across ddp via sum
         metrics["MSE"] = self.MSE(metrics["MSE"])
         metrics["NMSE"] = self.NMSE(metrics["NMSE"])
         metrics["SSIM"] = self.SSIM(metrics["SSIM"])
         metrics["PSNR"] = self.PSNR(metrics["PSNR"])
+        metrics["RPEMS"] = self.RPEMS(metrics["RPEMS"])
+        metrics["NCCc"] = self.NCCc(metrics["NCCc"])
         tot_examples = self.TotExamples(torch.tensor(local_examples))
 
         for metric, value in metrics.items():

@@ -59,7 +59,7 @@ class MaskL1Loss(Loss):
         if self.amplitude_weight:
             amplitude_boost = (target.abs() - 0.5).clamp(min=0.0)
             weighted_mask = weighted_mask + float(self.amplitude_weight) * amplitude_boost
-            weighted_mask = weighted_mask.clamp(max=self.amplitude_weight)
+            weighted_mask = weighted_mask.clamp(max=self.amplitude_weight + self.weight)
 
         diff = torch.abs(pred - target)
         loss = diff * weighted_mask

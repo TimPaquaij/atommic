@@ -1012,6 +1012,9 @@ class LayoutMaskFunc(MaskFunc):
                     mask[:6, :] = 1
                     mask[7, :] = 1
                     mask[10, :] = 1
+                elif acceleration == "single_lead":
+                    single_lead = self.rng.choice(range(12))
+                    mask[single_lead, :] = 1
                 elif acceleration == "random":
                     mask = self.random_mask(
                         shape, min_block=self.min_block, low_ratio=self.low_ratio, high_ratio=self.high_ratio
@@ -1036,6 +1039,9 @@ class LayoutMaskFunc(MaskFunc):
                     mask[:2, :] = 1
                     mask[3, :] = 1
                     mask[6, :] = 1
+                elif acceleration == "single_lead":
+                    single_lead = self.rng.choice(range(8))
+                    mask[single_lead, :] = 1
                 elif acceleration == "random":
                     mask = self.random_mask(shape, min_block=self.min_block)
         return mask, acceleration

@@ -59,6 +59,7 @@ class CIRIMECG(BaseECGReconstructionModel):
                     recurrent_dilations=cfg_dict.get("recurrent_dilations"),
                     recurrent_bias=cfg_dict.get("recurrent_bias"),
                     depth=cfg_dict.get("depth"),
+                    no_dc=cfg_dict.get("no_dc"),
                     time_steps=self.time_steps,
                     conv_dim=cfg_dict.get("conv_dim"),
                     update_in_frequency=cfg_dict.get("update_in_frequency"),
@@ -138,7 +139,7 @@ class CIRIMECG(BaseECGReconstructionModel):
                     keep_prediction=False,
                 )
                 hx_1 = h_mask_1[-1]
-                
+
                 target_2, h_mask_2 = cascade.encoder_forward(
                     target=target_2,
                     mask=mask,
@@ -150,15 +151,10 @@ class CIRIMECG(BaseECGReconstructionModel):
                 hx_2 = h_mask_2[-1]
 
                 # combine latent states from both halves into [B, 2, ...]
-                h_mlp = [
-                    torch.stack((h1, h2), dim=1)
-                    for h1, h2 in zip(h_mask_1, h_mask_2)
-                ]
+                h_mlp = [torch.stack((h1, h2), dim=1) for h1, h2 in zip(h_mask_1, h_mask_2)]
                 latent_list.append(h_mlp)
 
-            labels = torch.arange(
-                latent_list[-1][0].shape[0], device=latent_list[-1][0].device
-            )
+            labels = torch.arange(latent_list[-1][0].shape[0], device=latent_list[-1][0].device)
 
             return cascades_predictions, latent_list, labels
 
@@ -204,7 +200,7 @@ class CIRIMECG(BaseECGReconstructionModel):
             Otherwise, returns the loss of the last intermediate loss.
         """
 
-        def compute_reconstruction_loss(t, p,m, attrs, latent_features, labels):
+        def compute_reconstruction_loss(t, p, m, attrs, latent_features, labels):
             if self.unnormalize_loss_inputs:
                 # we do the unnormalization here to avoid explicitly iterating through list of predictions, which
                 # might be a list of lists.
@@ -223,7 +219,7 @@ class CIRIMECG(BaseECGReconstructionModel):
 
             if "mask" in str(loss_func).lower():
                 return loss_func(t, p, m)
-            
+
             if "supconloss" in str(loss_func).lower():
                 if latent_features is None:
                     return torch.tensor(0.0, device=t.device)
@@ -237,7 +233,10 @@ class CIRIMECG(BaseECGReconstructionModel):
                 time_steps_weights = torch.logspace(-1, 0, steps=len(cascade_pred)).to(target.device)
                 if latent_features is not None:
                     time_steps_loss = [
-                        compute_reconstruction_loss(target, time_step_pred, mask, attrs, latent_features[idx][kdx], labels) for kdx, time_step_pred in enumerate(cascade_pred)
+                        compute_reconstruction_loss(
+                            target, time_step_pred, mask, attrs, latent_features[idx][kdx], labels
+                        )
+                        for kdx, time_step_pred in enumerate(cascade_pred)
                     ]
                     cascade_loss = sum(x * w for x, w in zip(time_steps_loss, time_steps_weights)) / sum(
                         time_steps_weights
@@ -245,7 +244,8 @@ class CIRIMECG(BaseECGReconstructionModel):
                     cascades_loss.append(cascade_loss)
                 else:
                     time_steps_loss = [
-                        compute_reconstruction_loss(target, time_step_pred, mask, attrs, latent_features, labels) for time_step_pred in cascade_pred
+                        compute_reconstruction_loss(target, time_step_pred, mask, attrs, latent_features, labels)
+                        for time_step_pred in cascade_pred
                     ]
                     cascade_loss = sum(x * w for x, w in zip(time_steps_loss, time_steps_weights)) / sum(
                         time_steps_weights

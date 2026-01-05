@@ -9,6 +9,7 @@ from atommic.collections.common.parts.fft import fft1, ifft1
 from atommic.collections.reconstruction_ecg.nn.rim_base import conv_layers, rim_utils, rnn_cells
 from atommic.collections.reconstruction_ecg.nn.rim_base.rim_mlp import ProjectorMLP
 
+
 class RIMBlock(torch.nn.Module):
     """RIMBlock is a block of Recurrent Inference Machines (RIMs) as presented in [Lonning19]_.
 
@@ -27,11 +28,11 @@ class RIMBlock(torch.nn.Module):
         conv_kernels=None,
         conv_dilations=None,
         conv_bias=None,
-        conv_act=None,
         recurrent_filters=None,
         recurrent_kernels=None,
         recurrent_dilations=None,
         recurrent_bias=None,
+        no_dc: bool = True,
         depth: int = 2,
         time_steps: int = 8,
         conv_dim: int = 2,
@@ -102,7 +103,13 @@ class RIMBlock(torch.nn.Module):
             (conv_features, conv_k_size, conv_dilation, l_conv_bias, nonlinear),
             (rnn_features, rnn_k_size, rnn_dilation, rnn_bias, rnn_type),
         ) in zip(
-            zip(conv_filters, conv_kernels, conv_dilations, conv_bias, ["relu", "relu", "relu", None]),
+            zip(
+                conv_filters,
+                conv_kernels,
+                conv_dilations,
+                conv_bias,
+                ["relu" if idx < len(conv_filters) - 1 else None for idx, _ in enumerate(conv_filters)],
+            ),
             zip(
                 recurrent_filters,
                 recurrent_kernels,
@@ -154,7 +161,12 @@ class RIMBlock(torch.nn.Module):
             self.samplebase = samplebase
 
         self.recurrent_filters = recurrent_filters
-        self.mlp = ProjectorMLP()
+        self.lead_logit = torch.nn.Parameter(torch.zeros(self.time_steps, 12))
+        self.mlp = ProjectorMLP(conv_dim=self.conv_dim, in_channels=self.recurrent_filters[-2])
+
+        self.no_dc = no_dc
+        if not self.no_dc:
+            self.dc_logit = torch.nn.Parameter(torch.zeros(12))
 
     def forward(
         self,
@@ -208,7 +220,7 @@ class RIMBlock(torch.nn.Module):
                 if f != 0
             ]
         predictions = []
-        for _ in range(self.time_steps):
+        for idx, _ in enumerate(range(self.time_steps)):
             log_likelihood_gradient_prediction = rim_utils.log_likelihood_gradient_ecg(
                 prediction,
                 measured_ecg,
@@ -239,21 +251,36 @@ class RIMBlock(torch.nn.Module):
                     ).to(prediction.device)
                     freq_mask = (freq_map.abs() >= self.lowcut) & (freq_map.abs() <= self.highcut)
                     log_likelihood_gradient_prediction = log_likelihood_gradient_prediction * freq_mask
-                prediction = prediction_freq + log_likelihood_gradient_prediction.permute(0, 2, 3, 1)
+                lead_scale = torch.sigmoid(self.lead_logit[idx])
+                expand_dims = [1, -1] + [1] * (log_likelihood_gradient_prediction.dim() - 2)
+                lead_scale = lead_scale.view(*expand_dims)
+                prediction = prediction_freq + lead_scale * log_likelihood_gradient_prediction.permute(0, 2, 3, 1)
             else:
                 if self.conv_dim == 1:
-                    prediction = prediction + log_likelihood_gradient_prediction
+                    lead_scale = torch.sigmoid(self.lead_logit[idx])
+                    expand_dims = [1, -1] + [1] * (log_likelihood_gradient_prediction.dim() - 2)
+                    lead_scale = lead_scale.view(*expand_dims)
+                    prediction = prediction + lead_scale * log_likelihood_gradient_prediction
 
                 else:
-                    prediction = prediction + log_likelihood_gradient_prediction.permute(0, 2, 3, 1)
+                    lead_scale = torch.sigmoid(self.lead_logit[idx])
+                    expand_dims = [1, -1] + [1] * (log_likelihood_gradient_prediction.dim() - 2)
+                    lead_scale = lead_scale.view(*expand_dims)
+                    prediction = prediction + lead_scale * log_likelihood_gradient_prediction.permute(0, 2, 3, 1)
 
             if self.conv_dim == 2 and not self.update_in_frequency:
                 predictions.append(prediction.squeeze(-1))
             else:
                 predictions.append(prediction)
+        if self.no_dc:
+            return predictions, hx
 
-        return predictions, hx
-    
+        dc_weight = torch.sigmoid(self.dc_logit)
+        expand_dims = [1, -1] + [1] * (mask.dim() - 2)
+        dc_weight = dc_weight.view(*expand_dims)
+        predictions_dc = [x - (dc_weight * mask * (x - measured_ecg)) for x in predictions]
+
+        return predictions_dc, hx
 
     def encoder_forward(
         self,
@@ -301,11 +328,7 @@ class RIMBlock(torch.nn.Module):
         else:
             end = slice(1, None)
         if hx is None or (not isinstance(hx, list) and hx.dim() < 3):
-            hx = [
-                target.new_zeros((target.size(0), f, *target.size()[end]))
-                for f in self.recurrent_filters
-                if f != 0
-            ]
+            hx = [target.new_zeros((target.size(0), f, *target.size()[end])) for f in self.recurrent_filters if f != 0]
         hx_list = []
         targets = []
         for _ in range(self.time_steps):
@@ -318,8 +341,6 @@ class RIMBlock(torch.nn.Module):
                 self.hexad_inform,
             ).contiguous()
 
-
-
             if self.conv_dim == 1 and self.update_in_frequency:
                 B, F, L, S = log_likelihood_gradient_prediction.shape
                 log_likelihood_gradient_prediction = log_likelihood_gradient_prediction.reshape(B, F * L, S)
@@ -327,7 +348,7 @@ class RIMBlock(torch.nn.Module):
             for h, convrnn in enumerate(self.layers):
                 hx[h] = convrnn(log_likelihood_gradient_prediction, hx[h])
                 log_likelihood_gradient_prediction = hx[h]
-            
+
             hx_list.append(self.mlp.forward(hx[-1]))
 
             log_likelihood_gradient_prediction = self.final_layer(log_likelihood_gradient_prediction)
@@ -359,4 +380,12 @@ class RIMBlock(torch.nn.Module):
                 targets.append(target)
         if keep_prediction is False:
             targets = targets[-1]
-        return targets, hx_list
+        if self.no_dc:
+            return targets, hx_list
+
+        dc_weight = torch.sigmoid(self.dc_logit)
+        expand_dims = [1, -1] + [1] * (mask.dim() - 2)
+        dc_weight = dc_weight.view(*expand_dims)
+        predictions_dc = [t - (dc_weight.view(1, -1, 1) * mask * (t - measured_ecg)) for t in targets]
+
+        return predictions_dc, hx_list

@@ -7,9 +7,9 @@ model:
   recurrent_layer: IndRNN
   input_channels: 36
   conv_filters:
-    - 96
-    - 192
-    - 192
+    - 64
+    - 128
+    - 128
     - 12
   conv_kernels:
     - 9
@@ -27,9 +27,9 @@ model:
     - true
     - false
   recurrent_filters:
-    - 192
-    - 192
-    - 96
+    - 128
+    - 128
+    - 64
     - 0
   recurrent_kernels:
     - 3
@@ -48,7 +48,7 @@ model:
     - false
   time_steps: 8
   conv_dim: 1
-  num_cascades: 1
+  num_cascades: 3
   no_dc: true
   depth: 2
   keep_prediction: true
@@ -59,8 +59,8 @@ model:
     masked_mse: 0.3
     multi_stft: 0.001
     contrastive_loss: 0.001
-  masked_weight: 3
-  amplitude_weight: 4
+  masked_weight: 2
+  amplitude_weight: 3
   normalization_type: null
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
@@ -93,7 +93,7 @@ model:
       use_seed: false
     normalization_type: null
     use_seed: false
-    dataset_number_of_examples: 1000
+    dataset_number_of_examples: null
     batch_size: 18
     shuffle: true
     num_workers: 10
@@ -125,7 +125,7 @@ model:
       use_seed: true
     normalization_type: null
     use_seed: true
-    dataset_number_of_examples: 1000
+    dataset_number_of_examples: null
     batch_size: 18
     log_figures: 4
     shuffle: false
@@ -155,13 +155,13 @@ trainer:
   precision: 16
   enable_checkpointing: false
   logger: false
-  log_every_n_steps: 100
+  log_every_n_steps: 1000
   check_val_every_n_epoch: -1
   max_steps: -1
 
 exp_manager:
   exp_dir: /home/jovyan/work/training/ECGSynthesis/models
-  name: ECGCIRIM_time_1D_3x4_1_test
+  name: ECGCIRIM_time_1D_3x4_1
   create_tensorboard_logger: true
   summary_writer_kwargs:
     flush_secs: 30
