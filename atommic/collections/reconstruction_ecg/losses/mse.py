@@ -72,6 +72,8 @@ class MaskMSELoss(Loss):
 
         # Reduction
         if self.reduction == "mean":
+            if loss.ndim > 1:
+                loss = loss.mean(tuple(range(1, loss.ndim)))
             return loss.mean()
         if self.reduction == "sum":
             return loss.sum()

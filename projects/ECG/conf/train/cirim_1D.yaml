@@ -57,7 +57,7 @@ model:
   reconstruction_loss:
     masked_huber: 0.5
     masked_mse: 0.3
-    spectral_mse: 0.4
+    multi_stft: 0.001
     contrastive_loss: 0.001
   masked_weight: 3
   amplitude_weight: 4
@@ -66,7 +66,7 @@ model:
   unnormalize_log_outputs: false
   total_reconstruction_loss_weight: 1
   update_in_frequency: false
-  hexad_inform: true
+  hexad_inform: false
 
   train_ds:
     dataset_format: UniversalECGDataset
@@ -93,7 +93,7 @@ model:
       use_seed: false
     normalization_type: null
     use_seed: false
-    dataset_number_of_examples: null
+    dataset_number_of_examples: 1000
     batch_size: 18
     shuffle: true
     num_workers: 10
@@ -125,7 +125,7 @@ model:
       use_seed: true
     normalization_type: null
     use_seed: true
-    dataset_number_of_examples: null
+    dataset_number_of_examples: 1000
     batch_size: 18
     log_figures: 4
     shuffle: false
@@ -161,7 +161,7 @@ trainer:
 
 exp_manager:
   exp_dir: /home/jovyan/work/training/ECGSynthesis/models
-  name: ECGCIRIM_time_1D_3x4_1
+  name: ECGCIRIM_time_1D_3x4_1_test
   create_tensorboard_logger: true
   summary_writer_kwargs:
     flush_secs: 30

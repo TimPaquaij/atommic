@@ -49,6 +49,11 @@ from atommic.collections.reconstruction_ecg.losses.ml1 import MaskL1Loss
 from atommic.collections.reconstruction_ecg.losses.huber import MaskHuberLoss
 from atommic.collections.reconstruction_ecg.losses.mse import MaskMSELoss
 from atommic.collections.reconstruction_ecg.losses.contrastive import SupConLoss
+from atommic.collections.reconstruction_ecg.losses.STFT import (
+    SpectralConvergengeLoss,
+    STFTLoss,
+    MultiResolutionSTFTLoss,
+)
 from atommic.collections.reconstruction_ecg.metrics.reconstruction_metrics import mse, nmse, psnr, ssim
 
 __all__ = ["BaseECGReconstructionModel"]
@@ -137,6 +142,8 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                 elif name == "contrastive_loss":
                     self.reconstruction_losses[name] = SupConLoss(temperature=0.07, contrast_mode="all")
                     self.contrastive_loss = True
+                elif name == "multi_stft":
+                    self.reconstruction_losses[name] = MultiResolutionSTFTLoss()
 
         # replace losses names by 'loss_1', 'loss_2', etc. to properly iterate in the aggregator loss
         self.reconstruction_losses = {f"loss_{i+1}": v for i, v in enumerate(self.reconstruction_losses.values())}
@@ -244,7 +251,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         attrs: dict,
         latent_features: Optional[List[List[torch.Tensor]]] = None,
         labels: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, dict]:
         """Computes the reconstruction loss.
 
         Parameters
@@ -285,7 +292,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                 )
             else:
                 losses[name] = self.process_reconstruction_loss(target, predictions, mask, loss_func, attrs) * weight
-        return self.total_reconstruction_loss(**losses) * self.total_reconstruction_loss_weight
+        return self.total_reconstruction_loss(**losses) * self.total_reconstruction_loss_weight, losses
 
     def __compute_and_log_metrics_and_outputs__(
         self,
@@ -638,11 +645,11 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         # Determine if contrastive loss should be applied
 
         if self.contrastive_loss:
-            train_loss = self.__compute_loss__(
+            train_loss, _ = self.__compute_loss__(
                 target, predictions, sample["mask"], sample["attrs"], **outputs["contrastive"]
             )
         else:
-            train_loss = self.__compute_loss__(target, predictions, sample["mask"], sample["attrs"])
+            train_loss, _ = self.__compute_loss__(target, predictions, sample["mask"], sample["attrs"])
         if self.update_in_frequency:
             target, predictions = self.__compute_time_domain(target, predictions)
         # Log loss for the chosen acceleration factor and the learning rate in the selected logger.
@@ -719,12 +726,15 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             target = fft1(target, time_dim=-1)
 
         if self.contrastive_loss:
-            val_loss = self.__compute_loss__(
+            val_loss, losses = self.__compute_loss__(
                 target, predictions, sample["mask"], sample["attrs"], **outputs["contrastive"]
             )
         else:
-            val_loss = self.__compute_loss__(target, predictions, sample["mask"], sample["attrs"])
-        self.validation_step_outputs.append({"val_loss": val_loss})
+            val_loss, losses = self.__compute_loss__(target, predictions, sample["mask"], sample["attrs"])
+        out = {"val_loss": val_loss.detach()}
+        for name, loss_val in losses.items():
+            out[f"val_loss/{name}"] = loss_val.detach()
+        self.validation_step_outputs.append(out)
         if self.update_in_frequency:
             target, predictions = self.__compute_time_domain(target, predictions)
 
@@ -818,7 +828,10 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
 
     def on_validation_epoch_end(self):
         """Called at the end of validation epoch to aggregate outputs."""
-        self.log("val_loss", torch.stack([x["val_loss"] for x in self.validation_step_outputs]).mean(), sync_dist=True)
+        keys = self.validation_step_outputs[0].keys()
+        for k in keys:
+            mean_k = torch.stack([x[k] for x in self.validation_step_outputs]).mean()
+            self.log(k, mean_k, sync_dist=True)
 
         # Initialize metrics.
         mse_vals = defaultdict(dict)

@@ -32,7 +32,9 @@ def log_likelihood_gradient_ecg(
         mask_gradients = (prediction - measured_ecg) * mask.unsqueeze(-1) / sigma
         if prediction.shape[-3] == 12:
             pred_gradients = torch.zeros_like(prediction)
-            pred_gradients[..., 2, :, :] = prediction[..., 2, :, :] - (prediction[..., 1, :, :] - prediction[..., 0, :, :])
+            pred_gradients[..., 2, :, :] = prediction[..., 2, :, :] - (
+                prediction[..., 1, :, :] - prediction[..., 0, :, :]
+            )
             pred_gradients[..., 3, :, :] = prediction[..., 3, :, :] - (
                 -(prediction[..., 0, :, :] + prediction[..., 1, :, :]) / 2
             )
@@ -69,10 +71,12 @@ def log_likelihood_gradient_ecg(
                 pred_gradients[..., 7, :] = prediction[..., 8, :] - 2 * prediction[..., 7, :] + prediction[..., 6, :]
                 pred_gradients[..., 8, :] = prediction[..., 9, :] - 2 * prediction[..., 8, :] + prediction[..., 7, :]
                 pred_gradients[..., 9, :] = prediction[..., 10, :] - 2 * prediction[..., 9, :] + prediction[..., 8, :]
-                pred_gradients[..., 10, :] = prediction[..., 11, :] - 2 * prediction[..., 10, :] + prediction[..., 9, :]
+                pred_gradients[..., 10, :] = (
+                    prediction[..., 11, :] - 2 * prediction[..., 10, :] + prediction[..., 9, :]
+                )
         else:
             pred_gradients = None
-        
+
     if update_in_frequency:
         mask_gradients = fft1(mask_gradients, time_dim=-1)  # Time to freq
         if pred_gradients is not None:
