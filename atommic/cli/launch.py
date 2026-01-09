@@ -5,6 +5,9 @@ import argparse
 
 import pytorch_lightning as pl
 import torch
+from atommic.cli.onnx_wrapper import ONNXInferenceWrapper
+import sys
+
 torch.set_float32_matmul_precision('high')
 torch.autograd.set_detect_anomaly(True)
 from omegaconf import DictConfig, OmegaConf
@@ -171,6 +174,38 @@ def main(cfg: DictConfig):  # noqa: MC0001
             state_dict = torch.load(checkpoint, map_location="cpu")["state_dict"]
 
         model.load_state_dict(state_dict)
+        if isinstance(cfg.get("onnx_export_path", None), str):
+            model.eval()
+            model.cpu()
+            wrapped = ONNXInferenceWrapper(model=model)
+
+            batch = 1
+            leads = 12
+            length = 5000
+
+            masked_ecg = torch.randn(batch, leads, length, dtype=torch.float32)
+            mask = torch.ones(batch, leads, length, dtype=torch.float32)
+            sigma = torch.full((batch,), 1, dtype=torch.int64)
+
+            torch.onnx.export(
+                wrapped,
+                (masked_ecg, mask, sigma),
+                cfg.get("onnx_export_path"),
+                opset_version=17,
+                export_params=True,
+                do_constant_folding=True,
+                input_names=["masked_waveform", "mask", "sigma"],
+                output_names=["predictions"],
+                dynamic_axes={
+                    "masked_waveform": {0: "batch", 2: "length"},
+                    "mask": {0: "batch", 2: "length"},
+                    "sigma": {0: "batch"},
+                    "predictions": {0: "batch", 2: "length"},
+                },
+            )
+
+            print(f"ONNX exported to {cfg.get('onnx_export_path', None)}")
+            sys.exit(0)  # ✅ hard stop, nothing else runs
 
     if cfg.get("mode", None) == "train":
         logging.info("Validating")

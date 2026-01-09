@@ -12,7 +12,7 @@ def log_likelihood_gradient_ecg(
     prediction: torch.Tensor,  # [batch, leads, time] or [batch, 1, leads, time] for 2D conv
     measured_ecg: torch.Tensor,  # [batch, leads, time] or [batch, 1, leads, time] for 2D conv
     mask: torch.Tensor,  # [batch, leads, time] or [batch, 1, leads, time] for 2D conv
-    sigma: float,
+    sigma: torch.Tensor,
     update_in_frequency: Optional[bool] = False,
     hexad_inform: Optional[bool] = False,
 ) -> torch.Tensor:
@@ -20,10 +20,9 @@ def log_likelihood_gradient_ecg(
     Compute the gradient of the log-likelihood for ECG lead reconstruction.
     Missing leads are excluded using the mask.
     """
-    if isinstance(sigma, torch.Tensor):
-        sigma = sigma.item()
-    sigma = max(sigma, 1.0)
+    sigma = torch.clamp(sigma, min=1.0)
 
+    sigma = sigma.view(-1, 1, 1, 1) if prediction.dim() == 4 else sigma.view(-1, 1, 1)
     # Observed gradient (data consistency)
     if update_in_frequency and prediction.dim() == 4:
         prediction = ifft1(prediction, time_dim=-1)  # freg to time

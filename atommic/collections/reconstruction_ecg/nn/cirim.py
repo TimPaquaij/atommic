@@ -63,6 +63,7 @@ class CIRIMECG(BaseECGReconstructionModel):
                     time_steps=self.time_steps,
                     conv_dim=cfg_dict.get("conv_dim"),
                     update_in_frequency=cfg_dict.get("update_in_frequency"),
+                    update_parameters=cfg_dict.get("update_parameters", False),
                     hexad_inform=cfg_dict.get("hexad_inform"),
                     lowcut=cfg_dict.get("lowcut", None),
                     highcut=cfg_dict.get("highcut", None),
@@ -81,7 +82,7 @@ class CIRIMECG(BaseECGReconstructionModel):
         self,
         measured_ecg: torch.Tensor,
         mask: torch.Tensor,
-        sigma: float = 1.0,
+        sigma: Optional[torch.Tensor] = None,
         target: Optional[torch.Tensor] = None,
     ) -> Union[List[List[torch.Tensor]], List[torch.Tensor], torch.Tensor]:
         """Forward pass of :class:`CIRIM`.
@@ -103,6 +104,13 @@ class CIRIMECG(BaseECGReconstructionModel):
         prediction = measured_ecg.clone()
         hx = None
         cascades_predictions = []
+        if sigma is None:
+            sigma = torch.ones(
+                measured_ecg.shape[0],
+                device=measured_ecg.device,
+                dtype=measured_ecg.dtype,
+            )
+        sigma = sigma.view(-1, 1, 1)
 
         # --- synthetic branch ---
         for i, cascade in enumerate(self.reconstruction_module):

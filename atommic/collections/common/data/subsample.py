@@ -1015,6 +1015,8 @@ class LayoutMaskFunc(MaskFunc):
                 elif acceleration == "single_lead":
                     single_lead = self.rng.choice(range(12))
                     mask[single_lead, :] = 1
+                elif acceleration == "denoise_1":
+                    mask = torch.ones(size=(shape[0], shape[1]), dtype=torch.float32)
                 elif acceleration == "random":
                     mask = self.random_mask(
                         shape, min_block=self.min_block, low_ratio=self.low_ratio, high_ratio=self.high_ratio
@@ -1042,6 +1044,8 @@ class LayoutMaskFunc(MaskFunc):
                 elif acceleration == "single_lead":
                     single_lead = self.rng.choice(range(8))
                     mask[single_lead, :] = 1
+                elif acceleration == "denoise_1":
+                    mask = torch.ones(size=(shape[0], shape[1]), dtype=torch.float32)
                 elif acceleration == "random":
                     mask = self.random_mask(shape, min_block=self.min_block)
         return mask, acceleration

@@ -1,4 +1,5 @@
 pretrained: true
+onnx_export_path: /home/jovyan/work/training/ECGSynthesis/models/ECGCIRIM_time_1D/2025-12-04_15-08-04/ECG-RISE_32fp.onnx
 checkpoint: /home/jovyan/work/training/ECGSynthesis/models/ECGCIRIM_time_1D/2025-12-04_15-08-04/checkpoints/epoch=60-val_loss=0.0186-last.ckpt
 
 model:
@@ -6,45 +7,45 @@ model:
   recurrent_layer: IndRNN
   input_channels: 36
   conv_filters:
-    - 96
-    - 192
-    - 192
-    - 12
+  - 96
+  - 192
+  - 192
+  - 12
   conv_kernels:
-    - 9
-    - 7
-    - 5
-    - 3
+  - 9
+  - 7
+  - 5
+  - 3
   conv_dilations:
-    - 1
-    - 2
-    - 4
-    - 1
+  - 1
+  - 2
+  - 4
+  - 1
   conv_bias:
-    - true
-    - true
-    - true
-    - false
+  - true
+  - true
+  - true
+  - false
   recurrent_filters:
-    - 192
-    - 192
-    - 96
-    - 0
+  - 192
+  - 192
+  - 96
+  - 0
   recurrent_kernels:
-    - 3
-    - 3
-    - 3
-    - 0
+  - 3
+  - 3
+  - 3
+  - 0
   recurrent_dilations:
-    - 1
-    - 2
-    - 4
-    - 0
+  - 1
+  - 2
+  - 4
+  - 0
   recurrent_bias:
-    - true
-    - true
-    - true
-    - false
+  - true
+  - true
+  - true
+  - false
   time_steps: 8
   conv_dim: 1
   num_cascades: 1
@@ -57,7 +58,6 @@ model:
     masked_huber: 0.3
     masked_mse: 0.5
     spectral_mse: 0.15
-    contrastive_loss: 0.001
   masked_weight: 3
   amplitude_weight: 4
   normalization_type: null
@@ -71,8 +71,8 @@ model:
     dataset_format: UniversalECGDataset
     dataset_function: umcu
     waveform_dir: /home/jovyan/work/raw_data/umcu_rhythm
-    dataset: /home/jovyan/work/training/ECGSynthesis/dataset/shd_test_dataset.csv
-    params_json: /home/jovyan/work/training/ECGSynthesis/dataset/shd_params.json
+    dataset:  /home/jovyan/work/training/ECGSynthesis/dataset/ECGnet_synthesis_pres_dataset.csv
+    params_json: null
     transforms:
       applygain: true
       to12lead: true
@@ -86,7 +86,7 @@ model:
     mask_args:
       type: layouts
       accelerations:
-        - 3x4_1
+        - hex
       low_ratio: 0.1
       high_ratio: 0.5
       min_block: 500
@@ -128,7 +128,7 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /home/jovyan/work/training/ECGSynthesis/results/ECGCIRIM_time_1D_3x4_1/3x4_1
+  exp_dir: /home/jovyan/work/training/ECGSynthesis/results/ECGCIRIM_time_1D/hex
   ema:
     enable: false
   create_tensorboard_logger: true

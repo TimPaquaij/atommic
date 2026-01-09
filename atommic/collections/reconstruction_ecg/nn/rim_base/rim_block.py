@@ -37,6 +37,7 @@ class RIMBlock(torch.nn.Module):
         time_steps: int = 8,
         conv_dim: int = 2,
         update_in_frequency: bool = False,
+        update_parameters: bool = False,
         hexad_inform: bool = False,
         lowcut: Optional[float] = None,
         highcut: Optional[float] = None,
@@ -161,7 +162,9 @@ class RIMBlock(torch.nn.Module):
             self.samplebase = samplebase
 
         self.recurrent_filters = recurrent_filters
-        self.lead_logit = torch.nn.Parameter(torch.zeros(self.time_steps, 12))
+        self.update_parameters = update_parameters
+        if self.update_parameters:
+            self.lead_logit = torch.nn.Parameter(torch.zeros(self.time_steps, 12))
         self.mlp = ProjectorMLP(conv_dim=self.conv_dim, in_channels=self.recurrent_filters[-2])
 
         self.no_dc = no_dc
@@ -174,7 +177,7 @@ class RIMBlock(torch.nn.Module):
         mask: torch.Tensor,
         measured_ecg: torch.Tensor,
         hx: torch.Tensor = None,
-        sigma: float = 1.0,
+        sigma: torch.Tensor = None,
         keep_prediction: bool = False,
     ) -> Tuple[Any, Union[list, torch.Tensor, None]]:
         """Forward pass of :class:`RIMBlock`.
@@ -203,6 +206,13 @@ class RIMBlock(torch.nn.Module):
         Tuple[Any, Union[list, torch.Tensor, None]]
             Reconstructed image and hidden states.
         """
+        if sigma is None:
+            sigma = torch.ones(
+                measured_ecg.shape[0],
+                device=measured_ecg.device,
+                dtype=measured_ecg.dtype,
+            )
+        sigma = sigma.view(-1, 1, 1)
         if self.conv_dim == 2 and not self.update_in_frequency:
             end = slice(1, -1)
             mask = mask.unsqueeze(-1)  # [batch, leads, time, 1] 2D conv
@@ -251,22 +261,31 @@ class RIMBlock(torch.nn.Module):
                     ).to(prediction.device)
                     freq_mask = (freq_map.abs() >= self.lowcut) & (freq_map.abs() <= self.highcut)
                     log_likelihood_gradient_prediction = log_likelihood_gradient_prediction * freq_mask
-                lead_scale = torch.sigmoid(self.lead_logit[idx])
-                expand_dims = [1, -1] + [1] * (log_likelihood_gradient_prediction.dim() - 2)
-                lead_scale = lead_scale.view(*expand_dims)
-                prediction = prediction_freq + lead_scale * log_likelihood_gradient_prediction.permute(0, 2, 3, 1)
+                if self.update_parameters:
+                    lead_scale = torch.sigmoid(self.lead_logit[idx])
+                    expand_dims = [1, -1] + [1] * (log_likelihood_gradient_prediction.dim() - 2)
+                    lead_scale = lead_scale.view(*expand_dims)
+                    prediction = prediction_freq + lead_scale * log_likelihood_gradient_prediction.permute(0, 2, 3, 1)
+                else:
+                    prediction = prediction_freq + log_likelihood_gradient_prediction.permute(0, 2, 3, 1)
             else:
                 if self.conv_dim == 1:
-                    lead_scale = torch.sigmoid(self.lead_logit[idx])
-                    expand_dims = [1, -1] + [1] * (log_likelihood_gradient_prediction.dim() - 2)
-                    lead_scale = lead_scale.view(*expand_dims)
-                    prediction = prediction + lead_scale * log_likelihood_gradient_prediction
+                    if self.update_parameters:
+                        lead_scale = torch.sigmoid(self.lead_logit[idx])
+                        expand_dims = [1, -1] + [1] * (log_likelihood_gradient_prediction.dim() - 2)
+                        lead_scale = lead_scale.view(*expand_dims)
+                        prediction = prediction + lead_scale * log_likelihood_gradient_prediction
+                    else:
+                        prediction = prediction + log_likelihood_gradient_prediction
 
                 else:
-                    lead_scale = torch.sigmoid(self.lead_logit[idx])
-                    expand_dims = [1, -1] + [1] * (log_likelihood_gradient_prediction.dim() - 2)
-                    lead_scale = lead_scale.view(*expand_dims)
-                    prediction = prediction + lead_scale * log_likelihood_gradient_prediction.permute(0, 2, 3, 1)
+                    if self.update_parameters:
+                        lead_scale = torch.sigmoid(self.lead_logit[idx])
+                        expand_dims = [1, -1] + [1] * (log_likelihood_gradient_prediction.dim() - 2)
+                        lead_scale = lead_scale.view(*expand_dims)
+                        prediction = prediction + lead_scale * log_likelihood_gradient_prediction.permute(0, 2, 3, 1)
+                    else:
+                        prediction = prediction + log_likelihood_gradient_prediction.permute(0, 2, 3, 1)
 
             if self.conv_dim == 2 and not self.update_in_frequency:
                 predictions.append(prediction.squeeze(-1))
