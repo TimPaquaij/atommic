@@ -235,7 +235,7 @@ class RIMBlock(torch.nn.Module):
                 prediction,
                 measured_ecg,
                 mask,
-                sigma,
+                (idx + 1) * sigma,
                 self.update_in_frequency,
                 self.hexad_inform,
             ).contiguous()

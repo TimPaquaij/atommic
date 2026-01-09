@@ -13,8 +13,9 @@ def log_likelihood_gradient_ecg(
     measured_ecg: torch.Tensor,  # [batch, leads, time] or [batch, 1, leads, time] for 2D conv
     mask: torch.Tensor,  # [batch, leads, time] or [batch, 1, leads, time] for 2D conv
     sigma: torch.Tensor,
-    update_in_frequency: Optional[bool] = False,
-    hexad_inform: Optional[bool] = False,
+    update_in_frequency: bool = False,
+    hexad_inform: bool = False,
+    eps: float = 1e-8,
 ) -> torch.Tensor:
     """
     Compute the gradient of the log-likelihood for ECG lead reconstruction.
@@ -28,7 +29,10 @@ def log_likelihood_gradient_ecg(
         prediction = ifft1(prediction, time_dim=-1)  # freg to time
         measured_ecg = fft1(measured_ecg, time_dim=-1)  # time to freq
         measured_ecg = ifft1(measured_ecg, time_dim=-1)  # freq to time
-        mask_gradients = (prediction - measured_ecg) * mask.unsqueeze(-1) / sigma
+        mask_gradients = (prediction - measured_ecg) * mask.unsqueeze(-1)
+        rms = torch.sqrt(mask_gradients.pow(2).mean(dim=-1, keepdim=True) + eps)
+        mask_gradients = mask_gradients / rms
+        mask_gradients = mask_gradients / sigma
         if prediction.shape[-3] == 12:
             pred_gradients = torch.zeros_like(prediction)
             pred_gradients[..., 2, :, :] = prediction[..., 2, :, :] - (
@@ -59,7 +63,10 @@ def log_likelihood_gradient_ecg(
         else:
             pred_gradients = None
     else:
-        mask_gradients = (prediction - measured_ecg) * mask / sigma
+        mask_gradients = (prediction - measured_ecg) * mask
+        rms = torch.sqrt(mask_gradients.pow(2).mean(dim=-1, keepdim=True) + eps)
+        mask_gradients = mask_gradients / rms
+        mask_gradients = mask_gradients / sigma
         if prediction.shape[-2] == 12:
             pred_gradients = torch.zeros_like(prediction)
             pred_gradients[..., 2, :] = prediction[..., 2, :] - (prediction[..., 1, :] - prediction[..., 0, :])
