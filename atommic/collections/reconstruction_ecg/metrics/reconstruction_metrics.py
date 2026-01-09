@@ -167,61 +167,75 @@ def ssim(x: np.ndarray, y: np.ndarray, maxval: np.ndarray = None) -> float:
     return ssim_score / x.shape[0]
 
 
-def rpeak_timing_error_ms(x: np.ndarray, y: np.ndarray, fs: int = 500):
+def rpeak_timing_error_ms(
+    x: np.ndarray,
+    y: np.ndarray,
+    fs: int = 500,
+    return_per_lead: bool = False,
+):
     """
     Compute R-peak timing error (ms) between ground truth and reconstructed ECG.
 
     Parameters
     ----------
-    ecg_gt : np.ndarray
-        Ground truth ECG, shape [1, 12, T]
-    ecg_rec : np.ndarray
+    x : np.ndarray
         Reconstructed ECG, shape [1, 12, T]
+    y : np.ndarray
+        Ground truth ECG, shape [1, 12, T]
     fs : int
         Sampling frequency in Hz
+    return_per_lead : bool
+        Whether to also return per-lead errors
 
     Returns
     -------
     mean_error_ms : float
-        Mean absolute R-peak timing error across leads (ms)
-    per_lead_error_ms : np.ndarray
-        Array of shape [12] with per-lead timing errors (ms)
+        Mean absolute R-peak timing error (ms).
+        Returns np.nan ONLY if all leads fail.
+    per_lead_error_ms : np.ndarray (optional)
+        Per-lead timing errors (ms), NaN where undefined.
     """
 
     assert x.shape == y.shape, "GT and reconstructed ECG must have same shape"
 
     num_leads = x.shape[1]
-    per_lead_error_ms = []
+    per_lead_error_ms = np.full(num_leads, np.nan, dtype=np.float32)
 
     for lead in range(num_leads):
         signal_gt = y[0, lead]
         signal_rec = x[0, lead]
 
-        # Detect R-peaks
-        _, rpeaks_gt = nk.ecg_peaks(signal_gt, sampling_rate=fs)
-        _, rpeaks_rec = nk.ecg_peaks(signal_rec, sampling_rate=fs)
+        try:
+            _, rpeaks_gt = nk.ecg_peaks(signal_gt, sampling_rate=fs)
+            _, rpeaks_rec = nk.ecg_peaks(signal_rec, sampling_rate=fs)
+        except Exception:
+            # Peak detector failed entirely
+            continue
 
-        r_gt = rpeaks_gt["ECG_R_Peaks"]
-        r_rec = rpeaks_rec["ECG_R_Peaks"]
+        r_gt = rpeaks_gt.get("ECG_R_Peaks", [])
+        r_rec = rpeaks_rec.get("ECG_R_Peaks", [])
 
-        # Handle missing detections
         if len(r_gt) == 0 or len(r_rec) == 0:
-            per_lead_error_ms.append(np.nan)
             continue
 
         # Nearest-neighbor matching
         errors = []
         for r in r_gt:
             idx = np.argmin(np.abs(r_rec - r))
-            error_ms = (r_rec[idx] - r) / fs * 1000.0
+            error_ms = (r_rec[idx] - r) * 1000.0 / fs
             errors.append(abs(error_ms))
 
-        per_lead_error_ms.append(np.mean(errors))
+        if len(errors) > 0:
+            per_lead_error_ms[lead] = np.mean(errors)
 
-    per_lead_error_ms = np.array(per_lead_error_ms)
+    # Compute mean safely
+    if np.all(np.isnan(per_lead_error_ms)):
+        mean_error_ms = np.nan
+    else:
+        mean_error_ms = np.nanmean(per_lead_error_ms)
 
-    # Mean across leads (ignore NaNs)
-    mean_error_ms = np.nanmean(per_lead_error_ms)
+    if return_per_lead:
+        return mean_error_ms, per_lead_error_ms
 
     return mean_error_ms
 
