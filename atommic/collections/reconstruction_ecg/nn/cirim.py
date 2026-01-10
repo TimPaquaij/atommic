@@ -127,11 +127,10 @@ class CIRIMECG(BaseECGReconstructionModel):
         latent_list = []
         if target is not None:
             # Precompute masked target splits
-            target_1 = target * mask
-            target_2 = target * (1 - mask)
+            measured_ecg_2 = target * (1 - mask)
 
-            measured_ecg_1 = target_1
-            measured_ecg_2 = target_2
+            target_1 = measured_ecg.clone()
+            target_2 = measured_ecg_2.clone()
 
             hx_1, hx_2 = None, None
             latent_list = []
@@ -141,7 +140,7 @@ class CIRIMECG(BaseECGReconstructionModel):
                 target_1, h_mask_1 = cascade.encoder_forward(
                     target=target_1,
                     mask=mask,
-                    measured_ecg=measured_ecg_1,
+                    measured_ecg=measured_ecg,
                     hx=hx_1,
                     sigma=sigma,
                     keep_prediction=False,

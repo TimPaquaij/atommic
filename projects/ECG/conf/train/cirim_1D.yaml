@@ -97,6 +97,7 @@ model:
       min_block: 500
       use_seed: false
     normalization_type: null
+    noise_augmentations: true
     use_seed: false
     dataset_number_of_examples: 10000
     batch_size: 18
@@ -133,6 +134,7 @@ model:
       min_block: 500
       use_seed: true
     normalization_type: null
+    noise_augmentations: false
     use_seed: true
     dataset_number_of_examples: 1000
     batch_size: 18
@@ -161,7 +163,7 @@ trainer:
   devices: [0]
   num_nodes: 1
   max_epochs: 45
-  precision: 32
+  precision: 16
   enable_checkpointing: false
   logger: false
   log_every_n_steps: 50

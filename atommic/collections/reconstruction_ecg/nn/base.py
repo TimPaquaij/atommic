@@ -41,6 +41,9 @@ from ecgxai.utils.transforms import (
     ButterFilter,
     Masker,
     ECGNormalizer,
+    GaussianNoiseAugmentation,
+    BaselineDriftAugmentation,
+    NoiseAugmentation,
 )
 from atommic.collections.common.parts.fft import fft1, ifft1
 from atommic.collections.reconstruction_ecg.losses.na import NoiseAwareLoss
@@ -1044,6 +1047,17 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                         ButterFilter(lowcut=value["lowcut"], highcut=value["highcut"], order=value["order"])
                     )
             transforms.append(Masker(mask_func, use_seed=use_seed))
+        if cfg.get("noise_augmentations", False):
+            transforms.extend(
+                [
+                    GaussianNoiseAugmentation(waveform_key="waveform", use_seed=use_seed),
+                    GaussianNoiseAugmentation(waveform_key="masked_waveform", use_seed=use_seed),
+                    BaselineDriftAugmentation(waveform_key="waveform", use_seed=use_seed),
+                    BaselineDriftAugmentation(waveform_key="masked_waveform", use_seed=use_seed),
+                    NoiseAugmentation(waveform_key="waveform", use_seed=use_seed),
+                    NoiseAugmentation(waveform_key="masked_waveform", use_seed=use_seed),
+                ]
+            )
         if cfg.get("normalization_type", None):
             transforms.append(
                 ECGNormalizer(
