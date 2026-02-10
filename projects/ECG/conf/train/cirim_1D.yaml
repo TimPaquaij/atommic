@@ -73,7 +73,7 @@ model:
     dataset_format: UniversalECGDataset
     dataset_function: umcu
     waveform_dir: /home/jovyan/work/raw_data/umcu_rhythm
-    dataset: /home/jovyan/work/training/ECGSynthesis/dataset/ECGnet_synthesis_train_dataset.csv
+    dataset: /home/jovyan/work/training/ECGSynthesis/dataset/ECGnet_synthesis_train_dataset_clean.csv
     transforms:
       applygain: true
       to12lead: true
@@ -92,14 +92,15 @@ model:
         - 3x4_1
         - 6x2
         - hex
+        - single_lead
       low_ratio: 0.1
       high_ratio: 0.5
       min_block: 500
       use_seed: false
     normalization_type: null
-    noise_augmentations: true
+    noise_augmentations: null
     use_seed: false
-    dataset_number_of_examples: 10000
+    dataset_number_of_examples: null
     batch_size: 18
     shuffle: true
     num_workers: 10
@@ -110,7 +111,7 @@ model:
     dataset_format: UniversalECGDataset
     dataset_function: umcu
     waveform_dir: /home/jovyan/work/raw_data/umcu_rhythm
-    dataset: /home/jovyan/work/training/ECGSynthesis/dataset/ECGnet_synthesis_validation_dataset.csv
+    dataset: /home/jovyan/work/training/ECGSynthesis/dataset/ECGnet_synthesis_validation_dataset_clean.csv
     transforms:
       applygain: true
       to12lead: true
@@ -129,6 +130,7 @@ model:
         - 3x4_1
         - 6x2
         - hex
+        - single_lead
       low_ratio: 0.1
       high_ratio: 0.5
       min_block: 500
@@ -136,7 +138,7 @@ model:
     normalization_type: null
     noise_augmentations: false
     use_seed: true
-    dataset_number_of_examples: 1000
+    dataset_number_of_examples: null
     batch_size: 18
     log_figures: 4
     shuffle: false
@@ -166,13 +168,13 @@ trainer:
   precision: 16
   enable_checkpointing: false
   logger: false
-  log_every_n_steps: 50
+  log_every_n_steps: 100
   check_val_every_n_epoch: -1
   max_steps: -1
 
 exp_manager:
   exp_dir: /home/jovyan/work/training/ECGSynthesis/models
-  name: ECGCIRIM_time_1D_cascades_test
+  name: ECGCIRIM_time_1D_cascade
   create_tensorboard_logger: true
   summary_writer_kwargs:
     flush_secs: 30

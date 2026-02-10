@@ -1,70 +1,72 @@
 pretrained: true
-onnx_export_path: /home/jovyan/work/training/ECGSynthesis/models/ECGCIRIM_time_1D/2025-12-04_15-08-04/ECG-RISE_32fp.onnx
-checkpoint: /home/jovyan/work/training/ECGSynthesis/models/ECGCIRIM_time_1D/2025-12-04_15-08-04/checkpoints/epoch=60-val_loss=0.0186-last.ckpt
+onnx_export_path: /home/jovyan/work/training/ECGSynthesis/models/ECGCIRIM_time_1D_cascade/2026-01-11_21-03-32/checkpoints/ECG-RISE_32fp.onnx
+checkpoint: /home/jovyan/work/training/ECGSynthesis/models/ECGCIRIM_time_1D_cascade/2026-01-11_21-03-32/checkpoints/epoch=26-val_loss=0.0517-last.ckpt
 
 model:
   model_name: CIRIMECG
   recurrent_layer: IndRNN
   input_channels: 36
   conv_filters:
-  - 96
-  - 192
-  - 192
-  - 12
+    - 64
+    - 128
+    - 128
+    - 12
   conv_kernels:
-  - 9
-  - 7
-  - 5
-  - 3
+    - 9
+    - 7
+    - 5
+    - 3
   conv_dilations:
-  - 1
-  - 2
-  - 4
-  - 1
+    - 1
+    - 2
+    - 4
+    - 1
   conv_bias:
-  - true
-  - true
-  - true
-  - false
+    - true
+    - true
+    - true
+    - false
   recurrent_filters:
-  - 192
-  - 192
-  - 96
-  - 0
+    - 128
+    - 128
+    - 64
+    - 0
   recurrent_kernels:
-  - 3
-  - 3
-  - 3
-  - 0
+    - 3
+    - 3
+    - 3
+    - 0
   recurrent_dilations:
-  - 1
-  - 2
-  - 4
-  - 0
+    - 1
+    - 2
+    - 4
+    - 0
   recurrent_bias:
-  - true
-  - true
-  - true
-  - false
+    - true
+    - true
+    - true
+    - false
   time_steps: 8
   conv_dim: 1
-  num_cascades: 1
+  num_cascades: 3
   no_dc: true
   depth: 2
   keep_prediction: true
   accumulate_predictions: true
   dimensionality: 2
   reconstruction_loss:
-    masked_huber: 0.3
-    masked_mse: 0.5
-    spectral_mse: 0.15
-  masked_weight: 3
-  amplitude_weight: 4
+    masked_huber: 0.5
+    masked_mse: 0.3
+    multi_stft: 0.001
+    contrastive_loss: 0.001
+  masked_weight: 2
+  amplitude_weight: 3
   normalization_type: null
   unnormalize_loss_inputs: false
   unnormalize_log_outputs: false
   total_reconstruction_loss_weight: 1
   update_in_frequency: false
+  update_parameters: true
   hexad_inform: false
 
   test_ds:

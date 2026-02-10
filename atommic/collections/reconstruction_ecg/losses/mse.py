@@ -35,7 +35,8 @@ class MaskMSELoss(Loss):
         self,
         target: torch.Tensor,
         pred: torch.Tensor,
-        mask: torch.Tensor = None,
+        mask: torch.Tensor | None = None,
+        complex_df: dict |None = None,
     ) -> torch.Tensor:
 
         pred = pred.to(target.dtype)
@@ -59,8 +60,8 @@ class MaskMSELoss(Loss):
                 torch.tensor(self.weight, dtype=target.dtype, device=target.device),
             )
         if self.amplitude_weight:
-            amplitude_boost = (target.abs() - 0.5).clamp(min=0.0)
-            weighted_mask = weighted_mask + float(self.amplitude_weight) * amplitude_boost
+            amplitude_mask = self.onset_offset_to_mask_batch(onsets=complex_df["qrs_onset"],offsets=complex_df["qrs_offset"],num_leads=pred.size(1), length=pred.size(2))
+            weighted_mask = weighted_mask + float(self.amplitude_weight) * amplitude_mask
             weighted_mask = weighted_mask.clamp(max=self.amplitude_weight + self.weight)
 
         # Standard MSE per element
@@ -81,3 +82,68 @@ class MaskMSELoss(Loss):
             return loss
 
         raise ValueError(f"Unknown reduction: {self.reduction}")
+    
+
+    def onset_offset_to_mask_batch(self,
+        onsets: torch.Tensor,
+        offsets: torch.Tensor,
+        num_leads: int = 12,
+        length: int = 5000,
+    ) -> torch.Tensor:
+        """
+        Convert batched onset/offset tensors to binary masks.
+
+        Parameters
+        ----------
+        onsets : torch.Tensor
+            Shape [B, N], NaN or int indices
+        offsets : torch.Tensor
+            Shape [B, N], NaN or int indices
+        num_leads : int
+            Number of ECG leads
+        length : int
+            Number of samples
+
+        Returns
+        -------
+        mask : torch.Tensor
+            Shape [B, num_leads, length], dtype uint8
+        """
+        device = onsets.device
+        B = onsets.shape[0]
+
+        # ---- difference array per batch ----
+        diff = torch.zeros(B, length + 1, device=device, dtype=torch.int32)
+
+        valid = (~torch.isnan(onsets)) & (~torch.isnan(offsets))
+        if not valid.any():
+            return torch.zeros(B, num_leads, length, device=device, dtype=torch.uint8)
+
+        on = onsets.clone()
+        off = offsets.clone()
+
+        on[~valid] = 0
+        off[~valid] = 0
+
+        on = on.long().clamp(0, length)
+        off = off.long().clamp(0, length)
+
+        batch_idx = torch.arange(B, device=device).unsqueeze(1).expand_as(on)
+
+        diff.index_put_(
+            (batch_idx, on),
+            torch.ones_like(on, dtype=diff.dtype),
+            accumulate=True,
+        )
+        diff.index_put_(
+            (batch_idx, off),
+            -torch.ones_like(off, dtype=diff.dtype),
+            accumulate=True,
+        )
+
+        time_mask = torch.cumsum(diff[:, :-1], dim=1) > 0   # [B, T]
+
+        # ---- broadcast to leads ----
+        mask = time_mask.unsqueeze(1).expand(B, num_leads, length)
+
+        return mask.to(torch.uint8)

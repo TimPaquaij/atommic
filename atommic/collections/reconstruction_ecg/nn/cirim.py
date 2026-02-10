@@ -176,6 +176,7 @@ class CIRIMECG(BaseECGReconstructionModel):
         attrs: Dict,
         latent_features: Optional[List[List[torch.Tensor]]] = None,
         labels: Optional[torch.Tensor] = None,
+        complex_df: Optional[dict] = None,
     ) -> torch.Tensor:
         """Processes the reconstruction loss for the CIRIM model. It differs from the base class in that it can handle
         multiple cascades and time steps.
@@ -207,7 +208,7 @@ class CIRIMECG(BaseECGReconstructionModel):
             Otherwise, returns the loss of the last intermediate loss.
         """
 
-        def compute_reconstruction_loss(t, p, m, attrs, latent_features, labels):
+        def compute_reconstruction_loss(t, p, m, attrs, latent_features, labels, complex_df):
             if self.unnormalize_loss_inputs:
                 # we do the unnormalization here to avoid explicitly iterating through list of predictions, which
                 # might be a list of lists.
@@ -225,7 +226,7 @@ class CIRIMECG(BaseECGReconstructionModel):
                 )
 
             if "mask" in str(loss_func).lower():
-                return loss_func(t, p, m)
+                return loss_func(t, p, m, complex_df)
 
             if "supconloss" in str(loss_func).lower():
                 if latent_features is None:
@@ -241,7 +242,7 @@ class CIRIMECG(BaseECGReconstructionModel):
                 if latent_features is not None:
                     time_steps_loss = [
                         compute_reconstruction_loss(
-                            target, time_step_pred, mask, attrs, latent_features[idx][kdx], labels
+                            target, time_step_pred, mask, attrs, latent_features[idx][kdx], labels, complex_df
                         )
                         for kdx, time_step_pred in enumerate(cascade_pred)
                     ]
@@ -251,7 +252,7 @@ class CIRIMECG(BaseECGReconstructionModel):
                     cascades_loss.append(cascade_loss)
                 else:
                     time_steps_loss = [
-                        compute_reconstruction_loss(target, time_step_pred, mask, attrs, latent_features, labels)
+                        compute_reconstruction_loss(target, time_step_pred, mask, attrs, latent_features, labels, complex_df)
                         for time_step_pred in cascade_pred
                     ]
                     cascade_loss = sum(x * w for x, w in zip(time_steps_loss, time_steps_weights)) / sum(
@@ -263,5 +264,5 @@ class CIRIMECG(BaseECGReconstructionModel):
             # keep the last prediction of the last cascade
             prediction = prediction[-1][-1]
             latent_features = None if latent_features is None else latent_features[-1][-1]
-            loss = compute_reconstruction_loss(target, prediction, mask, attrs, latent_features, labels)
+            loss = compute_reconstruction_loss(target, prediction, mask, attrs, latent_features, labels, complex_df)
         return loss

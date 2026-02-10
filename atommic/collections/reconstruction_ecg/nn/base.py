@@ -202,6 +202,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         attrs: Dict,
         latent_features: Optional[List[List[torch.Tensor]]] = None,
         labels: Optional[torch.Tensor] = None,
+        complex_df: Optional[dict] = None
     ) -> torch.Tensor:
         """Processes the reconstruction loss.
 
@@ -230,7 +231,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             Otherwise, returns the loss of the last intermediate loss.
         """
 
-        def compute_reconstruction_loss(t, p, m, attrs, hx):
+        def compute_reconstruction_loss(t, p, m, attrs,latent_features, labels, complex_df):
             if self.unnormalize_loss_inputs:
                 # we do the unnormalization here to avoid explicitly iterating through list of predictions, which
                 # might be a list of lists.
@@ -244,18 +245,17 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
                     p,
                     data_range=torch.tensor([max(torch.max(t).item(), torch.max(p).item())]).unsqueeze(dim=0).to(t),
                 )
-            if "masked_l1" in str(loss_func).lower():
-                return loss_func(t, p, m)
+            if "mask" in str(loss_func).lower():
+                return loss_func(t, p, m, complex_df)
 
-            if "masked_huber" in str(loss_func).lower():
-                return loss_func(t, p, m)
-
-            if "contrastive_loss":
+            if "supconloss" in str(loss_func).lower():
+                if latent_features is None:
+                    return torch.tensor(0.0, device=t.device)
                 return loss_func(latent_features, labels)
 
             return loss_func(t, p)
 
-        return compute_reconstruction_loss(target, prediction, mask, attrs, latent_features, labels)
+        return compute_reconstruction_loss(target, prediction, mask, attrs, latent_features, labels, complex_df)
 
     def __compute_loss__(
         self,
@@ -265,6 +265,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         attrs: dict,
         latent_features: Optional[List[List[torch.Tensor]]] = None,
         labels: Optional[torch.Tensor] = None,
+        complex_df: Optional[dict] = None
     ) -> tuple[torch.Tensor, dict]:
         """Computes the reconstruction loss.
 
@@ -297,15 +298,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         if self.update_in_frequency:
             mask = mask.unsqueeze(-1)
         for name, loss_func in self.reconstruction_losses.items():
-            if self.contrastive_loss:
-                losses[name] = (
-                    self.process_reconstruction_loss(
-                        target, predictions, mask, loss_func, attrs, latent_features, labels
-                    )
-                    * weight
-                )
-            else:
-                losses[name] = self.process_reconstruction_loss(target, predictions, mask, loss_func, attrs) * weight
+                losses[name] = self.process_reconstruction_loss(target, predictions, mask, loss_func, attrs, latent_features, labels, complex_df) * weight
         return self.total_reconstruction_loss(**losses) * self.total_reconstruction_loss_weight, losses
 
     def __compute_and_log_metrics_and_outputs__(
@@ -536,6 +529,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         id: Union[List[int], int],
         layout: Union[List[str], str],
         attrs: Union[List[Dict], Dict],
+        complex_df: Optional[Union[List[Dict], Dict]] = None,
     ):
         """Performs an inference step, i.e., computes the predictions of the model.
 
@@ -603,11 +597,13 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         return {
             "fname": fname,
             "id": id,
+            "mask": mask,
             "layout": layout,
             "predictions": predictions,
             "target": target,
+            "complex_df": complex_df,
             "attrs": attrs,
-            "contrastive": {"latent_features": h, "labels": labels} if self.contrastive_loss else None,
+            "contrastive": {"latent_features": h, "labels": labels} if self.contrastive_loss else {"latent_features": None, "labels": None},
         }
 
     def training_step(self, batch: Dict[float, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
@@ -650,26 +646,29 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         """
         sample = batch
         outputs = self.inference_step(
-            sample["masked_waveform"],
-            sample["mask"],
-            sample["waveform"],
-            sample["filename"],  # type: ignore
-            sample["data_idx"],  # type: ignore
-            sample["layout"],
-            sample["attrs"],  # type: ignore
+            sample.get("masked_waveform"),
+            sample.get("mask"),
+            sample.get("waveform"),
+            sample.get("filename"),  # type: ignore
+            sample.get("data_idx"),  # type: ignore
+            sample.get("layout"),
+            sample.get("attrs",{}),  # type: ignore
+            sample.get("complex_df", None),
         )
         target = outputs["target"]
         predictions = outputs["predictions"]
         if self.update_in_frequency:
             target = fft1(target, time_dim=-1)
-        # Determine if contrastive loss should be applied
 
-        if self.contrastive_loss:
-            train_loss, _ = self.__compute_loss__(
-                target, predictions, sample["mask"], sample["attrs"], **outputs["contrastive"]
-            )
-        else:
-            train_loss, _ = self.__compute_loss__(target, predictions, sample["mask"], sample["attrs"])
+        train_loss, _ = self.__compute_loss__(
+            target=target,
+            predictions=predictions,
+            mask=outputs["mask"],
+            attrs=outputs["attrs"],
+            complex_df=outputs.get("complex_df"),
+            latent_features=outputs.get("contrastive", {}).get("latent_features"),
+            labels=outputs.get("contrastive", {}).get("labels"),
+        )
         if self.update_in_frequency:
             target, predictions = self.__compute_time_domain(target, predictions)
         # Log loss for the chosen acceleration factor and the learning rate in the selected logger.
@@ -732,25 +731,29 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         """
         sample = batch
         outputs = self.inference_step(
-            sample["masked_waveform"],
-            sample["mask"],
-            sample["waveform"],
-            sample["filename"],  # type: ignore
-            sample["data_idx"],  # type: ignore
-            sample["layout"],
-            sample["attrs"],  # type: ignore
+            sample.get("masked_waveform"),
+            sample.get("mask"),
+            sample.get("waveform"),
+            sample.get("filename"),  # type: ignore
+            sample.get("data_idx"),  # type: ignore
+            sample.get("layout"),
+            sample.get("attrs",{}),  # type: ignore
+            sample.get("complex_df", None),
         )
         target = outputs["target"]
         predictions = outputs["predictions"]
         if self.update_in_frequency:
             target = fft1(target, time_dim=-1)
 
-        if self.contrastive_loss:
-            val_loss, losses = self.__compute_loss__(
-                target, predictions, sample["mask"], sample["attrs"], **outputs["contrastive"]
-            )
-        else:
-            val_loss, losses = self.__compute_loss__(target, predictions, sample["mask"], sample["attrs"])
+        val_loss, losses = self.__compute_loss__(
+            target=target,
+            predictions=predictions,
+            mask=outputs["mask"],
+            attrs=outputs["attrs"],
+            complex_df=outputs.get("complex_df"),
+            latent_features=outputs.get("contrastive").get("latent_features"),
+            labels=outputs.get("contrastive").get("labels"),
+        )
         out = {"val_loss": val_loss.detach()}
         for name, loss_val in losses.items():
             out[f"val_loss/{name}"] = loss_val.detach()
@@ -803,13 +806,14 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         """
         sample = batch
         outputs = self.inference_step(
-            sample["masked_waveform"],
-            sample["mask"],
-            sample["waveform"],
-            sample["filename"],  # type: ignore
-            sample["data_idx"],  # type: ignore
-            sample["layout"],
-            sample["attrs"],  # type: ignore
+            sample.get("masked_waveform"),
+            sample.get("mask"),
+            sample.get("waveform"),
+            sample.get("filename"),  # type: ignore
+            sample.get("data_idx"),  # type: ignore
+            sample.get("layout"),
+            sample.get("attrs",{}),  # type: ignore
+            sample.get("complex_df", None),
         )
 
         target = outputs["target"]
