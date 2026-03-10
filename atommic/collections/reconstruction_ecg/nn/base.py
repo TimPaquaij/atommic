@@ -66,6 +66,12 @@ from atommic.collections.reconstruction_ecg.metrics.reconstruction_metrics impor
     ncc_nan_safe_vectorized,
 )
 
+from ecgxai.utils.collate import (
+    collate_time,
+    umcu_median_collate,
+)
+from torch.utils.data._utils.collate import default_collate
+
 __all__ = ["BaseECGReconstructionModel"]
 
 
@@ -646,9 +652,9 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         """
         sample = batch
         outputs = self.inference_step(
-            sample.get("masked_waveform"),
-            sample.get("mask"),
-            sample.get("waveform"),
+            sample.get("masked_waveform").float(),
+            sample.get("mask").float(),
+            sample.get("waveform").float(),
             sample.get("filename"),  # type: ignore
             sample.get("data_idx"),  # type: ignore
             sample.get("layout"),
@@ -731,9 +737,9 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         """
         sample = batch
         outputs = self.inference_step(
-            sample.get("masked_waveform"),
-            sample.get("mask"),
-            sample.get("waveform"),
+            sample.get("masked_waveform").float(),
+            sample.get("mask").float(),
+            sample.get("waveform").float(),
             sample.get("filename"),  # type: ignore
             sample.get("data_idx"),  # type: ignore
             sample.get("layout"),
@@ -806,9 +812,9 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         """
         sample = batch
         outputs = self.inference_step(
-            sample.get("masked_waveform"),
-            sample.get("mask"),
-            sample.get("waveform"),
+            sample.get("masked_waveform").float(),
+            sample.get("mask").float(),
+            sample.get("waveform").float(),
             sample.get("filename"),  # type: ignore
             sample.get("data_idx"),  # type: ignore
             sample.get("layout"),
@@ -1012,6 +1018,11 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         mask_type = mask_args.get("type", None)
         use_seed = mask_args.get("use_seed", False)
         mask_func = None
+        COLLATE_FN_REGISTRY: Dict[str, Callable] = {
+            "default": default_collate,
+            "collate_time": collate_time,
+            "umcu_median": umcu_median_collate,
+        }
 
         accelerations = mask_args.get("accelerations", [1])
         if "random" in accelerations:
@@ -1039,7 +1050,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         if transform:
             for key, value in transform.items():
                 if key.lower() == "applygain":
-                    transforms.append(ApplyGain())
+                    transforms.append(ApplyGain(uV=value["uV"]))
                 if key.lower() == "resample":
                     transforms.append(Resample(value[0]))
                 if key.lower() == "totensor":
@@ -1120,7 +1131,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             dataset = dataloader(
                 dataset_function=cfg.get("dataset_function"),
                 waveform_dir=cfg.get("waveform_dir"),
-                dataset=pd.read_csv((cfg.get("dataset")))[: cfg.get("dataset_number_of_examples", None)],
+                dataset=pd.read_csv(cfg.get("dataset"), nrows = cfg.get("dataset_number_of_examples", None)),
                 transform=Compose(transforms),
                 labels=cfg.get("labels", None),
                 secondary_waveform_dir=cfg.get("secondary_waveform_dir",None),
@@ -1142,4 +1153,5 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             num_workers=cfg.get("num_workers", 4),
             pin_memory=cfg.get("pin_memory", False),
             drop_last=cfg.get("drop_last", False),
+            collate_fn = COLLATE_FN_REGISTRY[cfg.get("collate_fn", "default")]
         )

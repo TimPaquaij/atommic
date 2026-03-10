@@ -205,7 +205,6 @@ def main(cfg: DictConfig):  # noqa: MC0001
             )
 
             print(f"ONNX exported to {cfg.get('onnx_export_path', None)}")
-            sys.exit(0)  # ✅ hard stop, nothing else runs
 
     if cfg.get("mode", None) == "train":
         logging.info("Validating")

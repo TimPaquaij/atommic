@@ -158,8 +158,11 @@ class BaseMRIModel(modelPT.ModelPT, ABC):
         """
         if image.dim() > 3:
             image = image[0, 0, :, :].unsqueeze(0)
-        elif image.shape[0] == 12:
-            fig, _ = plot_12lead_ecg(image.numpy(), layoutid="12x1")
+        if image.shape[0] == 12:
+            if image.max() > 100:
+                fig, _ = plot_12lead_ecg(image.numpy(), layoutid="12x1", uV=True)
+            else:
+                fig, _ = plot_12lead_ecg(image.numpy(), layoutid="12x1", uV=False)
             buf = io.BytesIO()
             fig.savefig(buf, format='png')
             buf.seek(0)

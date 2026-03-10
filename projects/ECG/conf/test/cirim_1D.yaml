@@ -1,7 +1,6 @@
 pretrained: true
-onnx_export_path: /home/jovyan/work/training/ECGSynthesis/models/ECGCIRIM_time_1D_cascade/2026-01-11_21-03-32/checkpoints/ECG-RISE_32fp.onnx
-checkpoint: /home/jovyan/work/training/ECGSynthesis/models/ECGCIRIM_time_1D_cascade/2026-01-11_21-03-32/checkpoints/epoch=26-val_loss=0.0517-last.ckpt
-
+onnx_export_path: /home/jovyan/work/training/ECGSynthesis/models/ECGCIRIM_ISCE/2026-02-25_19-12-19/checkpoints/ECG-RISE_32fp.onnx
+checkpoint: /home/jovyan/work/training/ECGSynthesis/models/ECGCIRIM_ISCE/2026-02-25_19-12-19/checkpoints/epoch=16-val_loss=0.0133.ckpt
 model:
   model_name: CIRIMECG
   recurrent_layer: IndRNN
@@ -73,7 +72,17 @@ model:
     dataset_format: UniversalECGDataset
     dataset_function: umcu
     waveform_dir: /home/jovyan/work/raw_data/umcu_rhythm
-    dataset:  /home/jovyan/work/training/ECGSynthesis/dataset/ECGnet_synthesis_pres_dataset.csv
+    median_beat_dir: /home/jovyan/work/ECGSynthesis_data/median_beat
+    median_load_params:
+      tables:
+        - complex_df_p_onset
+        - complex_df_p_offset
+        - complex_df_qrs_onset
+        - complex_df_qrs_offset
+        - complex_df_t_onset
+        - complex_df_t_offset
+    dataset:  /home/jovyan/work/training/ECGSynthesis/dataset/ECGnet_synthesis_test_dataset_clean.csv
+    collate_fn: umcu_median
     params_json: null
     transforms:
       applygain: true
@@ -96,7 +105,7 @@ model:
     normalization_type: null
     use_seed: true
     dataset_number_of_examples: null
-    batch_size: 30
+    batch_size: 20
     log_figures: 0
     shuffle: false
     num_workers: 8
@@ -119,7 +128,7 @@ model:
 trainer:
   strategy: auto
   accelerator: gpu
-  devices: [0]
+  devices: [1]
   num_nodes: 1
   max_epochs: 50
   precision: 32
@@ -130,7 +139,7 @@ trainer:
   max_steps: -1
 
 exp_manager:
-  exp_dir: /home/jovyan/work/training/ECGSynthesis/results/ECGCIRIM_time_1D/hex
+  exp_dir: /home/jovyan/work/ECGSynthesis_data/results/ECGCIRIM_ISCE/hex
   ema:
     enable: false
   create_tensorboard_logger: true

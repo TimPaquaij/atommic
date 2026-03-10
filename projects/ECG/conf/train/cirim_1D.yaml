@@ -73,9 +73,20 @@ model:
     dataset_format: UniversalECGDataset
     dataset_function: umcu
     waveform_dir: /home/jovyan/work/raw_data/umcu_rhythm
+    median_beat_dir: /home/jovyan/work/ECGSynthesis_data/median_beat
+    median_load_params:
+      tables:
+        - complex_df_p_onset
+        - complex_df_p_offset
+        - complex_df_qrs_onset
+        - complex_df_qrs_offset
+        - complex_df_t_onset
+        - complex_df_t_offset
     dataset: /home/jovyan/work/training/ECGSynthesis/dataset/ECGnet_synthesis_train_dataset_clean.csv
+    collate_fn: umcu_median
     transforms:
-      applygain: true
+      applygain:
+        uV: true
       to12lead: true
       resample:
       - 500
@@ -87,12 +98,7 @@ model:
     mask_args:
       type: layouts
       accelerations:
-        - random
-        - 3x4
-        - 3x4_1
-        - 6x2
         - hex
-        - single_lead
       low_ratio: 0.1
       high_ratio: 0.5
       min_block: 500
@@ -111,9 +117,20 @@ model:
     dataset_format: UniversalECGDataset
     dataset_function: umcu
     waveform_dir: /home/jovyan/work/raw_data/umcu_rhythm
+    median_beat_dir: /home/jovyan/work/ECGSynthesis_data/median_beat
+    median_load_params: 
+      tables:
+        - complex_df_p_onset
+        - complex_df_p_offset
+        - complex_df_qrs_onset
+        - complex_df_qrs_offset
+        - complex_df_t_onset
+        - complex_df_t_offset
     dataset: /home/jovyan/work/training/ECGSynthesis/dataset/ECGnet_synthesis_validation_dataset_clean.csv
+    collate_fn: umcu_median
     transforms:
-      applygain: true
+      applygain:
+        uV: true
       to12lead: true
       resample:
       - 500
@@ -125,12 +142,7 @@ model:
     mask_args:
       type: layouts
       accelerations:
-        - random
-        - 3x4
-        - 3x4_1
-        - 6x2
         - hex
-        - single_lead
       low_ratio: 0.1
       high_ratio: 0.5
       min_block: 500
@@ -168,13 +180,13 @@ trainer:
   precision: 16
   enable_checkpointing: false
   logger: false
-  log_every_n_steps: 100
+  log_every_n_steps: 10
   check_val_every_n_epoch: -1
   max_steps: -1
 
 exp_manager:
   exp_dir: /home/jovyan/work/training/ECGSynthesis/models
-  name: ECGCIRIM_time_1D_cascade
+  name: ECGCIRIM_ISCE
   create_tensorboard_logger: true
   summary_writer_kwargs:
     flush_secs: 30

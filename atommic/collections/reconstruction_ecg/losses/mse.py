@@ -60,8 +60,10 @@ class MaskMSELoss(Loss):
                 torch.tensor(self.weight, dtype=target.dtype, device=target.device),
             )
         if self.amplitude_weight:
-            amplitude_mask = self.onset_offset_to_mask_batch(onsets=complex_df["qrs_onset"],offsets=complex_df["qrs_offset"],num_leads=pred.size(1), length=pred.size(2))
-            weighted_mask = weighted_mask + float(self.amplitude_weight) * amplitude_mask
+            p_mask = self.onset_offset_to_mask_batch(onsets=complex_df["p_onset"],offsets=complex_df["p_offset"],num_leads=pred.size(1), length=pred.size(2))
+            qrs_mask = self.onset_offset_to_mask_batch(onsets=complex_df["qrs_onset"],offsets=complex_df["qrs_offset"],num_leads=pred.size(1), length=pred.size(2))
+            t_mask = self.onset_offset_to_mask_batch(onsets=complex_df["t_onset"],offsets=complex_df["t_offset"],num_leads=pred.size(1), length=pred.size(2))
+            weighted_mask = weighted_mask + float(self.amplitude_weight) * (p_mask + qrs_mask + t_mask)
             weighted_mask = weighted_mask.clamp(max=self.amplitude_weight + self.weight)
 
         # Standard MSE per element
