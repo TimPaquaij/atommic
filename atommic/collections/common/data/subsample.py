@@ -1000,17 +1000,27 @@ class LayoutMaskFunc(MaskFunc):
                     mask[3:6, int(shape[1] / 4) + 1 : int(shape[1] / 2) + 1] = 1
                     mask[6:9, int((shape[1] / 2)) + 1 : int(3 * shape[1] / 4) + 1] = 1
                     mask[9:, int(3 * shape[1] / 4) + 1 :] = 1
-                elif acceleration == "3x4_1":
+                elif acceleration.startswith("3x4_1"):
                     mask[:3, : int(shape[1] / 4) + 1] = 1
                     mask[3:6, int(shape[1] / 4) + 1 : int(shape[1] / 2) + 1] = 1
                     mask[6:9, int((shape[1] / 2)) + 1 : int(3 * shape[1] / 4) + 1] = 1
                     mask[9:, int(3 * shape[1] / 4) + 1 :] = 1
-                    rhythm_lead = 0 
+                    if "_rl" in acceleration:
+                        rhythm_lead = int(acceleration.split("_rl")[1])
+                    else:
+                        rhythm_lead = int(self.rng.randint(0, 2))
+                        acceleration = f"{acceleration}_rl{rhythm_lead}"
                     mask[rhythm_lead, :] = 1
-                elif acceleration == "hex":
+                elif acceleration.startswith("reduce_leads"):
                     mask[:6, :] = 1
-                    mask[7, :] = 1
-                    mask[10, :] = 1
+                    if "_pl" in acceleration:
+                        precordial_leads = [int(l) for l in acceleration.split("_pl")[1].split("_")]
+                    else:
+                        n_leads = int(self.rng.randint(1, 3))
+                        precordial_leads = self.rng.choice(range(6, 12), size=n_leads, replace=False).tolist()
+                        acceleration = f"{acceleration}_pl{'_'.join(str(l) for l in precordial_leads)}"
+                    for lead in precordial_leads:
+                        mask[lead, :] = 1
                 elif acceleration == "single_lead":
                     single_lead = 0
                     mask[single_lead, :] = 1
@@ -1029,16 +1039,26 @@ class LayoutMaskFunc(MaskFunc):
                     mask[:2, : int(shape[1] / 4) + 1] = 1
                     mask[2:5, int((shape[1] / 2)) + 1 : int(3 * shape[1] / 4) + 1] = 1
                     mask[5:, int(3 * shape[1] / 4) + 1 :] = 1
-                elif acceleration == "3x4_1":
+                elif acceleration.startswith("3x4_1"):
                     mask[:2, : int(shape[1] / 4) + 1] = 1
                     mask[2:5, int((shape[1] / 2)) + 1 : int(3 * shape[1] / 4) + 1] = 1
                     mask[5:, int(3 * shape[1] / 4) + 1 :] = 1
-                    rhythm_lead = 0 
+                    if "_rl" in acceleration:
+                        rhythm_lead = int(acceleration.split("_rl")[1])
+                    else:
+                        rhythm_lead = int(self.rng.randint(0, 2))
+                        acceleration = f"{acceleration}_rl{rhythm_lead}"
                     mask[rhythm_lead, :] = 1
-                elif acceleration == "hex":
+                elif acceleration.startswith("reduce_leads"):
                     mask[:2, :] = 1
-                    mask[3, :] = 1
-                    mask[6, :] = 1
+                    if "_pl" in acceleration:
+                        precordial_leads = [int(l) for l in acceleration.split("_pl")[1].split("_")]
+                    else:
+                        n_leads = int(self.rng.integers(1, 3))
+                        precordial_leads = self.rng.choice(range(2, 8), size=n_leads, replace=False).tolist()
+                        acceleration = f"{acceleration}_pl{'_'.join(str(l) for l in precordial_leads)}"
+                    for lead in precordial_leads:
+                        mask[lead, :] = 1
                 elif acceleration == "single_lead":
                     single_lead = 0
                     mask[single_lead, :] = 1

@@ -1065,11 +1065,11 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
         if cfg.get("noise_augmentations", False):
             transforms.extend(
                 [
-                    GaussianNoiseAugmentation(waveform_key="waveform", use_seed=use_seed),
+                    #GaussianNoiseAugmentation(waveform_key="waveform", use_seed=use_seed),
                     GaussianNoiseAugmentation(waveform_key="masked_waveform", use_seed=use_seed),
-                    BaselineDriftAugmentation(waveform_key="waveform", use_seed=use_seed),
+                    #BaselineDriftAugmentation(waveform_key="waveform", use_seed=use_seed),
                     BaselineDriftAugmentation(waveform_key="masked_waveform", use_seed=use_seed),
-                    NoiseAugmentation(waveform_key="waveform", use_seed=use_seed),
+                    #NoiseAugmentation(waveform_key="waveform", use_seed=use_seed),
                     NoiseAugmentation(waveform_key="masked_waveform", use_seed=use_seed),
                 ]
             )
@@ -1102,7 +1102,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             dataset1 = dataloader(
                 dataset_function=cfg.get("dataset_function"),
                 waveform_dir=params["umcu_data_dir"],
-                dataset=subset1,
+                dataset=subset1.reset_index(drop=True),
                 transform=Compose(transforms),
                 labels=params["labels"],
                 secondary_waveform_dir=cfg.get("secondary_waveform_dir", None),
@@ -1115,7 +1115,7 @@ class BaseECGReconstructionModel(BaseMRIModel, ABC):
             dataset2 = dataloader(
                 dataset_function="universal",
                 waveform_dir=params["cze_data_dir"],
-                dataset=subset2,
+                dataset=subset2.reset_index(drop=True),
                 transform=Compose(transforms),
                 labels=params["labels"],
                 secondary_waveform_dir=cfg.get("secondary_waveform_dir", None),

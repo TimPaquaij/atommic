@@ -1,5 +1,5 @@
 pretrained: false
-checkpoint: None
+checkpoint: null
 mode: train
 
 model:
@@ -86,7 +86,7 @@ model:
     collate_fn: umcu_median
     transforms:
       applygain:
-        uV: true
+        uV: false
       to12lead: true
       resample:
       - 500
@@ -98,13 +98,13 @@ model:
     mask_args:
       type: layouts
       accelerations:
-        - hex
+        - 6x2
       low_ratio: 0.1
       high_ratio: 0.5
       min_block: 500
       use_seed: false
     normalization_type: null
-    noise_augmentations: null
+    noise_augmentations: true
     use_seed: false
     dataset_number_of_examples: null
     batch_size: 18
@@ -130,7 +130,7 @@ model:
     collate_fn: umcu_median
     transforms:
       applygain:
-        uV: true
+        uV: false
       to12lead: true
       resample:
       - 500
@@ -142,13 +142,13 @@ model:
     mask_args:
       type: layouts
       accelerations:
-        - hex
+        - 6x2
       low_ratio: 0.1
       high_ratio: 0.5
       min_block: 500
       use_seed: true
     normalization_type: null
-    noise_augmentations: false
+    noise_augmentations: true
     use_seed: true
     dataset_number_of_examples: null
     batch_size: 18
@@ -176,17 +176,19 @@ trainer:
   accelerator: gpu
   devices: [0]
   num_nodes: 1
-  max_epochs: 45
+  max_epochs: 40
   precision: 16
   enable_checkpointing: false
   logger: false
   log_every_n_steps: 10
-  check_val_every_n_epoch: -1
+  check_val_every_n_epoch: 1
   max_steps: -1
+  gradient_clip_val: 1.0
+  gradient_clip_algorithm: norm
 
 exp_manager:
   exp_dir: /home/jovyan/work/training/ECGSynthesis/models
-  name: ECGCIRIM_ISCE
+  name: ECGCIRIM_REX_6x2
   create_tensorboard_logger: true
   summary_writer_kwargs:
     flush_secs: 30
@@ -196,7 +198,7 @@ exp_manager:
     patience: 5
     mode: min
     strict: true
-    min_delta: 0.0005 # minimum change to qualify as an improvement
+    min_delta: 0.001 # minimum change to qualify as an improvement
   create_checkpoint_callback: true
   checkpoint_callback_params:
     monitor: val_loss
